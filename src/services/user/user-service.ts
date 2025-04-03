@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { generatePasswordResetToken, generatePasswordResetTokenByPhone, getPasswordResetTokenByToken } from "../../utils/mails/token";
 import { httpStatusCode } from "../../lib/constant";
 import { nestedQueryBuilder } from "src/utils";
-import { ordersModel } from "../../models/orders/orders-schema";
+// import { ordersModel } from "../../models/orders/orders-schema";
 import { deleteFileFromS3 } from "src/config/s3";
 import { configDotenv } from "dotenv";
 
@@ -14,8 +14,8 @@ import { passwordResetTokenModel } from "src/models/password-token-schema";
 import { generateOtpWithTwilio } from "src/utils/sms/sms";
 import { generateUserToken, getSignUpQueryByAuthType, handleExistingUser, hashPasswordIfEmailAuth, sendOTPIfNeeded, validatePassword, validateUserForLogin } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
-import { awardsModel } from "src/models/awards/awards-schema";
-import { readProgressModel } from "src/models/user-reads/read-progress-schema";
+// import { awardsModel } from "src/models/awards/awards-schema";
+// import { readProgressModel } from "src/models/user-reads/read-progress-schema";
 
 configDotenv();
 
@@ -232,39 +232,39 @@ export const createUserService = async (payload: any, res: Response) => {
   };
 };
 
-export const getUserService = async (id: string, res: Response) => {
-  const user = await usersModel.findById(id);
-  if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);
-  const totalAmountPaidResult = await ordersModel.aggregate([{ $match: { userId: user._id } }, { $group: { _id: null, totalAmount: { $sum: "$totalAmount" } } }]);
-  const amountPaid = totalAmountPaidResult.length > 0 ? totalAmountPaidResult[0].totalAmount : 0;
-  // Fetch all orders for the user
-  const userOrders = await ordersModel.find({ userId: user._id }).populate({ path: "productIds", model: "products" });
+// export const getUserService = async (id: string, res: Response) => {
+//   const user = await usersModel.findById(id);
+//   if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);
+//   const totalAmountPaidResult = await ordersModel.aggregate([{ $match: { userId: user._id } }, { $group: { _id: null, totalAmount: { $sum: "$totalAmount" } } }]);
+//   const amountPaid = totalAmountPaidResult.length > 0 ? totalAmountPaidResult[0].totalAmount : 0;
+//   // Fetch all orders for the user
+//   const userOrders = await ordersModel.find({ userId: user._id }).populate({ path: "productIds", model: "products" });
 
-  // Calculate the number of books purchased by the user
-  const booksPurchasedCount = userOrders.reduce((count, order) => {
-    return count + order.productIds.filter((product: any) => product.type === "e-book").length;
-  }, 0);
+//   // Calculate the number of books purchased by the user
+//   const booksPurchasedCount = userOrders.reduce((count, order) => {
+//     return count + order.productIds.filter((product: any) => product.type === "e-book").length;
+//   }, 0);
 
-  // Calculate the number of courses purchased by the user
-  const courseCount = userOrders.reduce((count, order) => {
-    return count + order.productIds.filter((product: any) => product.type === "course").length;
-  }, 0);
+//   // Calculate the number of courses purchased by the user
+//   const courseCount = userOrders.reduce((count, order) => {
+//     return count + order.productIds.filter((product: any) => product.type === "course").length;
+//   }, 0);
 
-  // Calculate the number of events attended by the user
-  //  const eventsCount = await eventsModel.countDocuments({ userId: user._id });
+//   // Calculate the number of events attended by the user
+//   //  const eventsCount = await eventsModel.countDocuments({ userId: user._id });
 
-  return {
-    success: true,
-    message: "User retrieved successfully",
-    data: {
-      data: user,
-      amountPaid,
-      booksPurchasedCount,
-      courseCount,
-      // Events,
-    },
-  };
-};
+//   return {
+//     success: true,
+//     message: "User retrieved successfully",
+//     data: {
+//       data: user,
+//       amountPaid,
+//       booksPurchasedCount,
+//       courseCount,
+//       // Events,
+//     },
+//   };
+// };
 
 export const updateUserService = async (id: string, payload: any, res: Response) => {
   const user = await usersModel.findById(id);
@@ -295,112 +295,112 @@ export const deleteUserService = async (id: string, res: Response) => {
   };
 };
 
-export const getUserProfileDetailService = async (id: string, payload: any, res: Response) => {
-  const user = await usersModel.findById(id);
-  if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);
+// export const getUserProfileDetailService = async (id: string, payload: any, res: Response) => {
+//   const user = await usersModel.findById(id);
+//   if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);
 
-  const year = payload.duration;
-  const userOrders = await ordersModel.find({ userId: id }).populate({
-    path: "productIds",
-    populate: [
-      { path: "authorId", model: "authors" },
-      { path: "categoryId", model: "categories" },
-    ],
-  });
+//   const year = payload.duration;
+//   const userOrders = await ordersModel.find({ userId: id }).populate({
+//     path: "productIds",
+//     populate: [
+//       { path: "authorId", model: "authors" },
+//       { path: "categoryId", model: "categories" },
+//     ],
+//   });
 
-  let filteredOrders = userOrders;
+//   let filteredOrders = userOrders;
 
-  if (year) {
-    filteredOrders = userOrders.filter((order: any) => {
-      const parsedDate = new Date(order.createdAt);
-      if (isNaN(parsedDate.getTime())) {
-        console.warn("Invalid createdAt for order:", order);
-        return false;
-      }
+//   if (year) {
+//     filteredOrders = userOrders.filter((order: any) => {
+//       const parsedDate = new Date(order.createdAt);
+//       if (isNaN(parsedDate.getTime())) {
+//         console.warn("Invalid createdAt for order:", order);
+//         return false;
+//       }
 
-      const orderYear = parsedDate.getFullYear().toString();
-      return orderYear === year;
-    });
-  }
+//       const orderYear = parsedDate.getFullYear().toString();
+//       return orderYear === year;
+//     });
+//   }
 
-  const totalAmountPaid = filteredOrders.reduce((acc, order) => acc + order.totalAmount, 0);
+//   const totalAmountPaid = filteredOrders.reduce((acc, order) => acc + order.totalAmount, 0);
 
-  const coursesPurchased = filteredOrders
-    .flatMap((order) => order.productIds)
-    .filter((product: any) => product?.type === "course")
-    .map((product) => product._id);
+//   const coursesPurchased = filteredOrders
+//     .flatMap((order) => order.productIds)
+//     .filter((product: any) => product?.type === "course")
+//     .map((product) => product._id);
 
-  const booksPurchased = filteredOrders
-    .flatMap((order) => order.productIds)
-    .filter((product: any) => product?.type === "e-book")
-    .map((product) => product._id);
+//   const booksPurchased = filteredOrders
+//     .flatMap((order) => order.productIds)
+//     .filter((product: any) => product?.type === "e-book")
+//     .map((product) => product._id);
 
-  const booksPurchasedCount = booksPurchased.length;
-  const coursesCount = coursesPurchased.length;
+//   const booksPurchasedCount = booksPurchased.length;
+//   const coursesCount = coursesPurchased.length;
 
-  return {
-    success: true,
-    message: "User profile details retrieved successfully",
-    data: {
-      user,
-      userOrders: userOrders,
-      totalAmountPaid: totalAmountPaid || 0,
-      booksPurchasedCount: booksPurchasedCount || 0,
-      coursesCount: coursesCount || 0,
-      eventsCount: 0,
-    },
-  };
-};
+//   return {
+//     success: true,
+//     message: "User profile details retrieved successfully",
+//     data: {
+//       user,
+//       userOrders: userOrders,
+//       totalAmountPaid: totalAmountPaid || 0,
+//       booksPurchasedCount: booksPurchasedCount || 0,
+//       coursesCount: coursesCount || 0,
+//       eventsCount: 0,
+//     },
+//   };
+// };
 
-export const getAllUserService = async (payload: any, res: Response) => {
-  const page = parseInt(payload.page as string) || 1;
-  const limit = parseInt(payload.limit as string) || 0;
-  const offset = (page - 1) * limit;
-  let { query, sort } = nestedQueryBuilder(payload, ["name", "email"]);
+// export const getAllUserService = async (payload: any, res: Response) => {
+//   const page = parseInt(payload.page as string) || 1;
+//   const limit = parseInt(payload.limit as string) || 0;
+//   const offset = (page - 1) * limit;
+//   let { query, sort } = nestedQueryBuilder(payload, ["name", "email"]);
 
-  if (payload.duration) {
-    const durationDays = parseInt(payload.duration);
-    if (durationDays === 30 || durationDays === 7) {
-      const date = new Date();
-      date.setDate(date.getDate() - durationDays);
-      (query as any) = { ...query, createdAt: { $gte: date } };
-    }
-  }
+//   if (payload.duration) {
+//     const durationDays = parseInt(payload.duration);
+//     if (durationDays === 30 || durationDays === 7) {
+//       const date = new Date();
+//       date.setDate(date.getDate() - durationDays);
+//       (query as any) = { ...query, createdAt: { $gte: date } };
+//     }
+//   }
 
-  const totalDataCount = Object.keys(query).length < 1 ? await usersModel.countDocuments() : await usersModel.countDocuments(query);
+//   const totalDataCount = Object.keys(query).length < 1 ? await usersModel.countDocuments() : await usersModel.countDocuments(query);
 
-  const users = await usersModel.find(query).sort(sort).skip(offset).limit(limit).select("-__v -password -otp -token -fcmToken -whatsappNumberVerified -emailVerified");
+//   const users = await usersModel.find(query).sort(sort).skip(offset).limit(limit).select("-__v -password -otp -token -fcmToken -whatsappNumberVerified -emailVerified");
 
-  if (!users.length) {
-    return {
-      data: [],
-      page,
-      limit,
-      success: false,
-      message: "No users found",
-      total: 0,
-    };
-  }
+//   if (!users.length) {
+//     return {
+//       data: [],
+//       page,
+//       limit,
+//       success: false,
+//       message: "No users found",
+//       total: 0,
+//     };
+//   }
 
-  const userIds = users.map((user) => user._id);
-  const awards = await awardsModel.find({ userId: { $in: userIds } }).select("userId level badge");
+//   const userIds = users.map((user) => user._id);
+//   const awards = await awardsModel.find({ userId: { $in: userIds } }).select("userId level badge");
 
-  const awardsMap = new Map(awards.map((award) => [award.userId.toString(), award]));
+//   const awardsMap = new Map(awards.map((award) => [award.userId.toString(), award]));
 
-  const results = users.map((user) => ({
-    ...user.toObject(),
-    award: awardsMap.get(user._id.toString()) || null,
-  }));
+//   const results = users.map((user) => ({
+//     ...user.toObject(),
+//     award: awardsMap.get(user._id.toString()) || null,
+//   }));
 
-  return {
-    page,
-    limit,
-    success: true,
-    message: "Users retrieved successfully",
-    total: totalDataCount,
-    data: results,
-  };
-};
+//   return {
+//     page,
+//     limit,
+//     success: true,
+//     message: "Users retrieved successfully",
+//     total: totalDataCount,
+//     data: results,
+//   };
+// };
 
 
 export const generateAndSendOTP = async (payload: { email?: string; phoneNumber?: string }) => {
@@ -495,22 +495,22 @@ export const changePasswordService = async (userData: any, payload: any, res: Re
   };
 };
 
-export const getCurrentUserDetailsService = async (userData: any, res: Response) => {
-  const user = await usersModel.findById(userData.id).select("-__v -password -otp -token -fcmToken -whatsappNumberVerified -emailVerified");
-  if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);
-  const award = await awardsModel.findOne({ userId: userData.id });
-  const booksReadCount = await readProgressModel.countDocuments({ userId: userData.id, progress: 100 });
+// export const getCurrentUserDetailsService = async (userData: any, res: Response) => {
+//   const user = await usersModel.findById(userData.id).select("-__v -password -otp -token -fcmToken -whatsappNumberVerified -emailVerified");
+//   if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);
+//   const award = await awardsModel.findOne({ userId: userData.id });
+//   const booksReadCount = await readProgressModel.countDocuments({ userId: userData.id, progress: 100 });
 
-  return {
-    success: true,
-    message: "User retrieved successfully",
-    data: {
-      data: user,
-      award,
-      booksReadCount,
-    },
-  };
-};
+//   return {
+//     success: true,
+//     message: "User retrieved successfully",
+//     data: {
+//       data: user,
+//       award,
+//       booksReadCount,
+//     },
+//   };
+// };
 export const updateCurrentUserDetailsService = async (userData: any, payload: any, res: Response) => {
   const user = await usersModel.findById(userData.id);
   if (!user) return errorResponseHandler("User not found", httpStatusCode.NOT_FOUND, res);

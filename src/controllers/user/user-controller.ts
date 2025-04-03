@@ -5,16 +5,13 @@ import {
   createUserService,
   deleteUserService,
   generateAndSendOTP,
-  getAllUserService,
-  getUserProfileDetailService,
-  getUserService,
   updateUserService,
   verifyOTPService,
   forgotPasswordUserService,
   signUpService,
   loginUserService,
   changePasswordService,
-  getCurrentUserDetailsService,
+
   updateCurrentUserDetailsService,
   WhatsappLoginService,
 } from "src/services/user/user-service";
@@ -101,15 +98,15 @@ export const newPassswordAfterOTPVerifiedApp = async (req: Request, res: Respons
 };
 
 // Dashboard
-export const getUserDashboardStats = async (req: Request, res: Response) => {
-  try {
-    const response = await getUserProfileDetailService(req.params.id, req.query, res);
-    return res.status(httpStatusCode.OK).json(response);
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
-  }
-};
+// export const getUserDashboardStats = async (req: Request, res: Response) => {
+//   try {
+//     const response = await getUserProfileDetailService(req.params.id, req.query, res);
+//     return res.status(httpStatusCode.OK).json(response);
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+//   }
+// };
 
 export const createNewUser = async (req: Request, res: Response) => {
   try {
@@ -121,24 +118,24 @@ export const createNewUser = async (req: Request, res: Response) => {
   }
 };
 
-export const getUser = async (req: Request, res: Response) => {
-  try {
-    const response = await getUserService(req.params.id, res);
-    return res.status(httpStatusCode.OK).json(response);
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
-  }
-};
-export const getAllUser = async (req: Request, res: Response) => {
-  try {
-    const response = await getAllUserService(req.query, res);
-    return res.status(httpStatusCode.OK).json(response);
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
-  }
-};
+// export const getUser = async (req: Request, res: Response) => {
+//   try {
+//     const response = await getUserService(req.params.id, res);
+//     return res.status(httpStatusCode.OK).json(response);
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+//   }
+// };
+// export const getAllUser = async (req: Request, res: Response) => {
+//   try {
+//     const response = await getAllUserService(req.query, res);
+//     return res.status(httpStatusCode.OK).json(response);
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+//   }
+// };
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
@@ -200,15 +197,15 @@ export const resendOTP = async (req: Request, res: Response) => {
   }
 };
 
-export const getCurrentUserDetails = async (req: Request, res: Response) => {
-  try {
-    const response = await getCurrentUserDetailsService(req.user, res);
-    return res.status(httpStatusCode.OK).json(response);
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
-  }
-};
+// export const getCurrentUserDetails = async (req: Request, res: Response) => {
+//   try {
+//     const response = await getCurrentUserDetailsService(req.user, res);
+//     return res.status(httpStatusCode.OK).json(response);
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+//   }
+// };
 export const updateCurrentUserDetails = async (req: Request, res: Response) => {
   try {
     const response = await updateCurrentUserDetailsService(req.user,req.body, res);

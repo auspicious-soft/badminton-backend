@@ -4,7 +4,7 @@ import cors from "cors"
 import path from "path"
 import { fileURLToPath } from 'url'
 import connectDB from "./config/db"
-import { admin, publisher, user } from "./routes"
+import { admin, user } from "./routes"
 // import admin from "firebase-admin"
 import { checkValidAdminRole, checkValidPublisherRole } from "./utils"
 import bodyParser from 'body-parser'
@@ -58,8 +58,7 @@ app.get("/", (_, res: any) => {
     res.send("Hello world entry point 🚀✅");
 });
 
-app.use("/api/admin",checkValidAdminRole, admin);
-app.use("/api/publisher",checkValidPublisherRole,checkPublisherAuth, publisher);
+app.use("/api/admin",checkValidAdminRole,checkAuth, admin);
 app.use("/api/user",checkAuth, user);
 
 //adminAuth routes
