@@ -20,15 +20,14 @@ export const generateUserToken = (user: UserDocument) => {
   return jwt.sign(tokenPayload, process.env.AUTH_SECRET as string);
 };
 
+
 export const getSignUpQueryByAuthType = (
   userData: UserDocument,
   authType: string
 ) => {
-  if (["Email", "Google", "Apple", "Facebook"].includes(authType)) {
+  if ([ "Google", "Apple", "Facebook"].includes(authType)) {
     return { email: userData.email?.toLowerCase() };
-  } else if (authType === "Phone") {
-    return { phoneNumber: userData.phoneNumber };
-  } else if (authType === "Email-Phone") {
+  } else {
     return {
       $or: [
         { email: userData.email?.toLowerCase() },
@@ -71,8 +70,10 @@ export const sendOTPIfNeeded = async (
   authType: string
 ) => {
   if (["Email", "Phone", "Email-Phone"].includes(authType)) {
-    await generateAndSendOTP(
-      authType, { email: userData?.email, phoneNumber: userData?.phoneNumber });
+    await generateAndSendOTP(authType, {
+      email: userData?.email,
+      phoneNumber: userData?.phoneNumber,
+    });
   }
 };
 
@@ -89,13 +90,13 @@ export const validateUserForLogin = async (
       res
     );
   }
-  if (authType !== user.authType) {
-    return errorResponseHandler(
-      `Wrong Login method!!, Try login from ${user.authType}`,
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
+  // if (authType !== user.authType) {
+  //   return errorResponseHandler(
+  //     `Wrong Login method!!, Try login from ${user.authType}`,
+  //     httpStatusCode.BAD_REQUEST,
+  //     res
+  //   );
+  // }
   if (authType === "Email" && (!user.password || !userData.password)) {
     return errorResponseHandler(
       "Password is required for Email login",

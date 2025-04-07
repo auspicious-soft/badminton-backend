@@ -147,7 +147,7 @@ export const forgotPasswordService = async (email: string, res: Response) => {
       httpStatusCode.NOT_FOUND,
       res
     );
-  const passwordResetToken = await generatePasswordResetToken(email);
+  const passwordResetToken = await generatePasswordResetToken(email, null);
   console.log("passwordResetToken: ", passwordResetToken);
   if (passwordResetToken !== null) {
     await sendPasswordResetEmail(email, passwordResetToken.token, "eng");

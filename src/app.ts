@@ -68,9 +68,8 @@ app.post("/api/forgot-password", forgotPassword)
 app.patch("/api/new-password-otp-verified", newPassswordAfterOTPVerified)
 
 //userAuth routes
-// app.post("/api/user-login", loginUser)
+app.post("/api/user-login", loginUser)
 // app.post("/api/whatsapp-login", WhatsapploginUser)
-// app.post("/api/user-signup", userSignup)  
 // app.post("/api/resend-otp", resendOTP)
 app.post("/api/user-signup", userSignup)
 app.post("/api/verify-otp", verifyOTP)
