@@ -1,66 +1,69 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 
-export interface UserDocument extends Document {
+export interface UserDocument{
   _id?: string;
-  email?: string;
+  email?: string | null;
   password?: string;
   fullName?: string;
-  phoneNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string | null;
+  countryCode?: string;
+  emailVerified: boolean;
+  phoneVerified: boolean;
   otp?: {
-    code: string;
+    emailCode: string;
+    phoneCode: string;
     expiresAt: Date;
   };
-  emailVerified: boolean;
-  role?: string;
-  countryCode?: string;
-  level?: string;
-  profilePic?: string;
   authType?: string;
-  schoolVoucher?: string;
+  role?: string;
+  profilePic?: string;
+  language?: string;
+  token?: string;
+  fcmToken?: string;
+  productsLanguage?: string[];
+  dob?: Date;
+  country?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  location?: {
+    type: "Point";
+    coordinates: [number, number]; // [longitude, latitude]
+  };
 }
+
 const usersSchema = new mongoose.Schema(
   {
-    identifier: {
-      type: String,
-      // required: true,
-      unique: true,
-    },
     role: {
       type: String,
       required: true,
       default: "user",
     },
     fullName: {
-      type: Object,
-      // requried: true,
+      type: String,
       trim: true,
     },
     firstName: {
-      type: Object,
-      // requried: true,
+      type: String,
       trim: true,
     },
     lastName: {
-      type: Object,
-      // requried: true,
+      type: String,
       trim: true,
     },
     email: {
       type: String,
-      // required: true,
-      // unique: true,
       lowercase: true,
+      default: null,
     },
     password: {
       type: String,
-      // required: function(this: UserDocument) {
-      //   return !this.googleId && !this.facebookId && !this.appleId && !this.phoneNumber;
-      // },
     },
     authType: {
       type: String,
-      enum: ["Email", "Whatsapp", "Facebook", "Apple", "Google"],
-      default: "Email",
+      enum: ["Email", "Phone", "Email-Phone", "Facebook", "Apple", "Google"],
+      default: "Phone",
     },
     countryCode: {
       type: String,
@@ -77,12 +80,13 @@ const usersSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    whatsappNumberVerified: {
+    phoneVerified: {
       type: Boolean,
       default: false,
     },
     otp: {
-      code: { type: String, default: null },
+      emailCode: { type: String, default: null },
+      phoneCode: { type: String, default: null },
       expiresAt: { type: Date, default: null },
     },
     language: {
@@ -93,14 +97,6 @@ const usersSchema = new mongoose.Schema(
     token: {
       type: String,
     },
-    schoolVoucher: {
-      voucherId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "bookSchools",
-      },
-      createdAt: { type: Date, default: Date.now },
-      expiredAt: { type: Date, default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) },
-    },
     fcmToken: {
       type: String,
       default: null,
@@ -108,16 +104,28 @@ const usersSchema = new mongoose.Schema(
     productsLanguage: {
       type: [String],
       enum: ["kaz", "eng", "rus"],
-      default: "eng",
+      default: ["eng"],
     },
     dob: {
       type: Date,
     },
     country: {
       type: String,
+      default: "India"
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number],
+        default: [0, 0],
+      },
     },
   },
   { timestamps: true }
 );
 
-export const usersModel = mongoose.model("users", usersSchema);
+export const usersModel = mongoose.model<UserDocument>("users", usersSchema);

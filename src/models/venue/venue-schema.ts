@@ -25,6 +25,10 @@ export interface VenueDocument extends Document {
   isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  location?: {
+    type: "Point";
+    coordinates: [number, number]; // [longitude, latitude]
+  };
 }
 
 const venueSchema = new Schema<VenueDocument>(
@@ -86,6 +90,17 @@ const venueSchema = new Schema<VenueDocument>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number],
+        default: [0, 0],
+      },
     },
   },
   { timestamps: true }

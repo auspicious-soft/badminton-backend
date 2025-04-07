@@ -11,49 +11,78 @@ import {
   signUpService,
   loginUserService,
   changePasswordService,
-
   updateCurrentUserDetailsService,
   WhatsappLoginService,
 } from "src/services/user/user-service";
 import { newPassswordAfterOTPVerifiedService } from "src/services/admin/admin-service";
-import { verifyOtpPasswordResetService, newPassswordAfterOTPVerifiedUserService } from "../../services/user/user-service";
+import {
+  verifyOtpPasswordResetService,
+  newPassswordAfterOTPVerifiedUserService,
+} from "../../services/user/user-service";
 
 export const userSignup = async (req: Request, res: Response) => {
   try {
-    const user = await signUpService(req.body, req.body.authType, res);
-
+    const authType =
+      req.body.email && req.body.phoneNumber
+        ? "Email-Phone"
+        : req.body.email
+        ? "Email"
+        : req.body.phoneNumber
+        ? "Phone"
+        : req.body.authType;
+    const user = await signUpService(req.body, authType, res);
     return res.status(httpStatusCode.OK).json(user);
-  }  catch (error: any) {
+  } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
 export const loginUser = async (req: Request, res: Response) => {
   try {
-    const loginResponse = await loginUserService(req.body, req.body.authType, res);
+    const loginResponse = await loginUserService(
+      req.body,
+      req.body.authType,
+      res
+    );
     return res.status(httpStatusCode.OK).json(loginResponse);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 export const socialLoginUser = async (req: Request, res: Response) => {
   try {
-    const loginResponse = await loginUserService(req.body, req.body.authType, res);
+    const loginResponse = await loginUserService(
+      req.body,
+      req.body.authType,
+      res
+    );
     return res.status(httpStatusCode.OK).json(loginResponse);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 export const WhatsapploginUser = async (req: Request, res: Response) => {
   try {
-    const whatsappLoginResponse = await WhatsappLoginService(req.body, req.body.authType, res);
+    const whatsappLoginResponse = await WhatsappLoginService(
+      req.body,
+      req.body.authType,
+      res
+    );
     return res.status(httpStatusCode.OK).json(whatsappLoginResponse);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
@@ -63,7 +92,9 @@ export const forgotPasswordUser = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
@@ -74,26 +105,41 @@ export const verifyOtpPasswordReset = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
-export const newPassswordAfterOTPVerifiedUser = async (req: Request, res: Response) => {
+export const newPassswordAfterOTPVerifiedUser = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const response = await newPassswordAfterOTPVerifiedUserService(req.body, res);
+    const response = await newPassswordAfterOTPVerifiedUserService(
+      req.body,
+      res
+    );
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
-export const newPassswordAfterOTPVerifiedApp = async (req: Request, res: Response) => {
+export const newPassswordAfterOTPVerifiedApp = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const response = await newPassswordAfterOTPVerifiedService(req.body, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
@@ -114,7 +160,9 @@ export const createNewUser = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.CREATED).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
@@ -143,7 +191,9 @@ export const updateUser = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
@@ -153,16 +203,20 @@ export const deleteUser = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 export const changePasswordUser = async (req: Request, res: Response) => {
   try {
-    const response = await changePasswordService(req.user,req.body, res);
+    const response = await changePasswordService(req.user, req.body, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };
 
@@ -183,11 +237,11 @@ export const verifyOTP = async (req: Request, res: Response) => {
 };
 export const resendOTP = async (req: Request, res: Response) => {
   try {
-    const response = await generateAndSendOTP(req.body);
+    // const response = await generateAndSendOTP(req.body);
 
     res.status(200).json({
       success: true,
-      data: { response },
+      // data: { response },
     });
   } catch (error) {
     res.status(400).json({
@@ -208,10 +262,16 @@ export const resendOTP = async (req: Request, res: Response) => {
 // };
 export const updateCurrentUserDetails = async (req: Request, res: Response) => {
   try {
-    const response = await updateCurrentUserDetailsService(req.user,req.body, res);
+    const response = await updateCurrentUserDetailsService(
+      req.user,
+      req.body,
+      res
+    );
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
-    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: message || "An error occurred" });
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
   }
 };

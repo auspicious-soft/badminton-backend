@@ -11,7 +11,7 @@ import { configDotenv } from "dotenv";
 
 import { addedUserCreds, sendEmailVerificationMail, sendLoginCredentialsEmail, sendPasswordResetEmail } from "src/utils/mails/mail";
 import { passwordResetTokenModel } from "src/models/password-token-schema";
-import { generateOtpWithTwilio } from "src/utils/sms/sms";
+import { generateOtpWithTwilio, generatePasswordResetTokenByPhoneWithTwilio } from "src/utils/sms/sms";
 import { generateUserToken, getSignUpQueryByAuthType, handleExistingUser, hashPasswordIfEmailAuth, sendOTPIfNeeded, validatePassword, validateUserForLogin } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
 // import { awardsModel } from "src/models/awards/awards-schema";
@@ -84,24 +84,21 @@ const createNewUser = async (userData: any, authType: string) => {
 };
 
 export const signUpService = async (userData: UserDocument, authType: string, res: Response) => {
-
+    console.log("userData", userData);
     if (!authType) {
       return errorResponseHandler("Auth type is required", httpStatusCode.BAD_REQUEST, res);
     }
-
-    // if (authType === "Email" && (!userData.password || !userData.email)) {
-    //   return errorResponseHandler("Both email and password is required for Email authentication", httpStatusCode.BAD_REQUEST, res);
-    // }
-
+    if ((authType === "Email-Phone" || authType === "Email" || authType === "Phone") && !userData.password) {
+      return errorResponseHandler("Password is required for Email and Phone authentication", httpStatusCode.BAD_REQUEST, res);
+    }
     const query = getSignUpQueryByAuthType(userData, authType);
+    console.log("query", query);
     const existingUser = await usersModel.findOne(query);
     const existingUserResponse = existingUser ? handleExistingUser(existingUser as any, authType, res) : null;
     if (existingUserResponse) return existingUserResponse;
 
     const newUserData = { ...userData, authType };
     newUserData.password = await hashPasswordIfEmailAuth(userData, authType);
-    const identifier = customAlphabet("0123456789", 5);
-    (newUserData as any).identifier = identifier();
     const user = await usersModel.create(newUserData);
     await sendOTPIfNeeded(userData, authType);
 
@@ -155,14 +152,15 @@ export const WhatsappLoginService = async (userData: UserDocument, authType: str
 
 
 export const forgotPasswordUserService = async (payload: any, res: Response) => {
-  const { email } = payload;
-  const user = await usersModel.findOne({ email }).select("+password");
-  if (!user) return errorResponseHandler("Email not found", httpStatusCode.NOT_FOUND, res);
-  if(user.authType !== "Email") return errorResponseHandler(`Try login using ${user.authType}`, httpStatusCode.BAD_REQUEST, res);
-  const passwordResetToken = await generatePasswordResetToken(email);
+  const { phoneNumber } = payload;
+  const user = await usersModel.findOne({ phoneNumber }).select("+password");
+  if (!user) return errorResponseHandler("Phone number not found", httpStatusCode.NOT_FOUND, res);
+  if(user.authType !== "Email" && user.authType !== "Phone") return errorResponseHandler(`Try login using ${user.authType}`, httpStatusCode.BAD_REQUEST, res);
+  const passwordResetToken = await generatePasswordResetToken(phoneNumber);
 
   if (passwordResetToken !== null) {
-    await sendPasswordResetEmail(email, passwordResetToken.token, user.language);
+    // await sendPasswordResetEmail(phoneNumber, passwordResetToken.token, user.language);
+    await generatePasswordResetTokenByPhoneWithTwilio(phoneNumber, passwordResetToken.token);
     return { success: true, message: "Password reset email sent with otp" };
   }
 };
@@ -403,10 +401,12 @@ export const deleteUserService = async (id: string, res: Response) => {
 // };
 
 
-export const generateAndSendOTP = async (payload: { email?: string; phoneNumber?: string }) => {
+export const generateAndSendOTP = async (authType: string, payload: { email?: string | null; phoneNumber?: string | null }) => {
     const { email, phoneNumber } = payload;
+    console.log("payload", payload, authType);
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpEmail = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpPhone = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 20 * 60 * 1000); // OTP expires in 20 minutes
 
     let user;
@@ -415,25 +415,26 @@ export const generateAndSendOTP = async (payload: { email?: string; phoneNumber?
         { email },
         {
           $set: {
-            "otp.code": otp,
-            "otp.expiresAt": expiresAt,
-          },
-        },
-        { upsert: true, new: true }
-      );
-    } else if (phoneNumber) {
-      user = await usersModel.findOneAndUpdate(
-        { phoneNumber },
-        {
-          $set: {
-            "otp.code": otp,
+            "otp.emailCode": otpEmail,
             "otp.expiresAt": expiresAt,
           },
         },
         { upsert: true, new: true }
       );
     }
-
+    
+    if (phoneNumber) {
+      user = await usersModel.findOneAndUpdate(
+        { phoneNumber },
+        {
+          $set: {
+            "otp.phoneCode": otpPhone,
+            "otp.expiresAt": expiresAt,
+          },
+        },
+        { upsert: true, new: true }
+      );
+    }
 
     if (user) {
       // No need to call save if findOneAndUpdate handles the commit
@@ -442,38 +443,70 @@ export const generateAndSendOTP = async (payload: { email?: string; phoneNumber?
 
     // Send OTP via the respective method
     if (phoneNumber) {
-      await generateOtpWithTwilio(phoneNumber, otp);
+      await generateOtpWithTwilio(phoneNumber, otpPhone);
     }
     if (email) {
-      await sendEmailVerificationMail(email, otp, user?.language || "en");
+      await sendEmailVerificationMail(email, otpEmail, user?.language || "en");
     }
-
     return { success: true, message: "OTP sent successfully" };
   } 
 // };
 
 export const verifyOTPService = async (payload: any) => {
-  const { email, phoneNumber, otp } = payload;
+  const { email, phoneNumber, phoneCode, emailCode } = payload;
+
+  if (!email && !phoneNumber) {
+    throw new Error("Email or phone number is required");
+  }
+
+  if (!phoneCode && !emailCode) {
+    throw new Error("OTP is required");
+  }
+
+  let user = null
+  let emailVerified = false
+  let phoneVerified = false
+
+  if(email && emailCode){
+    user = await usersModel.findOne({
+      email,
+      "otp.emailCode": emailCode,
+      "otp.expiresAt": { $gt: new Date() },
+    });
+
+    if (!user) {
+      throw new Error("Invalid or expired Email OTP");
+    }
+    emailVerified = true;
+  }
+  
+  if(phoneNumber && phoneCode){
+    user = await usersModel.findOne({
+      phoneNumber,
+      "otp.phoneCode": phoneCode,
+      "otp.expiresAt": { $gt: new Date() },
+    });
+
+    if (!user) {
+      throw new Error("Invalid or expired Phone OTP");
+    }
+    phoneVerified = true;
+
+  }
  
-  const user = await usersModel.findOne({
-    $or: [{ email }, { phoneNumber }],
-    "otp.code": otp,
-    "otp.expiresAt": { $gt: new Date() },
-  });
-
   if (!user) {
-    throw new Error("Invalid or expired OTP");
+    throw new Error("User not found or OTP verification failed");
   }
 
-  if (user.otp) {
-    user.otp.code = "";
+  user.emailVerified = emailVerified;
+  user.phoneVerified = phoneVerified;
+
+  console.log(user.toObject())
+
+  if (user?.otp?.phoneCode || user?.otp?.emailCode) {
+    user.otp.phoneCode = "";
+    user.otp.emailCode = "";
     user.otp.expiresAt = new Date(0);
-  }
-  if (email) {
-    user.emailVerified = true;
-  }
-  if (phoneNumber) {
-    user.whatsappNumberVerified = true;
   }
   user.token = generateUserToken(user as any);
   await user.save();

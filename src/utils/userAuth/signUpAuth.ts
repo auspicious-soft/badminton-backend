@@ -6,6 +6,7 @@ import { Response } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { configDotenv } from "dotenv";
+import { any } from "webidl-conversions";
 configDotenv();
 
 export const generateUserToken = (user: UserDocument) => {
@@ -19,24 +20,44 @@ export const generateUserToken = (user: UserDocument) => {
   return jwt.sign(tokenPayload, process.env.AUTH_SECRET as string);
 };
 
-export const getSignUpQueryByAuthType = (userData: UserDocument, authType: string) => {
+export const getSignUpQueryByAuthType = (
+  userData: UserDocument,
+  authType: string
+) => {
   if (["Email", "Google", "Apple", "Facebook"].includes(authType)) {
     return { email: userData.email?.toLowerCase() };
-  } else if (authType === "Whatsapp") {
+  } else if (authType === "Phone") {
     return { phoneNumber: userData.phoneNumber };
+  } else if (authType === "Email-Phone") {
+    return {
+      $or: [
+        { email: userData.email?.toLowerCase() },
+        { phoneNumber: userData.phoneNumber },
+      ],
+    };
   }
   return {};
 };
 
-export const handleExistingUser = (existingUser: UserDocument, authType: string, res: Response) => {
+export const handleExistingUser = (
+  existingUser: UserDocument,
+  authType: string,
+  res: Response
+) => {
   if (existingUser) {
-    const message = authType === "Whatsapp" ? "Phone number already registered" : `Email already registered, try logging in with ${existingUser?.authType}`;
+    const message =
+      authType === "Whatsapp"
+        ? "Phone number already registered"
+        : `Email already registered, try logging in with ${existingUser?.authType}`;
     return errorResponseHandler(message, httpStatusCode.BAD_REQUEST, res);
   }
 };
 
-export const hashPasswordIfEmailAuth = async (userData: UserDocument, authType: string) => {
-  if (authType === "Email") {
+export const hashPasswordIfEmailAuth = async (
+  userData: UserDocument,
+  authType: string
+) => {
+  if (authType === "Email" || authType === "Phone") {
     if (!userData.password) {
       throw new Error("Password is required for Email authentication");
     }
@@ -45,44 +66,88 @@ export const hashPasswordIfEmailAuth = async (userData: UserDocument, authType: 
   return userData.password;
 };
 
-export const sendOTPIfNeeded = async (userData: UserDocument, authType: string) => {
-  if (["Email", "Whatsapp"].includes(authType)) {
-    await generateAndSendOTP(authType === "Email" ? { email: userData.email } : { phoneNumber: `${userData.countryCode}${userData.phoneNumber}` });
+export const sendOTPIfNeeded = async (
+  userData: UserDocument,
+  authType: string
+) => {
+  if (["Email", "Phone", "Email-Phone"].includes(authType)) {
+    await generateAndSendOTP(
+      authType, { email: userData?.email, phoneNumber: userData?.phoneNumber });
   }
 };
 
-export const validateUserForLogin = async (user: any, authType: string, userData: UserDocument, res: Response) => {
+export const validateUserForLogin = async (
+  user: any,
+  authType: string,
+  userData: UserDocument,
+  res: Response
+) => {
   if (!user) {
-    return errorResponseHandler(authType !== "Whatsapp" ? "User not found" : "Number is not registered", httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      authType !== "Whatsapp" ? "User not found" : "Number is not registered",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   if (authType !== user.authType) {
-    return errorResponseHandler(`Wrong Login method!!, Try login from ${user.authType}`, httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      `Wrong Login method!!, Try login from ${user.authType}`,
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   if (authType === "Email" && (!user.password || !userData.password)) {
-    return errorResponseHandler("Password is required for Email login", httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      "Password is required for Email login",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   if (authType === "Email" && user.emailVerified === false) {
     await sendOTPIfNeeded(userData, authType);
-    return errorResponseHandler("Email not verified, verfication email sent to your email", httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      "Email not verified, verfication email sent to your email",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   if (authType === "Whatsapp" && user.whatsappNumberVerified === false) {
-    return errorResponseHandler(`Try login from ${user.authType}`, httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      `Try login from ${user.authType}`,
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   if (authType === "Whatsapp" && !user.whatsappNumberVerified) {
     await sendOTPIfNeeded(userData, authType);
-    return errorResponseHandler("Number is not verified, verfication otp sent to your number", httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      "Number is not verified, verfication otp sent to your number",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   return null;
 };
 
-
-export const validatePassword = async (user: UserDocument, userPassword: string, res: Response) => {
+export const validatePassword = async (
+  user: UserDocument,
+  userPassword: string,
+  res: Response
+) => {
   if (!user.password) {
-    return errorResponseHandler("User password is missing", httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      "User password is missing",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   const isPasswordValid = await bcrypt.compare(user.password, userPassword);
   if (!isPasswordValid) {
-    return errorResponseHandler("Invalid email or password", httpStatusCode.BAD_REQUEST, res);
+    return errorResponseHandler(
+      "Invalid email or password",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   return null;
 };

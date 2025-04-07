@@ -3,17 +3,17 @@ import { passwordResetTokenModel } from "../../models/password-token-schema"
 
 
 
-export const generatePasswordResetToken = async (email: string) => {
+export const generatePasswordResetToken = async (phoneNumber: string) => {
   const genId = customAlphabet('0123456789', 6)
   const token = genId()
   const expires = new Date(new Date().getTime() + 3600 * 1000)
 
-  const existingToken = await passwordResetTokenModel.findOne({ email })
+  const existingToken = await passwordResetTokenModel.findOne({ phoneNumber })
   if (existingToken) {
     await passwordResetTokenModel.findByIdAndDelete(existingToken._id)
   }
   const newPasswordResetToken = new passwordResetTokenModel({
-    email,
+    phoneNumber,
     token,
     expires
   })
