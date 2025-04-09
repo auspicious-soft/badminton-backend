@@ -567,7 +567,6 @@ export const generateAndSendOTP = async (
   payload: { email?: string | null; phoneNumber?: string | null }
 ) => {
   const { email, phoneNumber } = payload;
-  console.log("payload", payload, authType);
 
   const otpEmail = Math.floor(100000 + Math.random() * 900000).toString();
   const otpPhone = Math.floor(100000 + Math.random() * 900000).toString();

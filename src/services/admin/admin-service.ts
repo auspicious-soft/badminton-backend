@@ -18,7 +18,7 @@ import {
 } from "src/models/employees/employee-schema";
 import { hashPasswordIfEmailAuth } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
-import { attendanceModel } from "src/models/attendance/attendance-schema";
+import { attendanceModel } from "src/models/employees/attendance-schema";
 import mongoose from "mongoose";
 import { venueModel } from "src/models/venue/venue-schema";
 
@@ -380,6 +380,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     facilities?: { name: string; isActive: boolean }[];
     courts?: { name: string; isActive: boolean; games: string }[];
     employees?: { employeeId: string; isActive: boolean }[];
+    location?: any;
   }
 
   const {
@@ -394,6 +395,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     courts,
     employees,
     isActive,
+    location
   } = payload as UpdateVenuePayload;
 
   if (!venueId || !mongoose.Types.ObjectId.isValid(venueId)) {
@@ -419,6 +421,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
   if (city) venue.city = city;
   if (state) venue.state = state;
   if (image) venue.image = image;
+  if (location) venue.location = location;
   if (typeof isActive === "boolean") venue.isActive = isActive;
   if (gamesAvailable) {
     venue.gamesAvailable = gamesAvailable.map(

@@ -24,11 +24,17 @@ export interface VenueDocument extends Document {
   isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
-  courtInfo?: string;
+  venueInfo?: string;
   timeslots?: any;
   location?: {
     type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
+  };
+  weather?: {
+    status: string;
+    icon: string | null;
+    temperature: number;
+    lastUpdated: Date;
   };
 }
 
@@ -92,7 +98,7 @@ const venueSchema = new Schema<VenueDocument>(
       type: Boolean,
       default: true,
     },
-    courtInfo: {
+    venueInfo: {
       type: String,
       default: "No additional information present",
     },
@@ -128,8 +134,16 @@ const venueSchema = new Schema<VenueDocument>(
         default: [0, 0],
       },
     },
+    weather: {
+      status: { type: String, default: null },
+      icon: { type: String, default: null },
+      temperature: { type: Number, default: null },
+      lastUpdated: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
+
+venueSchema.index({ location: "2dsphere" });
 
 export const venueModel = mongoose.model<VenueDocument>("venues", venueSchema);

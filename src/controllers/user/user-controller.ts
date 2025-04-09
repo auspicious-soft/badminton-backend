@@ -237,11 +237,10 @@ export const verifyOTP = async (req: Request, res: Response) => {
 };
 export const resendOTP = async (req: Request, res: Response) => {
   try {
-    // const response = await generateAndSendOTP(req.body);
-
+    const response = await generateAndSendOTP("",req.body);
     res.status(200).json({
       success: true,
-      // data: { response },
+      data: { response },
     });
   } catch (error) {
     res.status(400).json({

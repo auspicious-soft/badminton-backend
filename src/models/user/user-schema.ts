@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export interface UserDocument{
+export interface UserDocument {
   _id?: string;
   email?: string | null;
   password?: string;
@@ -31,6 +31,7 @@ export interface UserDocument{
     type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
   };
+  isBlocked?: boolean;
 }
 
 const usersSchema = new mongoose.Schema(
@@ -112,7 +113,7 @@ const usersSchema = new mongoose.Schema(
     },
     country: {
       type: String,
-      default: "India"
+      default: "India",
     },
     location: {
       type: {
@@ -124,6 +125,10 @@ const usersSchema = new mongoose.Schema(
         type: [Number],
         default: [0, 0],
       },
+    },
+    isBlocked: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
