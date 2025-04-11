@@ -1,14 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { VENUE_TIME_SLOTS } from "src/lib/constant";
 
-export interface TeamPlayer {
-  player1?: mongoose.Types.ObjectId;
-  player2?: mongoose.Types.ObjectId;
-  rentedRacket?: number;
-  rentedBalls?: number;
-  paymentStatus: "Pending" | "Paid" | "Cancelled" | "Refunded";
-}
-
 export interface BookingDocument extends Document {
   userId: mongoose.Types.ObjectId;
   venueId: mongoose.Types.ObjectId;
@@ -17,12 +9,13 @@ export interface BookingDocument extends Document {
   askToJoin: boolean;
   isCompetitive: boolean;
   skillRequired: number;
-  teams1: TeamPlayer[];
-  team2: TeamPlayer[];
+  team1: any;
+  team2: any;
+  bookingType: "Self" | "Booking" | "Complete";
   bookingAmount: number;
   bookingPaymentStatus: boolean;
   bookingDate: Date;
-  bookingSlots: string[];
+  bookingSlots: string;
   cancellationReason?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -53,45 +46,44 @@ const bookingSchema = new Schema(
       type: Number,
       default: 0,
     },
-    teams1: [
+    team1: [
       {
-        player1: {
+        playerId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "users",
-          defult: null,
+        },
+        playerType: {
+          type: String,
+          enum: ["player1", "player2"],
           required: true,
+        },
+        playerPayment: {
+          type: Number,
+          default: 0,
         },
         paymentStatus: {
           type: String,
           enum: ["Pending", "Paid", "Cancelled", "Refunded"],
           default: "Pending",
         },
-        rentedRacket: {
-          type: Number,
-          default: 0,
-        },
-        rentedBalls: {
-          type: Number,
-          default: 0,
-        },
-      },
-      {
-        player2: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "users",
-          defult: null,
-          required: true,
-        },
-        paymentStatus: {
+        paidBy: {
           type: String,
-          enum: ["Pending", "Paid", "Cancelled", "Refunded"],
-          default: "Pending",
+          enum: ["player1", "player2", "player3", "player4", "Self"],
+          default: "Self",
         },
-        rentedRacket: {
+        racketA: {
           type: Number,
           default: 0,
         },
-        rentedBalls: {
+        racketB: {
+          type: Number,
+          default: 0,
+        },
+        racketC: {
+          type: Number,
+          default: 0,
+        },
+        balls: {
           type: Number,
           default: 0,
         },
@@ -99,43 +91,43 @@ const bookingSchema = new Schema(
     ],
     team2: [
       {
-        player1: {
+        playerId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "users",
           defult: null,
+        },
+        playerType: {
+          type: String,
+          enum: ["player3", "player4"],
           required: true,
+        },
+        playerPayment: {
+          type: Number,
+          defult: 0,
         },
         paymentStatus: {
           type: String,
           enum: ["Pending", "Paid", "Cancelled", "Refunded"],
           default: "Pending",
         },
-        rentedRacket: {
-          type: Number,
-          default: 0,
-        },
-        rentedBalls: {
-          type: Number,
-          default: 0,
-        },
-      },
-      {
-        player2: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "users",
-          defult: null,
-          required: true,
-        },
-        paymentStatus: {
+        paidBy: {
           type: String,
-          enum: ["Pending", "Paid", "Cancelled", "Refunded"],
-          default: "Pending",
+          enum: ["player1", "player2", "player3", "player4", "Self"],
+          default: "Self",
         },
-        rentedRacket: {
+        racketA: {
           type: Number,
           default: 0,
         },
-        rentedBalls: {
+        racketB: {
+          type: Number,
+          default: 0,
+        },
+        racketC: {
+          type: Number,
+          default: 0,
+        },
+        balls: {
           type: Number,
           default: 0,
         },
@@ -151,6 +143,12 @@ const bookingSchema = new Schema(
       ref: "courts",
       required: true,
     },
+    bookingType: {
+      type: String,
+      enum: ["Self", "Booking", "Complete"],
+      default: "Self",
+      required: true,
+    },
     bookingAmount: {
       type: Number,
       default: 0,
@@ -160,7 +158,7 @@ const bookingSchema = new Schema(
       default: false,
     },
     bookingDate: { type: Date, required: true },
-    bookingSlots: { type: [String], enum: VENUE_TIME_SLOTS, required: true },
+    bookingSlots: { type: String, enum: VENUE_TIME_SLOTS, required: true },
     cancellationReason: { type: String, default: null },
   },
   { timestamps: true }
