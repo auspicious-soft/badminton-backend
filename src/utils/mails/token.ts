@@ -3,7 +3,7 @@ import { passwordResetTokenModel } from "../../models/password-token-schema"
 
 
 
-export const generatePasswordResetToken = async (phoneNumber: string | null, email: string | null) => {
+export const generatePasswordResetToken = async (email: string | null, phoneNumber: string | null) => {
   console.log('phoneNumber: ', phoneNumber);
   console.log('email: ', email);
   const genId = customAlphabet('0123456789', 6)
