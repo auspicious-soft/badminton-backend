@@ -56,7 +56,7 @@ export const hashPasswordIfEmailAuth = async (
   userData: UserDocument,
   authType: string
 ) => {
-  if (authType === "Email" || authType === "Phone") {
+  if (authType === "Email" || authType === "Phone" || authType === "Email-Phone") {
     if (!userData.password) {
       throw new Error("Password is required for Email authentication");
     }

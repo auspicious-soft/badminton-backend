@@ -82,25 +82,18 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     
   try {
     if (gameType === "Public") {
-      // Calculate booking amount for each player
-      const allPlayers = [...team1, ...team2];
-      if (allPlayers.every((player: any) => !player.playerId)) {
+      if(team1.length>1){
         return errorResponseHandler(
-          "At least one player is required in team1 or team2",
+          "You are not allowed to book more than one player",
           httpStatusCode.BAD_REQUEST,
           res
         );
       }
 
-      [...team1, ...team2].forEach((player: any) => {
-        player.playerPayment = individualPrice;
-        player.paidBy = player.playerType === bookedBy ? "Self" : bookedBy;
-      });
-
-      const bookingAmount = [...team1, ...team2].reduce(
-        (total, player) => total + player?.playerPayment,
-        0
-      );
+      team1[0].playerId = userData.id;
+      team1[0].playerPayment = individualPrice;
+      team1[0].paymentStatus = "Pending";
+      team1[0].playerType = "player1"
 
       const booking = await bookingModel.create({
         userId: userData.id,
@@ -111,7 +104,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         gameType,
         team1,
         team2,
-        bookingAmount,
+        bookingAmount: individualPrice,
         askToJoin,
         isCompetitive,
         bookingType: "Self",
@@ -124,7 +117,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         message: "Court booking initiated",
         data: {
           bookingId: booking._id,
-          bookingAmount,
+          bookingAmount: individualPrice,
           paidBy: bookedBy,
           players: { team1, team2 },
         },
@@ -191,6 +184,35 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     );
   }
 };
+
+export const joinOpenBookingServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { bookingId, requestedPosition, requestedTeam } = req.body;
+
+  const booking = await bookingModel.findOne({
+    _id: bookingId,
+    gameType: "Public",
+    bookingDate: { $gte: new Date() },
+  });
+
+  console.log(booking)
+
+  if (!booking) {
+    return errorResponseHandler(
+      "Booking not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+
+  return {
+    success: true,
+    message: "Court booking initiated",
+    res
+  }
+}
+
 
 export const createBookingRequestService = async (
   req: Request,

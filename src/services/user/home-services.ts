@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
+  const userData = req.user as any;
   const { nearBy } = req.body;
 
   if (
@@ -58,9 +59,48 @@ export const userHomeServices = async (req: Request, res: Response) => {
       .lean();
   }
 
+  const upcomingMatchData = await bookingModel.aggregate([
+    {
+      $match: {
+        bookingDate: { $gte: new Date() },
+        $or: [
+          {
+            $and: [
+              { bookingType: "Self" },
+              {
+                $or: [
+                  { team1: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id), paymentStatus: "Paid" } } },
+                  { team2: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id), paymentStatus: "Paid" } } },
+                ],
+              },
+            ],
+          },
+          {
+            $and: [
+              { bookingType: { $in: ["Booking", "Complete"] } },
+              { bookingPaymentStatus: true },
+              {
+                $or: [
+                  { team1: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id) } } },
+                  { team2: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id) } } },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      $sort: {
+        bookingDate: 1,
+        bookingSlots: 1,
+      },
+    },
+  ]);
+  
   const data = {
     banners: [],
-    upcomingMatches: [],
+    upcomingMatches: upcomingMatchData,
     venueNearby: nearbyVenues,
     playersRanking: [],
     loyaltyPoints: { points: 0, level: 0, totalLevels: 5 },
@@ -485,15 +525,12 @@ export const searchFriendServices = async (req: Request, res: Response) => {
     // Get all friendships where the user is involved (both accepted and pending)
     const friendships = await friendsModel
       .find({
-        $or: [
-          { userId: userData.id },
-          { friendId: userData.id }
-        ]
+        $or: [{ userId: userData.id }, { friendId: userData.id }],
       })
       .lean();
 
     // Get all user IDs from friendships
-    const userIds = friendships.map(friendship => 
+    const userIds = friendships.map((friendship) =>
       friendship.userId.toString() === userData.id.toString()
         ? friendship.friendId
         : friendship.userId
@@ -502,14 +539,17 @@ export const searchFriendServices = async (req: Request, res: Response) => {
     // Fetch all users' details
     const friendUsers = await usersModel
       .find({ _id: { $in: userIds } })
-      .select('fullName profilePic')
+      .select("fullName profilePic")
       .lean();
 
     // Map users with their friendship status and request details
-    const usersWithStatus = friendUsers.map(user => {
-      const friendship = friendships.find(f =>
-        (f.userId.toString() === user._id.toString() && f.friendId.toString() === userData.id) ||
-        (f.userId.toString() === userData.id && f.friendId.toString() === user._id.toString())
+    const usersWithStatus = friendUsers.map((user) => {
+      const friendship = friendships.find(
+        (f) =>
+          (f.userId.toString() === user._id.toString() &&
+            f.friendId.toString() === userData.id) ||
+          (f.userId.toString() === userData.id &&
+            f.friendId.toString() === user._id.toString())
       );
 
       let result: any = {
@@ -518,12 +558,12 @@ export const searchFriendServices = async (req: Request, res: Response) => {
         profilePic: user.profilePic,
       };
 
-      if (friendship?.status === 'pending') {
+      if (friendship?.status === "pending") {
         if (friendship.friendId.toString() === userData.id.toString()) {
-          result.friendshipStatus = 'request_received';
+          result.friendshipStatus = "request_received";
           result.requestId = friendship._id;
         } else {
-          result.friendshipStatus = 'request_sent';
+          result.friendshipStatus = "request_sent";
         }
       } else {
         result.friendshipStatus = friendship?.status;
@@ -535,7 +575,7 @@ export const searchFriendServices = async (req: Request, res: Response) => {
     return {
       success: true,
       message: "All connections retrieved successfully",
-      data: usersWithStatus
+      data: usersWithStatus,
     };
   }
 
@@ -543,45 +583,45 @@ export const searchFriendServices = async (req: Request, res: Response) => {
   const searchQuery = {
     _id: { $ne: userData.id },
     $or: [
-      { fullName: { $regex: new RegExp(search, 'i') } },
-      { email: { $regex: new RegExp(search, 'i') } },
-      { phoneNumber: { $regex: new RegExp(search, 'i') } },
+      { fullName: { $regex: new RegExp(search, "i") } },
+      { email: { $regex: new RegExp(search, "i") } },
+      { phoneNumber: { $regex: new RegExp(search, "i") } },
     ],
   };
 
   const users = await usersModel
     .find(searchQuery)
-    .select('fullName profilePic')
+    .select("fullName profilePic")
     .lean();
 
   const friendships = await friendsModel
     .find({
-      $or: [
-        { userId: userData.id },
-        { friendId: userData.id },
-      ],
+      $or: [{ userId: userData.id }, { friendId: userData.id }],
     })
     .lean();
 
-  const usersWithFriendshipStatus = users?.map(user => {
-    const friendship = friendships.find(f => 
-      (f.userId.toString() === user._id.toString() && f.friendId.toString() === userData.id) ||
-      (f.userId.toString() === userData.id && f.friendId.toString() === user._id.toString())
+  const usersWithFriendshipStatus = users?.map((user) => {
+    const friendship = friendships.find(
+      (f) =>
+        (f.userId.toString() === user._id.toString() &&
+          f.friendId.toString() === userData.id) ||
+        (f.userId.toString() === userData.id &&
+          f.friendId.toString() === user._id.toString())
     );
 
     let result: any = {
       _id: user._id,
       fullName: user.fullName,
       profilePic: user.profilePic,
-      friendshipStatus: 'not_connected'
+      friendshipStatus: "not_connected",
     };
-    
+
     if (friendship) {
-      if (friendship.status === 'pending') {
+      if (friendship.status === "pending") {
         if (friendship.userId.toString() === userData.id) {
-          result.friendshipStatus = 'request_sent';
+          result.friendshipStatus = "request_sent";
         } else {
-          result.friendshipStatus = 'request_received';
+          result.friendshipStatus = "request_received";
           result.requestId = friendship._id;
         }
       } else {

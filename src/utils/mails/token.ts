@@ -4,20 +4,29 @@ import { passwordResetTokenModel } from "../../models/password-token-schema"
 
 
 export const generatePasswordResetToken = async (phoneNumber: string | null, email: string | null) => {
+  console.log('phoneNumber: ', phoneNumber);
+  console.log('email: ', email);
   const genId = customAlphabet('0123456789', 6)
   const token = genId()
   const expires = new Date(new Date().getTime() + 3600 * 1000)
 
+  if (!phoneNumber && !email) {
+    throw new Error("Either phone number or email is required")
+  }
+
   const existingToken = await passwordResetTokenModel.findOne({ $or: [{ phoneNumber }, { email }] })
+  console.log('existingToken: ', existingToken);
   if (existingToken) {
     await passwordResetTokenModel.findByIdAndDelete(existingToken._id)
   }
-  const newPasswordResetToken = new passwordResetTokenModel({
-    phoneNumber,
+
+  const tokenData = {
+    phoneNumber: phoneNumber || null,
     token,
     expires,
-    email
-  })
+    email: email || null,
+  }
+  const newPasswordResetToken = new passwordResetTokenModel(tokenData)
   const response = await newPasswordResetToken.save()
   return response
 }

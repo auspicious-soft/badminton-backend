@@ -30,12 +30,10 @@ export const checkPublisherAuth = async (
       salt: process.env.JWT_SALT as string,
     });
     if (!decoded)
-      return res
-        .status(httpStatusCode.UNAUTHORIZED)
-        .json({
-          success: false,
-          message: "Unauthorized token invalid or expired",
-        });
+      return res.status(httpStatusCode.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized token invalid or expired",
+      });
     (req as any).currentUser = decoded.id;
 
     next();
@@ -57,45 +55,28 @@ export const checkAuth = async (
         .status(httpStatusCode.UNAUTHORIZED)
         .json({ success: false, message: "Unauthorized token missing" });
 
-    const isMobileApp = req.headers["x-client-type"] === "mobile";
-    const userAgent = req.headers["user-agent"]?.toLowerCase() || "";
-    const isPostman = userAgent.includes("postman");
-
-    if (isMobileApp || isPostman) {
-      const decoded = jwt.verify(token, process.env.AUTH_SECRET as string) as JwtPayload & { id: string };
-      const user = await usersModel.findOne({ _id: decoded?.id, isBlocked: false });
-      if (!user) {
-        return res.status(httpStatusCode.UNAUTHORIZED).json({
-          success: false,
-          message: "Unauthorized user not found",
-        });
-      }
-
-      if (!decoded)
-        return res
-          .status(httpStatusCode.UNAUTHORIZED)
-          .json({
-            success: false,
-            message: "Unauthorized token invalid or expired",
-          });
-      req.user = decoded as JwtPayload;
-    } else {
-      const decoded = await decode({
-        secret: process.env.AUTH_SECRET as string,
-        token,
-        salt: process.env.JWT_SALT as string,
+    const decoded = jwt.verify(
+      token,
+      process.env.AUTH_SECRET as string
+    ) as JwtPayload & { id: string };
+    const user = await usersModel.findOne({
+      _id: decoded?.id,
+      isBlocked: false,
+    });
+    if (!user) {
+      return res.status(httpStatusCode.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized user not found",
       });
-      if (!decoded)
-        return res
-          .status(httpStatusCode.UNAUTHORIZED)
-          .json({
-            success: false,
-            message: "Unauthorized token invalid or expired",
-          });
-      (req as any).currentUser = decoded.id;
     }
 
-      next();
+    if (!decoded)
+      return res.status(httpStatusCode.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized token invalid or expired",
+      });
+    req.user = decoded as JwtPayload;
+    next();
   } catch (error) {
     return res
       .status(httpStatusCode.UNAUTHORIZED)

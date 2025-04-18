@@ -3,7 +3,8 @@ import mongoose from "mongoose"
 const passwordResetSchema = new mongoose.Schema({
     email: {
         type: String,
-        required: false
+        required: true,
+        sparse: true
     },
     token: {
         type: String,
@@ -16,7 +17,6 @@ const passwordResetSchema = new mongoose.Schema({
     },
     phoneNumber : {
         type: String,
-        required: false
     }
 
 });
