@@ -3,185 +3,104 @@ import { errorResponseHandler } from "../../lib/errors/error-response-handler";
 import { httpStatusCode } from "../../lib/constant";
 import { bookingModel } from "../../models/venue/booking-schema";
 import { bookingRequestModel } from "../../models/venue/booking-request-schema";
-import { venueModel } from "src/models/venue/venue-schema";
+import { transactionModel } from "src/models/admin/transaction-schema";
+import mongoose from "mongoose";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const {
+  let {
     venueId,
     courtId,
     bookingDate,
     bookingSlots,
     gameType,
-    team1,
+    team1 = [],
     team2 = [],
-    bookedBy,
     askToJoin = false,
     isCompetitive = false,
     skillRequired = 0,
     bookingType,
   } = req.body;
 
-  // Validate required fields
-  if (!venueId || !courtId || !bookingDate || !bookingSlots || !gameType) {
-    return errorResponseHandler(
-      "Required fields missing: venueId, courtId, bookingDate, bookingSlots, gameType",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
+  let playerType = ["player1", "player2", "player3", "player4"];
+  let paidFor :any[] = []
 
-  // Validate team1 structure and required player1 field
-  if (!Array.isArray(team1) || team1.length === 0) {
-    return errorResponseHandler(
-      "Team1 must be a non-empty array",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
+  // ********************Validattions****************************
 
-  // Check if the venue and court exist
-  const venue = await venueModel.findById(venueId);
-  if (!venue) {
-    return errorResponseHandler(
-      "Venue not found",
-      httpStatusCode.NOT_FOUND,
-      res
-    );
-  }
+  const bookingPrice: number = 600 ,
+    completeCourtPrice: number = 1200,
+    playerPayment: number = 300;
 
-  // Check if the court exists in the venue
-  const court = venue.courts.find((c: any) => c._id.toString() === courtId);
-  if (!court) {
-    return errorResponseHandler(
-      "Court not found in the venue",
-      httpStatusCode.NOT_FOUND,
-      res
-    );
-  }
+  [...team1, ...team2].map((items,indx)=>{
+    if(items.playerId && items.playerId === userData.id){
+      items.paidBy = "Self";
+      items.playerType = playerType[indx];
+      paidFor.push(playerType[indx]);
+    }
+    if(items.playerId && items.playerId !== userData.id){
+      items.paidBy = "User";
+      items.playerPayment = playerPayment;
+      items.playerType = playerType[indx];
+      paidFor.push(playerType[indx]);
+    }
+  })
 
-  // Check if the slot is already booked
-  const existingBooking = await bookingModel.findOne({
+  const session = await mongoose.startSession();
+
+  let bookingPayload = {
+    userId: userData.id,
     venueId,
     courtId,
+    gameType,
+    askToJoin,
+    isCompetitive,
+    skillRequired,
+    team1,
+    team2,
+    bookingType,
+    bookingAmount: bookingType === "Complete" ? completeCourtPrice : bookingPrice,
+    bookingPaymentStatus: false,
     bookingDate,
     bookingSlots,
-  });
-
-  if (existingBooking) {
-    return errorResponseHandler(
-      "This slot is already booked",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
   }
 
-  const individualPrice: number = 400,
-    bookingPrice: number = 800,
-    completeCourtPrice: number = 1600
-    
-  try {
-    if (gameType === "Public") {
-      if(team1.length>1){
-        return errorResponseHandler(
-          "You are not allowed to book more than one player",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
-      }
-
-      team1[0].playerId = userData.id;
-      team1[0].playerPayment = individualPrice;
-      team1[0].paymentStatus = "Pending";
-      team1[0].playerType = "player1"
-
-      const booking = await bookingModel.create({
-        userId: userData.id,
-        venueId,
-        courtId,
-        bookingDate,
-        bookingSlots,
-        gameType,
-        team1,
-        team2,
-        bookingAmount: individualPrice,
-        askToJoin,
-        isCompetitive,
-        bookingType: "Self",
-        skillRequired,
-        bookingPaymentStatus: false,
-      });
-
-      return {
-        success: true,
-        message: "Court booking initiated",
-        data: {
-          bookingId: booking._id,
-          bookingAmount: individualPrice,
-          paidBy: bookedBy,
-          players: { team1, team2 },
-        },
-      };
-    } else {
-      // Calculate booking amount for each player
-      if (!bookingType) {
-        return errorResponseHandler(
-          "Booking type is required",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
-      }
-
-      const allPlayers = [...team1, ...team2];
-      if (allPlayers.every((player: any) => !player.playerId)) {
-        return errorResponseHandler(
-          "At least one player is required in team1 or team2",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
-      }
-
-      [...team1, ...team2].forEach((player: any) => {
-        player.paidBy = player.playerType === bookedBy ? "Self" : bookedBy;
-      });
-
-      let bookingAmount =
-        bookingType === "Complete" ? completeCourtPrice : bookingPrice;
-
-      const booking = await bookingModel.create({
-        userId: userData.id,
-        venueId,
-        courtId,
-        bookingDate,
-        bookingSlots,
-        gameType,
-        team1,
-        team2,
-        bookingAmount,
-        askToJoin,
-        isCompetitive,
-        bookingType,
-        skillRequired,
-        bookingPaymentStatus: false,
-      });
-
-      return {
-        success: true,
-        message: "Court booking initiated",
-        data: {
-          bookingId: booking._id,
-          bookingAmount,
-          paidBy: bookedBy,
-          players: { team1, team2 },
-        },
-      };
+  let finalPayload = bookingSlots.map((slot: string)=>{
+    return {
+      ...bookingPayload,
+      bookingSlots : slot,
     }
-  } catch (error: any) {
-    return errorResponseHandler(
-      error.message || "Error creating booking",
-      httpStatusCode.INTERNAL_SERVER_ERROR,
-      res
-    );
+  })
+
+  try {
+    await session.startTransaction();
+    const bookingTransaction = await transactionModel.create([{
+      userId: userData.id,
+      paidFor: paidFor,
+      amount: bookingType === "Complete" ? completeCourtPrice * bookingSlots.length : bookingPrice * bookingSlots.length,
+      currency: "INR",
+      status: "created",
+      method: "razorpay",
+      notes: bookingSlots,
+      isWebhookVerified: false,
+    }], { session });
+
+    finalPayload.map((items: any)=>{
+      items.transactionId = bookingTransaction[0]._id;
+    })
+
+    await bookingModel.insertMany(finalPayload, { session });
+    await session.commitTransaction();
+
+    return {
+      success: true,
+      message: "Court booking initiated",
+      data: bookingTransaction[0],
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
   }
 };
 
@@ -195,7 +114,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     bookingDate: { $gte: new Date() },
   });
 
-  console.log(booking)
+  console.log(booking);
 
   if (!booking) {
     return errorResponseHandler(
@@ -205,14 +124,12 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-
   return {
     success: true,
     message: "Court booking initiated",
-    res
-  }
-}
-
+    res,
+  };
+};
 
 export const createBookingRequestService = async (
   req: Request,
@@ -449,3 +366,8 @@ export const handleBookingRequestService = async (
     );
   }
 };
+
+
+
+
+

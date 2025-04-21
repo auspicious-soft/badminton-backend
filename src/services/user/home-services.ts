@@ -191,7 +191,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
 
 export const getCourtsServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { venueId } = req.body;
+  const { venueId } = req.query;
   if (!venueId)
     return errorResponseHandler(
       "Venue ID is required",
@@ -519,7 +519,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
 
 export const searchFriendServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { search } = req.body;
+  const { search } = req.query;
 
   if (!search) {
     // Get all friendships where the user is involved (both accepted and pending)
@@ -583,9 +583,9 @@ export const searchFriendServices = async (req: Request, res: Response) => {
   const searchQuery = {
     _id: { $ne: userData.id },
     $or: [
-      { fullName: { $regex: new RegExp(search, "i") } },
-      { email: { $regex: new RegExp(search, "i") } },
-      { phoneNumber: { $regex: new RegExp(search, "i") } },
+      { fullName: { $regex: new RegExp(String(search), "i") } },
+      { email: { $regex: new RegExp(String(search), "i") } },
+      { phoneNumber: { $regex: new RegExp(String(search), "i") } },
     ],
   };
 

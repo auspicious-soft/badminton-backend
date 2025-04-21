@@ -86,7 +86,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
 
 export const getEmployees = async (req: Request, res: Response) => {
   try {
-    const response = await getEmployeesService(req.body, res);
+    const response = await getEmployeesService(req.query, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
@@ -98,7 +98,7 @@ export const getEmployees = async (req: Request, res: Response) => {
 
 export const getEmployeesById = async (req: Request, res: Response) => {
   try {
-    const response = await getEmployeeByIdService(req.body, res);
+    const response = await getEmployeeByIdService(req.query, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
@@ -161,7 +161,7 @@ export const createVenue = async (req: Request, res: Response) => {
 
   export const getVenue = async (req: Request, res: Response) => {
     try {
-      const response = await getVenueService(req.body, res);
+      const response = await getVenueService(req.query, res);
       return res.status(httpStatusCode.OK).json(response);
     } catch (error: any) {
       const { code, message } = errorParser(error);
@@ -173,7 +173,7 @@ export const createVenue = async (req: Request, res: Response) => {
 
 export const getVenueById = async (req: Request, res: Response) => {
     try {
-      const response = await getVenueByIdService(req.body, res);
+      const response = await getVenueByIdService(req.query, res);
       return res.status(httpStatusCode.OK).json(response);
     } catch (error: any) {
       const { code, message } = errorParser(error);

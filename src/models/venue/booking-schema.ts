@@ -11,7 +11,7 @@ export interface BookingDocument extends Document {
   skillRequired: number;
   team1: any;
   team2: any;
-  bookingType: "Self" | "Booking" | "Complete";
+  bookingType: "Booking" | "Complete";
   bookingAmount: number;
   bookingPaymentStatus: boolean;
   bookingDate: Date;
@@ -31,7 +31,7 @@ const bookingSchema = new Schema(
     gameType: {
       type: String,
       enum: ["Public", "Private"],
-      default: "Public",
+      default: "Private",
       required: true,
     },
     askToJoin: {
@@ -68,7 +68,7 @@ const bookingSchema = new Schema(
         },
         paidBy: {
           type: String,
-          enum: ["player1", "player2", "player3", "player4", "Self"],
+          enum: ["User", "Self"],
           default: "Self",
         },
         racketA: {
@@ -112,7 +112,7 @@ const bookingSchema = new Schema(
         },
         paidBy: {
           type: String,
-          enum: ["player1", "player2", "player3", "player4", "Self"],
+          enum: ["Self", "User"],
           default: "Self",
         },
         racketA: {
@@ -145,7 +145,7 @@ const bookingSchema = new Schema(
     },
     bookingType: {
       type: String,
-      enum: ["Self", "Booking", "Complete"],
+      enum: ["Booking", "Complete"],
       default: "Self",
       required: true,
     },
@@ -156,6 +156,10 @@ const bookingSchema = new Schema(
     bookingPaymentStatus: {
       type: Boolean,
       default: false,
+    },
+    transactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "transactions",
     },
     bookingDate: { type: Date, required: true },
     bookingSlots: { type: String, enum: VENUE_TIME_SLOTS, required: true },

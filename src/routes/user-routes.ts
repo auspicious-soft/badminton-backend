@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { acceptFriendRequest, bookCourt, getCourts, getOpenMatches, getVenues, joinOpenCourt, searchFriend, sendRequest, userHome } from "src/controllers/user/user-home-controller";
+import { validateBookingRequest } from "src/middleware/booking-validation";
 // import {  getAllAuthorsForUser, getAuthorCountries, getAuthorForUser } from "src/controllers/authors/authors-controller";
 // import {  getAllBookLivesWithBlogs, getBookLive } from "src/controllers/book-lives/book-lives-controller";
 // import { getBookSchoolsByCode, verifyBookSchoolsByCode } from "src/controllers/book-schools/book-schools-controller";
@@ -34,7 +35,7 @@ router.get("/user-home-screen", userHome);
 router.get("/get-venues", getVenues)
 router.get("/get-courts", getCourts)
 router.get("/get-booking-data-byId", getCourts)
-router.post("/book-court", bookCourt)
+router.post("/book-court",validateBookingRequest, bookCourt)
 
 router.get("/get-open-matches", getOpenMatches)
 router.post("/join-open-matches", joinOpenCourt)

@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface TransactionDocument extends Document {
   userId: mongoose.Types.ObjectId;
   bookingId?: mongoose.Types.ObjectId;
-  paidFor?: "player1" | "player2" | "player3" | "player4" | "all-players";
+  paidFor?: any;
   razorpayOrderId: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
@@ -37,13 +37,12 @@ const transactionSchema = new Schema<TransactionDocument>(
       ref: "bookings",
     },
     paidFor: {
-      type: String,
-      enum: ["player1", "player2", "player3", "player4", "all-players"],
-      required: true,
+      type: Array,
+      default: ["player1", "player2"],
     },
     razorpayOrderId: {
       type: String,
-      required: true,
+      // required: true,
     },
     razorpayPaymentId: {
       type: String,
