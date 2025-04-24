@@ -244,11 +244,39 @@ export const getEmployeesService = async (payload: any, res: Response) => {
   const page = parseInt(payload.page as string) || 1;
   const limit = parseInt(payload.limit as string) || 10;
   const offset = (page - 1) * limit;
+  const order = payload.order || "desc";
+  const status = payload.status || ""; // Remove default "Working" status
 
-  let searchQuery = {};
+  // Validate status if provided
+  if (status && !["Working", "Ex-Employee"].includes(status)) {
+    return errorResponseHandler(
+      "Invalid status. Must be either 'Working' or 'Ex-Employee'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Validate order
+  if (order && !["asc", "desc"].includes(order)) {
+    return errorResponseHandler(
+      "Invalid order. Must be either 'asc' or 'desc'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Build search query
+  let searchQuery: any = {}; // Initialize empty search query
+
+  // Only add status to query if it's provided
+  if (status) {
+    searchQuery.status = status;
+  }
+
   if (payload.search) {
     const searchRegex = new RegExp(payload.search, "i");
     searchQuery = {
+      ...searchQuery,
       $or: [
         { fullName: searchRegex },
         { email: searchRegex },
@@ -257,23 +285,18 @@ export const getEmployeesService = async (payload: any, res: Response) => {
     };
   }
 
-  if (payload.status) {
-    searchQuery = {
-      ...searchQuery,
-      status: payload.status,
-    };
-  }
-
-  const sortBy = {} as any;
-
+  // Build sort query
+  const sortBy: any = {};
   if (payload.sortBy === "fullName") {
-    sortBy.fullName = 1;
+    sortBy.fullName = order === "asc" ? 1 : -1;
   } else {
-    sortBy.createdAt = -1;
+    sortBy.createdAt = order === "asc" ? 1 : -1;
   }
 
-  const totalEmployees = await employeesModel.countDocuments();
+  // Get total count based on search query
+  const totalEmployees = await employeesModel.countDocuments(searchQuery);
 
+  // Get employees
   const employees = await employeesModel
     .find(searchQuery, "-password -otp")
     .skip(offset)
@@ -291,6 +314,9 @@ export const getEmployeesService = async (payload: any, res: Response) => {
       page,
       limit,
       totalPages: Math.ceil(totalEmployees / limit),
+      status: status || "all", // Return "all" when no status is specified
+      order,
+      sortBy: payload.sortBy || "createdAt"
     },
   };
 };
@@ -396,7 +422,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     courts,
     employees,
     isActive,
-    location
+    location,
   } = payload as UpdateVenuePayload;
 
   if (!venueId || !mongoose.Types.ObjectId.isValid(venueId)) {
@@ -552,8 +578,8 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
     {
       $match: {
         venueId: new mongoose.Types.ObjectId(id),
-        bookingPaymentStatus: true
-      }
+        bookingPaymentStatus: true,
+      },
     },
     // Lookup for team1 players
     {
@@ -563,20 +589,20 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         pipeline: [
           {
             $match: {
-              $expr: { $in: ["$_id", "$$team1Players"] }
-            }
+              $expr: { $in: ["$_id", "$$team1Players"] },
+            },
           },
           {
             $project: {
               fullName: 1,
               email: 1,
               phoneNumber: 1,
-              profileImage: 1
-            }
-          }
+              profileImage: 1,
+            },
+          },
         ],
-        as: "team1Players"
-      }
+        as: "team1Players",
+      },
     },
     // Lookup for team2 players
     {
@@ -586,20 +612,20 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         pipeline: [
           {
             $match: {
-              $expr: { $in: ["$_id", "$$team2Players"] }
-            }
+              $expr: { $in: ["$_id", "$$team2Players"] },
+            },
           },
           {
             $project: {
               fullName: 1,
               email: 1,
               phoneNumber: 1,
-              profileImage: 1
-            }
-          }
+              profileImage: 1,
+            },
+          },
         ],
-        as: "team2Players"
-      }
+        as: "team2Players",
+      },
     },
     // Project fields and combine players
     {
@@ -607,43 +633,45 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         bookingDate: 1,
         bookingSlots: 1,
         players: {
-          $concatArrays: ["$team1Players", "$team2Players"]
-        }
-      }
+          $concatArrays: ["$team1Players", "$team2Players"],
+        },
+      },
     },
     // If search is provided, filter matches where at least one player matches
-    ...(search ? [
-      {
-        $match: {
-          players: {
-            $elemMatch: {
-              fullName: { $regex: search, $options: "i" }
-            }
-          }
-        }
-      }
-    ] : []),
+    ...(search
+      ? [
+          {
+            $match: {
+              players: {
+                $elemMatch: {
+                  fullName: { $regex: search, $options: "i" },
+                },
+              },
+            },
+          },
+        ]
+      : []),
     // Sort by booking date (newest first)
     {
-      $sort: { bookingDate: -1 }
-    }
+      $sort: { bookingDate: -1 },
+    },
   ]);
 
   // Add matches to venue data
-  const matches = completedBookings.map(booking => ({
+  const matches = completedBookings.map((booking) => ({
     bookingDate: booking.bookingDate,
     bookingSlots: booking.bookingSlots,
     players: booking.players.map((player: any) => ({
       fullName: player.fullName,
       email: player.email,
       phoneNumber: player.phoneNumber,
-      profileImage: player.profileImage
-    }))
+      profileImage: player.profileImage,
+    })),
   }));
 
   return {
     success: true,
     message: "Venue retrieved successfully",
-    data: {...venue, matches}
+    data: { ...venue, matches },
   };
 };
