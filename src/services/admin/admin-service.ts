@@ -563,10 +563,7 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         pipeline: [
           {
             $match: {
-              $and: [
-                { $expr: { $in: ["$_id", "$$team1Players"] } },
-                search ? { fullName: { $regex: search, $options: "i" } } : {}
-              ]
+              $expr: { $in: ["$_id", "$$team1Players"] }
             }
           },
           {
@@ -589,10 +586,7 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         pipeline: [
           {
             $match: {
-              $and: [
-                { $expr: { $in: ["$_id", "$$team2Players"] } },
-                search ? { fullName: { $regex: search, $options: "i" } } : {}
-              ]
+              $expr: { $in: ["$_id", "$$team2Players"] }
             }
           },
           {
@@ -607,16 +601,7 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         as: "team2Players"
       }
     },
-    // Filter out bookings where no players match the search (if search is provided)
-    {
-      $match: {
-        $or: [
-          { "team1Players": { $ne: [] } },
-          { "team2Players": { $ne: [] } }
-        ]
-      }
-    },
-    // Project only the required fields
+    // Project fields and combine players
     {
       $project: {
         bookingDate: 1,
@@ -626,6 +611,18 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
         }
       }
     },
+    // If search is provided, filter matches where at least one player matches
+    ...(search ? [
+      {
+        $match: {
+          players: {
+            $elemMatch: {
+              fullName: { $regex: search, $options: "i" }
+            }
+          }
+        }
+      }
+    ] : []),
     // Sort by booking date (newest first)
     {
       $sort: { bookingDate: -1 }
