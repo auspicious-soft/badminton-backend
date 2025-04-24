@@ -237,7 +237,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     // Initial match for public games
     {
       $match: {
-        gameType: "Public",
+        askToJoin: true,
         bookingDate: { $gte: new Date(date) },
       },
     },
@@ -429,7 +429,6 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       $project: {
         bookingDate: 1,
         bookingSlots: 1,
-        gameType: 1,
         askToJoin: 1,
         isCompetitive: 1,
         skillRequired: 1,

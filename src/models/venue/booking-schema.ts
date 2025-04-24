@@ -66,6 +66,10 @@ const bookingSchema = new Schema(
           enum: ["Pending", "Paid", "Cancelled", "Refunded"],
           default: "Pending",
         },
+        transactionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "transactions",
+        },
         paidBy: {
           type: String,
           enum: ["User", "Self"],
@@ -109,6 +113,10 @@ const bookingSchema = new Schema(
           type: String,
           enum: ["Pending", "Paid", "Cancelled", "Refunded"],
           default: "Pending",
+        },
+        transactionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "transactions",
         },
         paidBy: {
           type: String,
@@ -156,10 +164,6 @@ const bookingSchema = new Schema(
     bookingPaymentStatus: {
       type: Boolean,
       default: false,
-    },
-    transactionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "transactions",
     },
     bookingDate: { type: Date, required: true },
     bookingSlots: { type: String, enum: VENUE_TIME_SLOTS, required: true },

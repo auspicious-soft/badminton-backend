@@ -21,6 +21,7 @@ import { customAlphabet } from "nanoid";
 import { attendanceModel } from "src/models/employees/attendance-schema";
 import mongoose from "mongoose";
 import { venueModel } from "src/models/venue/venue-schema";
+import { bookingModel } from "src/models/venue/booking-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -503,7 +504,7 @@ export const getVenueService = async (payload: any, res: Response) => {
 };
 
 export const getVenueByIdService = async (payload: any, res: Response) => {
-  const { id } = payload;
+  const { id, search } = payload;
   console.log("venueId: ", id);
 
   if (!id) {
@@ -534,7 +535,7 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
   // Modify employees structure
   if (venue.employees) {
     (venue.employees as any) = venue.employees.map((emp: any) => ({
-      employeeId: emp.employeeId?._id, // Keep only the ID
+      employeeId: emp.employeeId?._id,
       isActive: emp.isActive,
       employeeData: emp.employeeId
         ? {
@@ -542,13 +543,110 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
             email: emp.employeeId.email,
             phoneNumber: emp.employeeId.phoneNumber,
           }
-        : null, // Store only relevant details in employeeData
+        : null,
     }));
   }
+
+  // Get completed bookings with player details
+  const completedBookings = await bookingModel.aggregate([
+    {
+      $match: {
+        venueId: new mongoose.Types.ObjectId(id),
+        bookingPaymentStatus: true
+      }
+    },
+    // Lookup for team1 players
+    {
+      $lookup: {
+        from: "users",
+        let: { team1Players: "$team1.playerId" },
+        pipeline: [
+          {
+            $match: {
+              $and: [
+                { $expr: { $in: ["$_id", "$$team1Players"] } },
+                search ? { fullName: { $regex: search, $options: "i" } } : {}
+              ]
+            }
+          },
+          {
+            $project: {
+              fullName: 1,
+              email: 1,
+              phoneNumber: 1,
+              profileImage: 1
+            }
+          }
+        ],
+        as: "team1Players"
+      }
+    },
+    // Lookup for team2 players
+    {
+      $lookup: {
+        from: "users",
+        let: { team2Players: "$team2.playerId" },
+        pipeline: [
+          {
+            $match: {
+              $and: [
+                { $expr: { $in: ["$_id", "$$team2Players"] } },
+                search ? { fullName: { $regex: search, $options: "i" } } : {}
+              ]
+            }
+          },
+          {
+            $project: {
+              fullName: 1,
+              email: 1,
+              phoneNumber: 1,
+              profileImage: 1
+            }
+          }
+        ],
+        as: "team2Players"
+      }
+    },
+    // Filter out bookings where no players match the search (if search is provided)
+    {
+      $match: {
+        $or: [
+          { "team1Players": { $ne: [] } },
+          { "team2Players": { $ne: [] } }
+        ]
+      }
+    },
+    // Project only the required fields
+    {
+      $project: {
+        bookingDate: 1,
+        bookingSlots: 1,
+        players: {
+          $concatArrays: ["$team1Players", "$team2Players"]
+        }
+      }
+    },
+    // Sort by booking date (newest first)
+    {
+      $sort: { bookingDate: -1 }
+    }
+  ]);
+
+  // Add matches to venue data
+  const matches = completedBookings.map(booking => ({
+    bookingDate: booking.bookingDate,
+    bookingSlots: booking.bookingSlots,
+    players: booking.players.map((player: any) => ({
+      fullName: player.fullName,
+      email: player.email,
+      phoneNumber: player.phoneNumber,
+      profileImage: player.profileImage
+    }))
+  }));
 
   return {
     success: true,
     message: "Venue retrieved successfully",
-    data: venue,
+    data: {...venue, matches}
   };
 };

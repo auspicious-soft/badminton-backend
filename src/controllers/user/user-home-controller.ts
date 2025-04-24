@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
 import { errorParser } from "../../lib/errors/error-response-handler";
 import {acceptFriendRequestServices, getCourtsServices, getOpenMatchesServices, getVenuesServices, searchFriendServices, sendRequestServices, userHomeServices } from "src/services/user/home-services";
-import { bookCourtServices, joinOpenBookingServices } from "src/services/user/booking-services";
+import { bookCourtServices, joinOpenBookingServices, userNotificationServices } from "src/services/user/booking-services";
 
 
 export const userHome = async (req: Request, res: Response) => {
@@ -69,6 +69,18 @@ export const getOpenMatches = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
     const response = await getOpenMatchesServices(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const userNotifications = async (req: Request, res: Response) => {
+  try {
+    console.log("req.body: ", req.user);
+    const response = await userNotificationServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);

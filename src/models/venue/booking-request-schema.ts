@@ -2,12 +2,15 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface BookingRequestDocument extends Document {
   bookingId: mongoose.Types.ObjectId;
+  requestedTo: mongoose.Types.ObjectId;
   requestedBy: mongoose.Types.ObjectId;
   requestedTeam: "team1" | "team2";
   requestedPosition: "player1" | "player2" | "player3" | "player4";
   status: "pending" | "accepted" | "rejected" | "completed";
-  rentedRacket: number;
-  rentedBalls: number;
+  racketA: number;
+  racketB: number;
+  racketC: number;
+  balls: number;
   playerPayment: number;
   paymentStatus: "Pending" | "Paid" | "Cancelled" | "Refunded";
   createdAt?: Date;
@@ -19,6 +22,11 @@ const bookingRequestSchema = new Schema(
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "bookings",
+      required: true,
+    },
+    requestedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
       required: true,
     },
     requestedBy: {
@@ -41,11 +49,19 @@ const bookingRequestSchema = new Schema(
       enum: ["pending", "accepted", "rejected", "completed"],
       default: "pending",
     },
-    rentedRacket: {
+    racketA: {
       type: Number,
       default: 0,
     },
-    rentedBalls: {
+    racketB: {
+      type: Number,
+      default: 0,
+    },
+    racketC: {
+      type: Number,
+      default: 0,
+    },
+    balls: {
       type: Number,
       default: 0,
     },
@@ -53,7 +69,7 @@ const bookingRequestSchema = new Schema(
       type: Number,
       default: 0,
     },
-    paymentStatus: {
+    bookingStatus: {
       type: String,
       enum: ["Pending", "Paid", "Cancelled", "Refunded"],
       default: "Pending",
@@ -69,6 +85,6 @@ bookingRequestSchema.index(
 );
 
 export const bookingRequestModel = mongoose.model<BookingRequestDocument>(
-  "booking_requests",
+  "bookingRequests",
   bookingRequestSchema
 );
