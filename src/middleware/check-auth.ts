@@ -78,7 +78,7 @@ export const checkAdminAuth = async (
           success: false,
           message: "Unauthorized token invalid or expired",
         });
-    (req as any).currentUser = decoded.id;
+    (req as any).currentUser = decoded;
     next();
   } catch (error) {
     return res

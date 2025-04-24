@@ -358,12 +358,103 @@ export const getEmployeeByIdService = async (payload: any, res: Response) => {
 };
 
 export const getAdminDetailsService = async (payload: any, res: Response) => {
-  const results = await adminModel.find();
+  console.log("payload: ", payload.currentUser);
+  const results = await adminModel.findById(payload.currentUser.id).lean();
+
   return {
     success: true,
     data: results,
   };
 };
+
+export const updateAdminDetailsServices = async (payload: any, res: Response) => {
+  try {
+    const adminId = payload.currentUser.id;
+    const updateFields: any = {};
+
+    payload = payload.body;
+
+    // Only add fields that are provided and not empty
+    if (payload.fullName?.trim()) {
+      updateFields.fullName = payload.fullName;
+    }
+
+    if (payload.email?.trim()) {
+      const existingAdmin = await adminModel.findOne({ 
+        email: payload.email,
+        _id: { $ne: adminId }
+      });
+      
+      if (existingAdmin) {
+        return errorResponseHandler(
+          "Email already exists",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+      updateFields.email = payload.email;
+    }
+
+    if (payload.phoneNumber) {
+      const existingAdmin = await adminModel.findOne({ 
+        phoneNumber: payload.phoneNumber,
+        _id: { $ne: adminId }
+      });
+      
+      if (existingAdmin) {
+        return errorResponseHandler(
+          "Phone number already exists",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+      updateFields.phoneNumber = payload.phoneNumber;
+    }
+
+    if (payload.profilePic?.trim()) {
+      updateFields.profilePic = payload.profilePic;
+    }
+
+    if (payload.password) {
+      updateFields.password = await hashPasswordIfEmailAuth(payload, "Email")
+    }
+
+    // If no fields to update
+    if (Object.keys(updateFields).length === 0) {
+      return errorResponseHandler(
+        "No valid fields to update",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const updatedAdmin = await adminModel.findByIdAndUpdate(
+      adminId,
+      { $set: updateFields },
+      { new: true, select: '-password' }
+    );
+
+    if (!updatedAdmin) {
+      return errorResponseHandler(
+        "Admin not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+    return {
+      success: true,
+      message: "Admin updated successfully",
+      data: updatedAdmin
+    };
+  } catch (error) {
+    return errorResponseHandler(
+      "Error updating admin details",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+};
+
 
 // ******************** Handle Venue **************************
 

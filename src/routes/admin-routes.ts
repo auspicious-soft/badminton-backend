@@ -1,5 +1,5 @@
 import { Router } from "express";
-import {  createEmployee, createVenue, getAdminDetails, getEmployees, getEmployeesById, getVenue, getVenueById, logoutEmployee, updateEmployee, updateVenue} from "../controllers/admin/admin-controller";
+import {  createEmployee, createVenue, getAdminDetails, getEmployees, getEmployeesById, getVenue, getVenueById, logoutEmployee, updateAdminDetails, updateEmployee, updateVenue} from "../controllers/admin/admin-controller";
 
 const router = Router();
 //Emmpoyee routes
@@ -9,6 +9,7 @@ router.get("/get-employees", getEmployees);
 router.get("/get-employees-by-id", getEmployeesById);
 router.post("/logout-employee", logoutEmployee);
 router.get("/get-admin-details", getAdminDetails);
+router.put("/update-admin-details", updateAdminDetails);
 
 //Venue routes
 router.post("/create-venue", createVenue)
