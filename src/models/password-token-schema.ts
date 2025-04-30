@@ -17,6 +17,10 @@ const passwordResetSchema = new mongoose.Schema({
     },
     phoneNumber : {
         type: String,
+    },
+    isVerified: {
+        type: Boolean,
+        default: false
     }
 
 });

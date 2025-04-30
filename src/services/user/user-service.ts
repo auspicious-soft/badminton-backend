@@ -159,7 +159,7 @@ export const signUpService = async (
       res
     );
   }
-  let verification = false
+  let verification = false;
   user.token = generateUserToken(user as any, verification);
 
   await user.save();
@@ -255,19 +255,32 @@ export const forgotPasswordUserService = async (
       httpStatusCode.BAD_REQUEST,
       res
     );
-  await generatePasswordResetToken(phoneNumber, email);
+  await generatePasswordResetToken(email, phoneNumber);
 
-  return { success: true, message: "Password reset email sent with otp" };
+  let verification = false;
+  let token = generateUserToken(user as any, verification);
+
+  return {
+    success: true,
+    token,
+    message: "Password reset email sent with otp",
+  };
 };
 
 export const newPassswordAfterOTPVerifiedUserService = async (
   payload: { password: string; otp: string },
-  res: Response
+  res: Response,
+  req: Request
 ) => {
+  const userData = req.user as any;
   const { password, otp } = payload;
 
-  const existingToken = await getPasswordResetTokenByToken(otp);
-  if (!existingToken)
+  const existingToken = await passwordResetTokenModel.findOne({
+    $or: [{ phoneNumber: userData.phoneNumber }, { email: userData.email }],
+  });
+
+  // const existingToken = await getPasswordResetTokenByToken(otp);
+  if (!existingToken || !existingToken.isVerified)
     return errorResponseHandler("Invalid OTP", httpStatusCode.BAD_REQUEST, res);
 
   const hasExpired = new Date(existingToken.expires) < new Date();
@@ -296,12 +309,14 @@ export const newPassswordAfterOTPVerifiedUserService = async (
     { password: hashedPassword },
     { new: true }
   );
+  let token = generateUserToken(response as any, true);
+
   await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
 
   return {
     success: true,
     message: "Password updated successfully",
-    data: sanitizeUser(response),
+    data: sanitizeUser({...response, token}),
   };
 };
 
@@ -320,6 +335,29 @@ export const verifyOtpPasswordResetService = async (
   const hasExpired = new Date(existingToken.expires) < new Date();
   if (hasExpired)
     return errorResponseHandler("OTP expired", httpStatusCode.BAD_REQUEST, res);
+  return { success: true, message: "Token verified successfully" };
+};
+
+export const verifyOtpPasswordForgetService = async (
+  token: string,
+  res: Response
+) => {
+  const existingToken = await getPasswordResetTokenByToken(token);
+  if (!existingToken)
+    return errorResponseHandler(
+      "Invalid token",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+
+  const hasExpired = new Date(existingToken.expires) < new Date();
+  if (hasExpired)
+    return errorResponseHandler("OTP expired", httpStatusCode.BAD_REQUEST, res);
+
+  await passwordResetTokenModel.findByIdAndUpdate(existingToken._id, {
+    isVerified: true,
+  });
+
   return { success: true, message: "Token verified successfully" };
 };
 
