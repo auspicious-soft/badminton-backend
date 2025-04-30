@@ -1,4 +1,4 @@
 node_modules
 .env
-Bookstagram.pem
+playapp.pem
 firebase-service.json

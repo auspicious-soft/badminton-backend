@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url) // <-- Define __filename
 const __dirname = path.dirname(__filename)        // <-- Define __dirname
 // const serviceAccount = require(path.join(__dirname, 'config/firebase-adminsdk.json'));
 
-const PORT = process.env.PORT || 8000
+const PORT = process.env.PORT || 8002
 const app = express()
 
 app.use(express.json());
@@ -60,4 +60,4 @@ app.use("/api/user",checkAuth, user);
 app.use("/api", auth)
 
 // initializeFirebase()
-app.listen(8002, () => console.log(`Server is listening on port ${8002}`));
+app.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
