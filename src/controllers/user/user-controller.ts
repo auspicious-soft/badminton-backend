@@ -25,11 +25,10 @@ export const userSignup = async (req: Request, res: Response) => {
     const authType =
       req.body.email && req.body.phoneNumber
         ? "Email-Phone"
-        : req.body.email
-        ? "Email"
-        : req.body.phoneNumber
-        ? "Phone"
-        : req.body.authType;
+        : null
+    if(authType == null){
+      return res.status(httpStatusCode.BAD_REQUEST).json({ success: false, message: "Both Email and Phone number is required" });
+    }
     const user = await signUpService(req.body, authType, res);
     return res.status(httpStatusCode.OK).json(user);
   } catch (error: any) {
@@ -222,11 +221,13 @@ export const changePasswordUser = async (req: Request, res: Response) => {
 
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
-    const { user } = await verifyOTPService(req.body);
+
+    const verificationResult: any = await verifyOTPService(req.body, req);
 
     res.status(200).json({
       success: true,
-      data: { user },
+      data: verificationResult?.user,
+      message: verificationResult?.message,
     });
   } catch (error) {
     res.status(400).json({

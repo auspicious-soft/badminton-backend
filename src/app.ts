@@ -60,4 +60,4 @@ app.use("/api/user",checkAuth, user);
 app.use("/api", auth)
 
 // initializeFirebase()
-app.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
+app.listen(8002, () => console.log(`Server is listening on port ${8002}`));

@@ -63,7 +63,7 @@ const usersSchema = new mongoose.Schema(
     },
     authType: {
       type: String,
-      enum: ["Email", "Phone", "Email-Phone", "Facebook", "Apple", "Google"],
+      enum: ["Email-Phone", "Facebook", "Apple", "Google"],
       default: "Phone",
     },
     countryCode: {

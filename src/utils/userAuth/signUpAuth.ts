@@ -9,13 +9,14 @@ import { configDotenv } from "dotenv";
 import { any } from "webidl-conversions";
 configDotenv();
 
-export const generateUserToken = (user: UserDocument) => {
+export const generateUserToken = (user: UserDocument, verification: any) => {
   const tokenPayload = {
     id: user._id,
     role: user.role,
     email: user.email || undefined,
     phoneNumber: user.phoneNumber || undefined,
     name: user.fullName,
+    verificationToken: verification
   };
 
   return jwt.sign(tokenPayload, process.env.AUTH_SECRET as string);
@@ -71,10 +72,12 @@ export const sendOTPIfNeeded = async (
   authType: string
 ) => {
   if (["Email", "Phone", "Email-Phone"].includes(authType)) {
-    await generateAndSendOTP(authType, {
+    const otp = await generateAndSendOTP(authType, {
       email: userData?.email,
       phoneNumber: userData?.phoneNumber,
     });
+
+    return otp
   }
 };
 

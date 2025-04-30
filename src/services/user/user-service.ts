@@ -90,7 +90,7 @@ export const loginUserService = async (
     if (passwordValidationResponse) return passwordValidationResponse;
   }
 
-  user.token = generateUserToken(user as any);
+  user.token = generateUserToken(user as any, true);
 
   await user.save();
   return {
@@ -109,7 +109,7 @@ const createNewUser = async (userData: any, authType: string) => {
     fcmToken: userData.fcmToken,
     profilePic: userData.profilePic,
     password: null,
-    token: generateUserToken(userData),
+    token: generateUserToken(userData, true),
   });
 
   await newUser.save();
@@ -130,12 +130,7 @@ export const signUpService = async (
       res
     );
   }
-  if (
-    (authType === "Email-Phone" ||
-      authType === "Email" ||
-      authType === "Phone") &&
-    !userData.password
-  ) {
+  if (authType === "Email-Phone" && !userData.password) {
     return errorResponseHandler(
       "Password is required for Email and Phone authentication",
       httpStatusCode.BAD_REQUEST,
@@ -153,7 +148,9 @@ export const signUpService = async (
   const newUserData = { ...userData, authType };
   newUserData.password = await hashPasswordIfEmailAuth(userData, authType);
   const user = await usersModel.create(newUserData);
-  await sendOTPIfNeeded(userData, authType);
+  const otp = await sendOTPIfNeeded(userData, authType);
+
+  console.log(otp);
 
   if (!process.env.AUTH_SECRET) {
     return errorResponseHandler(
@@ -162,9 +159,9 @@ export const signUpService = async (
       res
     );
   }
-  if (authType !== "Email") {
-    user.token = generateUserToken(user as any);
-  }
+  let verification = false
+  user.token = generateUserToken(user as any, verification);
+
   await user.save();
   return {
     success: true,
@@ -173,6 +170,7 @@ export const signUpService = async (
         ? "OTP sent for verification"
         : "Sign-up successfully",
     data: sanitizeUser(user),
+    otp: otp?.otp || [],
   };
 };
 
@@ -453,68 +451,66 @@ export const generateAndSendOTP = async (
   if (email) {
     await sendEmailVerificationMail(email, otpEmail, user?.language || "en");
   }
-  return { success: true, message: "OTP sent successfully" };
+  return {
+    success: true,
+    message: "OTP sent successfully",
+    otp: [otpEmail, otpPhone],
+  };
 };
 
-export const verifyOTPService = async (payload: any) => {
-  const { email, phoneNumber, phoneCode, emailCode } = payload;
+export const verifyOTPService = async (payload: any, req: Request) => {
+  const { emailOtp, phoneOtp } = payload;
 
-  if (!email && !phoneNumber) {
-    throw new Error("Email or phone number is required");
+  if (emailOtp && phoneOtp) {
+    throw new Error("Both Email and Phone OTP cannot be verified at once");
   }
-
-  if (!phoneCode && !emailCode) {
+  if (!emailOtp && !phoneOtp) {
     throw new Error("OTP is required");
   }
 
-  let user = null;
-  let emailVerified = false;
-  let phoneVerified = false;
+  const userData = req.user as any;
 
-  if (email && emailCode) {
-    user = await usersModel.findOne({
-      email,
-      "otp.emailCode": emailCode,
+  if (emailOtp) {
+    let user = await usersModel.findOne({
+      _id: userData.id,
+      "otp.emailCode": emailOtp,
       "otp.expiresAt": { $gt: new Date() },
     });
 
     if (!user) {
       throw new Error("Invalid or expired Email OTP");
     }
-    emailVerified = true;
+    user.emailVerified = true;
+    if (user?.otp) {
+      user.otp.emailCode = "";
+    }
+    await user.save();
+    return { user: sanitizeUser(user), message: "Email verified successfully" };
   }
 
-  if (phoneNumber && phoneCode) {
-    user = await usersModel.findOne({
-      phoneNumber,
-      "otp.phoneCode": phoneCode,
+  if (phoneOtp) {
+    let user = await usersModel.findOne({
+      _id: userData.id,
+      "otp.phoneCode": phoneOtp,
       "otp.expiresAt": { $gt: new Date() },
     });
 
     if (!user) {
       throw new Error("Invalid or expired Phone OTP");
     }
-    phoneVerified = true;
+    user.phoneVerified = true;
+    if (user.otp) {
+      user.otp.phoneCode = "";
+      user.otp.expiresAt = new Date(0);
+    }
+
+    user.token = generateUserToken(user as any, true);
+    await user.save();
+    return {
+      user: sanitizeUser(user),
+      message: "Phone number verified successfully",
+    };
   }
-
-  if (!user) {
-    throw new Error("User not found or OTP verification failed");
-  }
-
-  user.emailVerified = emailVerified;
-  user.phoneVerified = phoneVerified;
-
-  console.log(user.toObject());
-
-  if (user?.otp?.phoneCode || user?.otp?.emailCode) {
-    user.otp.phoneCode = "";
-    user.otp.emailCode = "";
-    user.otp.expiresAt = new Date(0);
-  }
-  user.token = generateUserToken(user as any);
-  await user.save();
-
-  return { user: sanitizeUser(user), message: "OTP verified successfully" };
 };
 
 export const changePasswordService = async (

@@ -29,11 +29,53 @@ export const checkAuth = async (
       token,
       process.env.AUTH_SECRET as string
     ) as JwtPayload & { id: string };
+    console.log("decoded", decoded);
     const user = await usersModel.findOne({
       _id: decoded?.id,
       isBlocked: false,
     });
-    if (!user) {
+    if (!user || !decoded.verificationToken ) {
+      return res.status(httpStatusCode.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized user not found",
+      });
+    }
+
+    if (!decoded)
+      return res.status(httpStatusCode.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized token invalid or expired",
+      });
+    req.user = decoded as JwtPayload;
+    next();
+  } catch (error) {
+    return res
+      .status(httpStatusCode.UNAUTHORIZED)
+      .json({ success: false, message: "Unauthorized" });
+  }
+};
+
+export const checkOTPAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token)
+      return res
+        .status(httpStatusCode.UNAUTHORIZED)
+        .json({ success: false, message: "Unauthorized token missing" });
+
+    const decoded = jwt.verify(
+      token,
+      process.env.AUTH_SECRET as string
+    ) as JwtPayload & { id: string };
+    const user = await usersModel.findOne({
+      _id: decoded?.id,
+      isBlocked: false,
+    });
+    if (!user || decoded.verificationToken ) {
       return res.status(httpStatusCode.UNAUTHORIZED).json({
         success: false,
         message: "Unauthorized user not found",

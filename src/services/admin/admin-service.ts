@@ -2,16 +2,13 @@ import { adminModel } from "../../models/admin/admin-schema";
 import bcrypt from "bcryptjs";
 import { Response } from "express";
 import { errorResponseHandler } from "../../lib/errors/error-response-handler";
-import { FIXED_FACILITIES, httpStatusCode } from "../../lib/constant";
-import { queryBuilder } from "../../utils";
+import { httpStatusCode } from "../../lib/constant";
 import { sendPasswordResetEmail } from "src/utils/mails/mail";
 import {
   generatePasswordResetToken,
   getPasswordResetTokenByToken,
-  generatePasswordResetTokenByPhone,
 } from "src/utils/mails/token";
 import { passwordResetTokenModel } from "src/models/password-token-schema";
-import { usersModel } from "src/models/user/user-schema";
 import {
   EmployeeDocument,
   employeesModel,
@@ -22,6 +19,8 @@ import { attendanceModel } from "src/models/employees/attendance-schema";
 import mongoose from "mongoose";
 import { venueModel } from "src/models/venue/venue-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
+import { usersModel } from "src/models/user/user-schema";
+
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -316,7 +315,7 @@ export const getEmployeesService = async (payload: any, res: Response) => {
       totalPages: Math.ceil(totalEmployees / limit),
       status: status || "all", // Return "all" when no status is specified
       order,
-      sortBy: payload.sortBy || "createdAt"
+      sortBy: payload.sortBy || "createdAt",
     },
   };
 };
@@ -360,14 +359,16 @@ export const getEmployeeByIdService = async (payload: any, res: Response) => {
 export const getAdminDetailsService = async (payload: any, res: Response) => {
   console.log("payload: ", payload.currentUser);
   const results = await adminModel.findById(payload.currentUser.id).lean();
-
   return {
     success: true,
     data: results,
   };
 };
 
-export const updateAdminDetailsServices = async (payload: any, res: Response) => {
+export const updateAdminDetailsServices = async (
+  payload: any,
+  res: Response
+) => {
   try {
     const adminId = payload.currentUser.id;
     const updateFields: any = {};
@@ -380,11 +381,11 @@ export const updateAdminDetailsServices = async (payload: any, res: Response) =>
     }
 
     if (payload.email?.trim()) {
-      const existingAdmin = await adminModel.findOne({ 
+      const existingAdmin = await adminModel.findOne({
         email: payload.email,
-        _id: { $ne: adminId }
+        _id: { $ne: adminId },
       });
-      
+
       if (existingAdmin) {
         return errorResponseHandler(
           "Email already exists",
@@ -396,11 +397,11 @@ export const updateAdminDetailsServices = async (payload: any, res: Response) =>
     }
 
     if (payload.phoneNumber) {
-      const existingAdmin = await adminModel.findOne({ 
+      const existingAdmin = await adminModel.findOne({
         phoneNumber: payload.phoneNumber,
-        _id: { $ne: adminId }
+        _id: { $ne: adminId },
       });
-      
+
       if (existingAdmin) {
         return errorResponseHandler(
           "Phone number already exists",
@@ -416,7 +417,7 @@ export const updateAdminDetailsServices = async (payload: any, res: Response) =>
     }
 
     if (payload.password) {
-      updateFields.password = await hashPasswordIfEmailAuth(payload, "Email")
+      updateFields.password = await hashPasswordIfEmailAuth(payload, "Email");
     }
 
     // If no fields to update
@@ -431,7 +432,7 @@ export const updateAdminDetailsServices = async (payload: any, res: Response) =>
     const updatedAdmin = await adminModel.findByIdAndUpdate(
       adminId,
       { $set: updateFields },
-      { new: true, select: '-password' }
+      { new: true, select: "-password" }
     );
 
     if (!updatedAdmin) {
@@ -444,7 +445,7 @@ export const updateAdminDetailsServices = async (payload: any, res: Response) =>
     return {
       success: true,
       message: "Admin updated successfully",
-      data: updatedAdmin
+      data: updatedAdmin,
     };
   } catch (error) {
     return errorResponseHandler(
@@ -454,7 +455,6 @@ export const updateAdminDetailsServices = async (payload: any, res: Response) =>
     );
   }
 };
-
 
 // ******************** Handle Venue **************************
 
@@ -765,4 +765,95 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
     message: "Venue retrieved successfully",
     data: { ...venue, matches },
   };
+};
+
+//******************** Handle Users *************************
+
+export const getUsersService = async (payload: any, res: Response) => {
+  const { page, limit, search } = payload.query;
+  const pageNumber = parseInt(page) || 1;
+  const limitNumber = parseInt(limit) || 10;
+  const offset = (pageNumber - 1) * limitNumber;
+  
+  // Default sort is by fullName A-Z, unless explicitly changed
+  const order = payload.sortBy === "createdAt" 
+    ? (payload.order || "desc")
+    : "asc"; // Always asc for fullName sorting
+
+  // Validate order
+  if (order && !["asc", "desc"].includes(order)) {
+    return errorResponseHandler(
+      "Invalid order. Must be either 'asc' or 'desc'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  const searchQuery = search
+    ? {
+        $or: [
+          { fullName: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { phoneNumber: { $regex: search, $options: "i" } },
+        ],
+      }
+    : {};
+
+  try {
+    const totalUsers = await usersModel.countDocuments(searchQuery);
+
+    const pipeline = [
+      { $match: searchQuery },
+      {
+        $addFields: {
+          sortField: payload.sortBy === "createdAt"
+            ? "$createdAt"
+            : { $toLower: "$fullName" } // Default to fullName sorting
+        }
+      },
+      { 
+        $sort: { 
+          sortField: payload.sortBy === "createdAt" 
+            ? (order === "asc" ? 1 : -1) 
+            : 1  // Always ascending for fullName
+        } 
+      },
+      { $skip: offset },
+      { $limit: limitNumber },
+      {
+        $project: {
+          fullName: 1,
+          email: 1,
+          phoneNumber: 1,
+          profilePic: 1,
+          createdAt: 1,
+          _id: 1
+        }
+      }
+    ];
+
+    const users = await usersModel.aggregate(pipeline as any);
+
+    return {
+      success: true,
+      message: "All users retrieved successfully",
+      data: users,
+      meta: {
+        total: totalUsers,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: offset + limitNumber < totalUsers,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalUsers / limitNumber),
+        order,
+        sortBy: payload.sortBy || "fullName"
+      }
+    };
+  } catch (error) {
+    return errorResponseHandler(
+      "Error retrieving users",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
 };
