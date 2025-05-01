@@ -140,35 +140,72 @@ export const userHomeServices = async (req: Request, res: Response) => {
 export const getVenuesServices = async (req: Request, res: Response) => {
   try {
     let nearbyVenues = [];
-    const {
-      date,
-      distance = "ASC",
-      game = "all",
-      lng: lngQuery = null,
-      lat: latQuery = null,
+    const { 
+      startDate, 
+      endDate, 
+      distance = "ASC", 
+      game = "all", 
+      lng: lngQuery = null, 
+      lat: latQuery = null 
     } = req.query;
+    
     let lng: number | null = null;
     let lat: number | null = null;
 
-    if (!date) {
+    // Validate date parameters
+    if (!startDate) {
       return errorResponseHandler(
-        "Date is required",
+        "Start date is required",
         httpStatusCode.BAD_REQUEST,
         res
       );
     }
 
-    // Convert date string to Date object for comparison
-    const selectedDate = new Date(date as string);
-    selectedDate.setHours(0, 0, 0, 0); // Start of the day
+    // Parse dates
+    const startDateObj = new Date(startDate as string);
+    startDateObj.setHours(0, 0, 0, 0); // Start of the day
+    
+    let endDateObj;
+    if (endDate) {
+      endDateObj = new Date(endDate as string);
+      endDateObj.setHours(23, 59, 59, 999); // End of the day
+    } else {
+      // If no end date, default to start date (single day)
+      endDateObj = new Date(startDateObj);
+      endDateObj.setHours(23, 59, 59, 999);
+    }
+    
+    // Validate dates
+    if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+      return errorResponseHandler(
+        "Invalid date format",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+    
+    if (startDateObj > endDateObj) {
+      return errorResponseHandler(
+        "Start date cannot be after end date",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+    
+    // Limit date range to 7 days maximum
+    const maxEndDate = new Date(startDateObj);
+    maxEndDate.setDate(maxEndDate.getDate() + 6);
+    maxEndDate.setHours(23, 59, 59, 999);
+    
+    if (endDateObj > maxEndDate) {
+      endDateObj = maxEndDate;
+    }
 
-    const nextDay = new Date(selectedDate);
-    nextDay.setDate(nextDay.getDate() + 1); // End of the day
-
+    // Get venues based on location
     if (lngQuery && latQuery) {
       lng = Number(lngQuery);
       lat = Number(latQuery);
-
+      
       const geoNearStage: any = {
         $geoNear: {
           near: { type: "Point", coordinates: [lng, lat] },
@@ -204,10 +241,8 @@ export const getVenuesServices = async (req: Request, res: Response) => {
                 cond: {
                   $and: [
                     { $eq: ["$$court.isActive", true] },
-                    ...(game !== "all"
-                      ? [{ $eq: ["$$court.games", game] }]
-                      : []),
-                  ],
+                    ...(game !== "all" ? [{ $eq: ["$$court.games", game] }] : []),
+                  ]
                 },
               },
             },
@@ -221,8 +256,8 @@ export const getVenuesServices = async (req: Request, res: Response) => {
         // Only include venues that have at least one matching court
         {
           $match: {
-            "courts.0": { $exists: true },
-          },
+            "courts.0": { $exists: true }
+          }
         },
         {
           $sort: {
@@ -234,98 +269,125 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       nearbyVenues = await venueModel.aggregate(pipeline);
     } else {
       const query: any = { isActive: true };
-
+      
       if (game !== "all") {
         query.gamesAvailable = { $in: [game] };
       }
-
+      
       nearbyVenues = await venueModel
         .find(query)
         .select("name city state image weather courts timeslots")
         .lean();
-
+        
       // Filter courts by game type
       nearbyVenues = nearbyVenues.map((venue: any) => ({
         ...venue,
-        courts: venue.courts.filter(
-          (court: any) =>
-            court.isActive && (game === "all" || court.games === game)
-        ),
+        courts: venue.courts.filter((court: any) => 
+          court.isActive && (game === "all" || court.games === game)
+        )
       }));
-
+      
       // Remove venues with no matching courts
-      nearbyVenues = nearbyVenues.filter(
-        (venue: any) => venue.courts.length > 0
-      );
+      nearbyVenues = nearbyVenues.filter((venue: any) => venue.courts.length > 0);
     }
 
-    // Get all bookings for the selected date to determine available slots
-    const bookings = await bookingModel
-      .find({
-        venueId: { $in: nearbyVenues.map((venue: any) => venue._id) },
-        bookingDate: {
-          $gte: selectedDate,
-          $lt: nextDay,
-        },
-      })
-      .select("venueId courtId bookingSlots")
-      .lean();
+    // Get all bookings for the date range
+    const bookings = await bookingModel.find({
+      venueId: { $in: nearbyVenues.map((venue: any) => venue._id) },
+      bookingDate: {
+        $gte: startDateObj,
+        $lte: endDateObj
+      }
+    }).select("venueId courtId bookingDate bookingSlots").lean();
 
-    // Create a map of booked slots by venue and court
-    const bookedSlots: Record<string, Record<string, string[]>> = {};
-
+    // Create a map of booked slots by venue, court, and date
+    const bookedSlots: Record<string, Record<string, Record<string, string[]>>> = {};
+    
     bookings.forEach((booking: any) => {
       const venueId = booking.venueId.toString();
       const courtId = booking.courtId.toString();
-
+      const bookingDate = booking.bookingDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      
       if (!bookedSlots[venueId]) {
         bookedSlots[venueId] = {};
       }
-
+      
       if (!bookedSlots[venueId][courtId]) {
-        bookedSlots[venueId][courtId] = [];
+        bookedSlots[venueId][courtId] = {};
       }
-
-      bookedSlots[venueId][courtId].push(
-        ...(Array.isArray(booking.bookingSlots)
-          ? booking.bookingSlots
-          : [booking.bookingSlots])
+      
+      if (!bookedSlots[venueId][courtId][bookingDate]) {
+        bookedSlots[venueId][courtId][bookingDate] = [];
+      }
+      
+      bookedSlots[venueId][courtId][bookingDate].push(
+        ...(Array.isArray(booking.bookingSlots) ? booking.bookingSlots : [booking.bookingSlots])
       );
     });
 
-    // Add available slots to each court
-    const venuesWithAvailability = nearbyVenues.map((venue: any) => {
-      const venueId = venue._id.toString();
-      const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
+    // Generate array of dates in the range
+    const dateRange: Date[] = [];
+    let currentDate = new Date(startDateObj);
+    
+    while (currentDate <= endDateObj) {
+      dateRange.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
-      const courtsWithAvailability = venue.courts.map((court: any) => {
-        const courtId = court._id.toString();
-        const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
-
-        // Calculate available slots
-        const availableSlots = venueTimeslots.filter(
-          (slot: string) => !courtBookedSlots.includes(slot)
+    // Create result array with venues for each date
+    const result: any[] = [];
+    
+    dateRange.forEach(date => {
+      const dateString = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      
+      nearbyVenues.forEach(venue => {
+        const venueId = venue._id.toString();
+        const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
+        
+        const courtsWithAvailability = venue.courts.map((court: any) => {
+          const courtId = court._id.toString();
+          const courtBookedSlots = bookedSlots[venueId]?.[courtId]?.[dateString] || [];
+          
+          // Calculate available slots
+          const availableSlots = venueTimeslots.filter(
+            (slot: string) => !courtBookedSlots.includes(slot)
+          );
+          
+          return {
+            ...court,
+            availableSlots
+          };
+        });
+        
+        // Only include courts that have available slots
+        const courtsWithSlots = courtsWithAvailability.filter(
+          (court: any) => court.availableSlots.length > 0
         );
-
-        return {
-          ...court,
-          availableSlots,
-        };
+        
+        // Only add venue for this date if it has courts with available slots
+        if (courtsWithSlots.length > 0) {
+          // Clone venue without timeslots
+          const { timeslots, ...venueWithoutTimeslots } = venue;
+          
+          result.push({
+            ...venueWithoutTimeslots,
+            date: date.toLocaleDateString('en-CA'), // Format: YYYY-MM-DD without timezone issues
+            formattedDate: new Intl.DateTimeFormat('en-US', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            }).format(date),
+            courts: courtsWithSlots
+          });
+        }
       });
-
-      // Return venue without the timeslots field
-      const { timeslots, ...venueWithoutTimeslots } = venue;
-
-      return {
-        ...venueWithoutTimeslots,
-        courts: courtsWithAvailability,
-      };
     });
 
     return {
       success: true,
       message: "Venues retrieved successfully",
-      data: venuesWithAvailability,
+      data: result,
     };
   } catch (error) {
     return errorResponseHandler(
