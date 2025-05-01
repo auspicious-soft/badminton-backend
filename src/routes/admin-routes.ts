@@ -4,7 +4,6 @@ import {  createEmployee, createVenue, getAdminDetails, getEmployees, getEmploye
 const router = Router();
 
 //Emmpoyee routes
-
 router.post("/create-employee", createEmployee);
 router.put("/update-employee", updateEmployee);
 router.get("/get-employees", getEmployees);
