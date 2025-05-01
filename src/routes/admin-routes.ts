@@ -2,7 +2,6 @@ import { Router } from "express";
 import {  createEmployee, createVenue, getAdminDetails, getEmployees, getEmployeesById, getUsers, getVenue, getVenueById, logoutEmployee, updateAdminDetails, updateEmployee, updateVenue} from "../controllers/admin/admin-controller";
 
 const router = Router();
-
 //Emmpoyee routes
 router.post("/create-employee", createEmployee);
 router.put("/update-employee", updateEmployee);
