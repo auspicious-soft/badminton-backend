@@ -4,7 +4,6 @@ import { UserDocument, usersModel } from "../../models/user/user-schema";
 import bcrypt from "bcryptjs";
 import {
   generatePasswordResetToken,
-  generatePasswordResetTokenByPhone,
   getPasswordResetTokenByToken,
 } from "../../utils/mails/token";
 import { httpStatusCode } from "../../lib/constant";
@@ -14,14 +13,9 @@ import { configDotenv } from "dotenv";
 import {
   addedUserCreds,
   sendEmailVerificationMail,
-  sendLoginCredentialsEmail,
-  sendPasswordResetEmail,
 } from "src/utils/mails/mail";
 import { passwordResetTokenModel } from "src/models/password-token-schema";
-import {
-  generateOtpWithTwilio,
-  generatePasswordResetTokenByPhoneWithTwilio,
-} from "src/utils/sms/sms";
+import { generatePasswordResetTokenByPhoneWithTwilio } from "src/utils/sms/sms";
 import {
   generateUserToken,
   getSignUpQueryByAuthType,
@@ -57,8 +51,6 @@ export const loginUserService = async (
   authType: string,
   res: Response
 ) => {
-  let query = getSignUpQueryByAuthType(userData, authType);
-
   let user: any = await usersModel.findOne({
     $or: [
       { email: userData?.email?.toLowerCase() },
@@ -81,7 +73,7 @@ export const loginUserService = async (
   );
   if (validationResponse) return validationResponse;
 
-  if (authType === "Email" || true) {
+  if (authType === "Email-Phone") {
     let passwordValidationResponse = await validatePassword(
       userData,
       user.password,
@@ -89,9 +81,7 @@ export const loginUserService = async (
     );
     if (passwordValidationResponse) return passwordValidationResponse;
   }
-
   user.token = generateUserToken(user as any, true);
-
   await user.save();
   return {
     success: true,
@@ -122,7 +112,6 @@ export const signUpService = async (
   authType: string,
   res: Response
 ) => {
-  console.log("userData", userData);
   if (!authType) {
     return errorResponseHandler(
       "Auth type is required",
@@ -138,19 +127,15 @@ export const signUpService = async (
     );
   }
   const query = getSignUpQueryByAuthType(userData, authType);
-  console.log("query", query);
   const existingUser = await usersModel.findOne(query);
   const existingUserResponse = existingUser
     ? handleExistingUser(existingUser as any, authType, res)
     : null;
   if (existingUserResponse) return existingUserResponse;
-
   const newUserData = { ...userData, authType };
   newUserData.password = await hashPasswordIfEmailAuth(userData, authType);
   const user = await usersModel.create(newUserData);
   const otp = await sendOTPIfNeeded(userData, authType);
-
-  console.log(otp);
 
   if (!process.env.AUTH_SECRET) {
     return errorResponseHandler(
@@ -171,63 +156,6 @@ export const signUpService = async (
         : "Sign-up successfully",
     data: sanitizeUser(user),
     otp: otp?.otp || [],
-  };
-};
-
-export const WhatsappLoginService = async (
-  userData: UserDocument,
-  authType: string,
-  res: Response
-) => {
-  if (!authType) {
-    return errorResponseHandler(
-      "Auth type is required",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
-
-  const existingUser = await usersModel.findOne({
-    phoneNumber: userData.phoneNumber,
-  });
-
-  if (existingUser) {
-    await sendOTPIfNeeded(userData, authType);
-    return {
-      success: true,
-      message: "OTP sent successfully",
-      data: sanitizeUser(existingUser),
-    };
-  }
-
-  // If user doesn't exist, create a new user
-  const newUserData = { ...userData, authType };
-  newUserData.password = await hashPasswordIfEmailAuth(userData, authType);
-  const identifier = customAlphabet("0123456789", 5);
-  (newUserData as any).identifier = identifier();
-
-  // Create new user
-  const user = await usersModel.create(newUserData);
-
-  // Send OTP if needed for new user
-  await sendOTPIfNeeded(userData, authType);
-
-  if (!process.env.AUTH_SECRET) {
-    return errorResponseHandler(
-      "AUTH_SECRET is not defined",
-      httpStatusCode.INTERNAL_SERVER_ERROR,
-      res
-    );
-  }
-
-  // Generate token and save user
-  // user.token = generateUserToken(user as any);
-  await user.save();
-
-  return {
-    success: true,
-    message: "OTP sent successfully",
-    data: sanitizeUser(user),
   };
 };
 
@@ -304,11 +232,13 @@ export const newPassswordAfterOTPVerifiedUserService = async (
     );
   }
   const hashedPassword = await bcrypt.hash(password, 10);
-  const response = await usersModel.findByIdAndUpdate(
-    existingUser._id,
-    { password: hashedPassword },
-    { new: true }
-  ).lean();
+  const response = await usersModel
+    .findByIdAndUpdate(
+      existingUser._id,
+      { password: hashedPassword },
+      { new: true }
+    )
+    .lean();
   let token = generateUserToken(response as any, true);
 
   await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
@@ -491,7 +421,7 @@ export const generateAndSendOTP = async (
     );
   }
   if (email) {
-    await sendEmailVerificationMail(email, otpEmail, user?.language || "en");
+    await sendEmailVerificationMail(email, otpEmail, user?.language || "eng");
   }
   return {
     success: true,
@@ -500,14 +430,22 @@ export const generateAndSendOTP = async (
   };
 };
 
-export const verifyOTPService = async (payload: any, req: Request) => {
+export const verifyOTPService = async (
+  payload: any,
+  req: Request,
+  res: Response
+) => {
   const { emailOtp, phoneOtp } = payload;
 
   if (emailOtp && phoneOtp) {
-    throw new Error("Both Email and Phone OTP cannot be verified at once");
+    errorResponseHandler(
+      "Both Email and Phone OTP cannot be verified at once",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
   if (!emailOtp && !phoneOtp) {
-    throw new Error("OTP is required");
+    errorResponseHandler("OTP is required", httpStatusCode.BAD_REQUEST, res);
   }
 
   const userData = req.user as any;
@@ -520,13 +458,21 @@ export const verifyOTPService = async (payload: any, req: Request) => {
     });
 
     if (!user) {
-      throw new Error("Invalid or expired Email OTP");
+      errorResponseHandler(
+        "Invalid or expired Email OTP",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
     }
-    user.emailVerified = true;
+    if (user) {
+      user.emailVerified = true;
+    }
     if (user?.otp) {
       user.otp.emailCode = "";
     }
-    await user.save();
+    if (user) {
+      await user.save();
+    }
     return { user: sanitizeUser(user), message: "Email verified successfully" };
   }
 

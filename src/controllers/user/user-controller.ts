@@ -12,7 +12,6 @@ import {
   loginUserService,
   changePasswordService,
   updateCurrentUserDetailsService,
-  WhatsappLoginService,
   verifyOtpPasswordForgetService,
 } from "src/services/user/user-service";
 import { newPassswordAfterOTPVerifiedService } from "src/services/admin/admin-service";
@@ -63,21 +62,6 @@ export const socialLoginUser = async (req: Request, res: Response) => {
       res
     );
     return res.status(httpStatusCode.OK).json(loginResponse);
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
-  }
-};
-export const WhatsapploginUser = async (req: Request, res: Response) => {
-  try {
-    const whatsappLoginResponse = await WhatsappLoginService(
-      req.body,
-      req.body.authType,
-      res
-    );
-    return res.status(httpStatusCode.OK).json(whatsappLoginResponse);
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res
@@ -240,7 +224,7 @@ export const changePasswordUser = async (req: Request, res: Response) => {
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
 
-    const verificationResult: any = await verifyOTPService(req.body, req);
+    const verificationResult: any = await verifyOTPService(req.body, req, res);
 
     res.status(200).json({
       success: true,

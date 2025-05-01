@@ -31,7 +31,6 @@ const sanitizeUser = (user: any): EmployeeDocument => {
 
 export const loginService = async (payload: any, res: Response) => {
   const { email, password } = payload;
-  console.log("email: ", email);
   const countryCode = "+45";
   const toNumber = Number(email);
   const isEmail = isNaN(toNumber);

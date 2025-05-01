@@ -10,14 +10,13 @@ import mongoose from "mongoose";
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
   const userData = req.user as any;
-  const { nearBy } = req.body;
+  let { nearBy = true, lng: lngQuery = null, lat: latQuery = null } = req.query;
+  let lng: number | null = null;
+  let lat: number | null = null;
 
-  if (
-    req?.body?.location?.coordinates &&
-    req.body.location.coordinates.length === 2
-  ) {
-    const [lng, lat] = req.body.location.coordinates;
-
+  if (lngQuery && latQuery) {
+    lng = Number(lngQuery);
+    lat = Number(latQuery)
     const geoNearStage: any = {
       $geoNear: {
         near: { type: "Point", coordinates: [lng, lat] },
@@ -26,10 +25,9 @@ export const userHomeServices = async (req: Request, res: Response) => {
       },
     };
 
-    if (nearBy !== false) {
+    if (nearBy !== "false") {
       geoNearStage.$geoNear.maxDistance = 30000;
     }
-
     const pipeline: any[] = [
       geoNearStage,
       {
@@ -115,9 +113,11 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
 export const getVenuesServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
-  const { date, distance, game, location } = req.body;
+  const { date, distance = "ASC", game = "all", lng: lngQuery = null, lat: latQuery = null } = req.query;
+  let lng: number | null = null;
+  let lat: number | null = null;
 
-  if (!date || !distance || !game || !location?.coordinates?.length) {
+  if (!date || !distance || !game) {
     return errorResponseHandler(
       "Invalid Payload",
       httpStatusCode.BAD_REQUEST,
@@ -125,12 +125,9 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     );
   }
 
-  if (
-    req?.body?.location?.coordinates &&
-    req.body.location.coordinates.length === 2
-  ) {
-    const [lng, lat] = req.body.location.coordinates;
-
+  if (lngQuery && latQuery) {
+    lng = Number(lngQuery);
+    lat = Number(latQuery)
     const geoNearStage: any = {
       $geoNear: {
         near: { type: "Point", coordinates: [lng, lat] },

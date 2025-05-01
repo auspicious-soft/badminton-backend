@@ -94,39 +94,24 @@ export const validateUserForLogin = async (
       res
     );
   }
-  // if (authType !== user.authType) {
-  //   return errorResponseHandler(
-  //     `Wrong Login method!!, Try login from ${user.authType}`,
-  //     httpStatusCode.BAD_REQUEST,
-  //     res
-  //   );
-  // }
-  if (authType === "Email" && (!user.password || !userData.password)) {
+  if (authType !== user.authType) {
+    return errorResponseHandler(
+      `Wrong Login method!!, Try login from ${user.authType}`,
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+  if (authType === "Email-Phone" && (!userData.password)) {
     return errorResponseHandler(
       "Password is required for Email login",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
-  if (authType === "Email" && user.emailVerified === false) {
+  if (authType === "Email-Phone" && user.emailVerified === false) {
     await sendOTPIfNeeded(userData, authType);
     return errorResponseHandler(
       "Email not verified, verfication email sent to your email",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
-  if (authType === "Whatsapp" && user.whatsappNumberVerified === false) {
-    return errorResponseHandler(
-      `Try login from ${user.authType}`,
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
-  if (authType === "Whatsapp" && !user.whatsappNumberVerified) {
-    await sendOTPIfNeeded(userData, authType);
-    return errorResponseHandler(
-      "Number is not verified, verfication otp sent to your number",
       httpStatusCode.BAD_REQUEST,
       res
     );

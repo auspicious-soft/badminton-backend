@@ -22,7 +22,6 @@ import { httpStatusCode } from "../../lib/constant";
 
 export const login = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.body);
     const response = await loginService(req.body, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
