@@ -308,7 +308,7 @@ export const newPassswordAfterOTPVerifiedUserService = async (
     existingUser._id,
     { password: hashedPassword },
     { new: true }
-  );
+  ).lean();
   let token = generateUserToken(response as any, true);
 
   await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
@@ -316,7 +316,6 @@ export const newPassswordAfterOTPVerifiedUserService = async (
   return {
     success: true,
     message: "Password updated successfully",
-    data: sanitizeUser({...response, token}),
   };
 };
 
@@ -484,7 +483,12 @@ export const generateAndSendOTP = async (
 
   // Send OTP via the respective method
   if (phoneNumber) {
-    await generateOtpWithTwilio(phoneNumber, otpPhone);
+    // await generateOtpWithTwilio(phoneNumber, otpPhone);
+    await generatePasswordResetTokenByPhoneWithTwilio(
+      phoneNumber,
+      otpPhone,
+      expiresAt
+    );
   }
   if (email) {
     await sendEmailVerificationMail(email, otpEmail, user?.language || "en");
