@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { errorResponseHandler } from "../../lib/errors/error-response-handler";
 import { venueModel } from "src/models/venue/venue-schema";
-import { httpStatusCode } from "src/lib/constant";
+import { httpStatusCode, VENUE_TIME_SLOTS } from "src/lib/constant";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { friendsModel } from "src/models/user/friends-schema";
 import { usersModel } from "src/models/user/user-schema";
@@ -16,7 +16,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
   if (lngQuery && latQuery) {
     lng = Number(lngQuery);
-    lat = Number(latQuery)
+    lat = Number(latQuery);
     const geoNearStage: any = {
       $geoNear: {
         near: { type: "Point", coordinates: [lng, lat] },
@@ -67,8 +67,22 @@ export const userHomeServices = async (req: Request, res: Response) => {
               { bookingType: "Self" },
               {
                 $or: [
-                  { team1: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id), paymentStatus: "Paid" } } },
-                  { team2: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id), paymentStatus: "Paid" } } },
+                  {
+                    team1: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                        paymentStatus: "Paid",
+                      },
+                    },
+                  },
+                  {
+                    team2: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                        paymentStatus: "Paid",
+                      },
+                    },
+                  },
                 ],
               },
             ],
@@ -79,8 +93,20 @@ export const userHomeServices = async (req: Request, res: Response) => {
               { bookingPaymentStatus: true },
               {
                 $or: [
-                  { team1: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id) } } },
-                  { team2: { $elemMatch: { playerId: new mongoose.Types.ObjectId(userData.id) } } },
+                  {
+                    team1: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                      },
+                    },
+                  },
+                  {
+                    team2: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                      },
+                    },
+                  },
                 ],
               },
             ],
@@ -95,7 +121,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
       },
     },
   ]);
-  
+
   const data = {
     banners: [],
     upcomingMatches: upcomingMatchData,
@@ -112,78 +138,202 @@ export const userHomeServices = async (req: Request, res: Response) => {
 };
 
 export const getVenuesServices = async (req: Request, res: Response) => {
-  let nearbyVenues = [];
-  const { date, distance = "ASC", game = "all", lng: lngQuery = null, lat: latQuery = null } = req.query;
-  let lng: number | null = null;
-  let lat: number | null = null;
+  try {
+    let nearbyVenues = [];
+    const {
+      date,
+      distance = "ASC",
+      game = "all",
+      lng: lngQuery = null,
+      lat: latQuery = null,
+    } = req.query;
+    let lng: number | null = null;
+    let lat: number | null = null;
 
-  if (!date || !distance || !game) {
+    if (!date) {
+      return errorResponseHandler(
+        "Date is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Convert date string to Date object for comparison
+    const selectedDate = new Date(date as string);
+    selectedDate.setHours(0, 0, 0, 0); // Start of the day
+
+    const nextDay = new Date(selectedDate);
+    nextDay.setDate(nextDay.getDate() + 1); // End of the day
+
+    if (lngQuery && latQuery) {
+      lng = Number(lngQuery);
+      lat = Number(latQuery);
+
+      const geoNearStage: any = {
+        $geoNear: {
+          near: { type: "Point", coordinates: [lng, lat] },
+          distanceField: "distance",
+          spherical: true,
+          maxDistance: 3000000,
+        },
+      };
+
+      const matchStage: any = {
+        isActive: true,
+      };
+
+      if (game !== "all") {
+        matchStage.gamesAvailable = { $in: [game] };
+      }
+
+      const pipeline: any[] = [
+        geoNearStage,
+        {
+          $match: matchStage,
+        },
+        {
+          $project: {
+            name: 1,
+            city: 1,
+            state: 1,
+            image: 1,
+            courts: {
+              $filter: {
+                input: "$courts",
+                as: "court",
+                cond: {
+                  $and: [
+                    { $eq: ["$$court.isActive", true] },
+                    ...(game !== "all"
+                      ? [{ $eq: ["$$court.games", game] }]
+                      : []),
+                  ],
+                },
+              },
+            },
+            distance: {
+              $round: [{ $divide: ["$distance", 1000] }, 1],
+            },
+            weather: 1,
+            timeslots: 1,
+          },
+        },
+        // Only include venues that have at least one matching court
+        {
+          $match: {
+            "courts.0": { $exists: true },
+          },
+        },
+        {
+          $sort: {
+            distance: distance === "ASC" ? 1 : -1,
+          },
+        },
+      ];
+
+      nearbyVenues = await venueModel.aggregate(pipeline);
+    } else {
+      const query: any = { isActive: true };
+
+      if (game !== "all") {
+        query.gamesAvailable = { $in: [game] };
+      }
+
+      nearbyVenues = await venueModel
+        .find(query)
+        .select("name city state image weather courts timeslots")
+        .lean();
+
+      // Filter courts by game type
+      nearbyVenues = nearbyVenues.map((venue: any) => ({
+        ...venue,
+        courts: venue.courts.filter(
+          (court: any) =>
+            court.isActive && (game === "all" || court.games === game)
+        ),
+      }));
+
+      // Remove venues with no matching courts
+      nearbyVenues = nearbyVenues.filter(
+        (venue: any) => venue.courts.length > 0
+      );
+    }
+
+    // Get all bookings for the selected date to determine available slots
+    const bookings = await bookingModel
+      .find({
+        venueId: { $in: nearbyVenues.map((venue: any) => venue._id) },
+        bookingDate: {
+          $gte: selectedDate,
+          $lt: nextDay,
+        },
+      })
+      .select("venueId courtId bookingSlots")
+      .lean();
+
+    // Create a map of booked slots by venue and court
+    const bookedSlots: Record<string, Record<string, string[]>> = {};
+
+    bookings.forEach((booking: any) => {
+      const venueId = booking.venueId.toString();
+      const courtId = booking.courtId.toString();
+
+      if (!bookedSlots[venueId]) {
+        bookedSlots[venueId] = {};
+      }
+
+      if (!bookedSlots[venueId][courtId]) {
+        bookedSlots[venueId][courtId] = [];
+      }
+
+      bookedSlots[venueId][courtId].push(
+        ...(Array.isArray(booking.bookingSlots)
+          ? booking.bookingSlots
+          : [booking.bookingSlots])
+      );
+    });
+
+    // Add available slots to each court
+    const venuesWithAvailability = nearbyVenues.map((venue: any) => {
+      const venueId = venue._id.toString();
+      const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
+
+      const courtsWithAvailability = venue.courts.map((court: any) => {
+        const courtId = court._id.toString();
+        const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
+
+        // Calculate available slots
+        const availableSlots = venueTimeslots.filter(
+          (slot: string) => !courtBookedSlots.includes(slot)
+        );
+
+        return {
+          ...court,
+          availableSlots,
+        };
+      });
+
+      // Return venue without the timeslots field
+      const { timeslots, ...venueWithoutTimeslots } = venue;
+
+      return {
+        ...venueWithoutTimeslots,
+        courts: courtsWithAvailability,
+      };
+    });
+
+    return {
+      success: true,
+      message: "Venues retrieved successfully",
+      data: venuesWithAvailability,
+    };
+  } catch (error) {
     return errorResponseHandler(
-      "Invalid Payload",
-      httpStatusCode.BAD_REQUEST,
+      "Error retrieving venues: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
       res
     );
   }
-
-  if (lngQuery && latQuery) {
-    lng = Number(lngQuery);
-    lat = Number(latQuery)
-    const geoNearStage: any = {
-      $geoNear: {
-        near: { type: "Point", coordinates: [lng, lat] },
-        distanceField: "distance",
-        spherical: true,
-        maxDistance: 3000000,
-      },
-    };
-
-    const matchStage: any = {
-      isActive: true,
-    };
-
-    if (game !== "all") {
-      matchStage.gamesAvailable = { $in: [game] };
-    }
-
-    const pipeline: any[] = [
-      geoNearStage,
-      {
-        $match: matchStage,
-      },
-      {
-        $project: {
-          name: 1,
-          city: 1,
-          state: 1,
-          image: 1,
-          courts: {
-            $filter: {
-              input: "$courts",
-              as: "court",
-              cond: { $eq: ["$$court.isActive", true] },
-            },
-          },
-          distance: {
-            $round: [{ $divide: ["$distance", 1000] }, 1],
-          },
-          weather: 1,
-        },
-      },
-      {
-        $sort: {
-          distance: distance === "ASC" ? 1 : -1,
-        },
-      },
-    ];
-
-    nearbyVenues = await venueModel.aggregate(pipeline);
-  }
-
-  return {
-    success: true,
-    message: "User home data retrieved successfully",
-    data: nearbyVenues,
-  };
 };
 
 export const getCourtsServices = async (req: Request, res: Response) => {
