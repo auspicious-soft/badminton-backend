@@ -306,7 +306,10 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     bookings.forEach((booking: any) => {
       const venueId = booking.venueId.toString();
       const courtId = booking.courtId.toString();
-      const bookingDate = booking.bookingDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      
+      // Use local date string to avoid timezone issues
+      const bookingDate = new Date(booking.bookingDate);
+      const bookingDateString = bookingDate.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
       
       if (!bookedSlots[venueId]) {
         bookedSlots[venueId] = {};
@@ -316,11 +319,11 @@ export const getVenuesServices = async (req: Request, res: Response) => {
         bookedSlots[venueId][courtId] = {};
       }
       
-      if (!bookedSlots[venueId][courtId][bookingDate]) {
-        bookedSlots[venueId][courtId][bookingDate] = [];
+      if (!bookedSlots[venueId][courtId][bookingDateString]) {
+        bookedSlots[venueId][courtId][bookingDateString] = [];
       }
       
-      bookedSlots[venueId][courtId][bookingDate].push(
+      bookedSlots[venueId][courtId][bookingDateString].push(
         ...(Array.isArray(booking.bookingSlots) ? booking.bookingSlots : [booking.bookingSlots])
       );
     });
@@ -338,7 +341,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     const result: any[] = [];
     
     dateRange.forEach(date => {
-      const dateString = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      const dateString = date.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
       
       nearbyVenues.forEach(venue => {
         const venueId = venue._id.toString();
