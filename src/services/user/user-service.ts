@@ -421,7 +421,7 @@ export const generateAndSendOTP = async (
     );
   }
   if (email) {
-    await sendEmailVerificationMail(email, otpEmail, user?.language || "eng");
+    await sendEmailVerificationMail(email, otpEmail, "eng");
   }
   return {
     success: true,

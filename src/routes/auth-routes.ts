@@ -42,12 +42,12 @@ router.patch(
   newPassswordAfterOTPVerifiedUser
 );
 
-// router.post("/test", (req, res) => {
-//   sendEmailVerificationMail("ankit@auspicioussoft.com", "777777", "eng");
-//   res.status(200).json({
-//     success: true,
-//     message: "Email sent successfully",
-//   });
-// });
+router.post("/test", (req, res) => {
+  sendEmailVerificationMail("ya@yopmail.com", "777777", "eng");
+  res.status(200).json({
+    success: true,
+    message: "Email sent successfully",
+  });
+});
 
 export { router };

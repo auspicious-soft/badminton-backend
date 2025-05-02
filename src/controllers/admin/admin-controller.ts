@@ -16,6 +16,7 @@ import {
   getVenueByIdService,
   updateAdminDetailsServices,
   getUsersService,
+  getUsersByIdService,
 } from "../../services/admin/admin-service";
 import { errorParser } from "../../lib/errors/error-response-handler";
 import { httpStatusCode } from "../../lib/constant";
@@ -202,6 +203,18 @@ export const getVenueById = async (req: Request, res: Response) => {
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const response = await getUsersService(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const getUsersById = async (req: Request, res: Response) => {
+  try {
+    const response = await getUsersByIdService(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);

@@ -856,3 +856,22 @@ export const getUsersService = async (payload: any, res: Response) => {
     );
   }
 };
+
+export const getUsersByIdService = async (payload: any, res: Response) => {
+  const { id } = payload.params;
+  const user = await usersModel.findById(id).lean();
+  if (!user)
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  delete user.token;
+  delete user.password;
+  delete user.otp
+  return {
+    success: true,
+    message: "User retrieved successfully",
+    data: user,
+  };
+};
