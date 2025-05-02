@@ -141,8 +141,8 @@ export const getVenuesServices = async (req: Request, res: Response) => {
   try {
     let nearbyVenues = [];
     const { 
-      startDate, 
-      endDate, 
+      startDate: startDateParam, 
+      endDate: endDateParam, 
       distance = "ASC", 
       game = "all", 
       lng: lngQuery = null, 
@@ -152,38 +152,49 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     let lng: number | null = null;
     let lat: number | null = null;
 
-    // Validate date parameters
-    if (!startDate) {
-      return errorResponseHandler(
-        "Start date is required",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-
-    // Parse dates
-    const startDateObj = new Date(startDate as string);
-    startDateObj.setHours(0, 0, 0, 0); // Start of the day
+    // Set default dates if not provided
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
-    let endDateObj;
-    if (endDate) {
-      endDateObj = new Date(endDate as string);
-      endDateObj.setHours(23, 59, 59, 999); // End of the day
+    // Default startDate is today
+    let startDateObj;
+    if (startDateParam) {
+      startDateObj = new Date(startDateParam as string);
+      startDateObj.setHours(0, 0, 0, 0);
+      
+      // Validate date format
+      if (isNaN(startDateObj.getTime())) {
+        return errorResponseHandler(
+          "Invalid start date format",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
     } else {
-      // If no end date, default to start date (single day)
+      startDateObj = new Date(today);
+    }
+    
+    // Default endDate is 6 days after startDate
+    let endDateObj;
+    if (endDateParam) {
+      endDateObj = new Date(endDateParam as string);
+      endDateObj.setHours(23, 59, 59, 999);
+      
+      // Validate date format
+      if (isNaN(endDateObj.getTime())) {
+        return errorResponseHandler(
+          "Invalid end date format",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+    } else {
       endDateObj = new Date(startDateObj);
+      endDateObj.setDate(endDateObj.getDate() + 6);
       endDateObj.setHours(23, 59, 59, 999);
     }
     
-    // Validate dates
-    if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
-      return errorResponseHandler(
-        "Invalid date format",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-    
+    // Validate date range
     if (startDateObj > endDateObj) {
       return errorResponseHandler(
         "Start date cannot be after end date",
