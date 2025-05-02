@@ -141,8 +141,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
   try {
     let nearbyVenues = [];
     const { 
-      startDate: startDateParam, 
-      endDate: endDateParam, 
+      date: dateParam,
       distance = "ASC", 
       game = "all", 
       lng: lngQuery = null, 
@@ -152,65 +151,31 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     let lng: number | null = null;
     let lat: number | null = null;
 
-    // Set default dates if not provided
+    // Set default date to today if not provided
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Default startDate is today
-    let startDateObj;
-    if (startDateParam) {
-      startDateObj = new Date(startDateParam as string);
-      startDateObj.setHours(0, 0, 0, 0);
+    // Parse the date parameter if provided
+    let dateObj;
+    if (dateParam) {
+      dateObj = new Date(dateParam as string);
+      dateObj.setHours(0, 0, 0, 0);
       
       // Validate date format
-      if (isNaN(startDateObj.getTime())) {
+      if (isNaN(dateObj.getTime())) {
         return errorResponseHandler(
-          "Invalid start date format",
+          "Invalid date format",
           httpStatusCode.BAD_REQUEST,
           res
         );
       }
     } else {
-      startDateObj = new Date(today);
+      dateObj = new Date(today);
     }
     
-    // Default endDate is 6 days after startDate
-    let endDateObj;
-    if (endDateParam) {
-      endDateObj = new Date(endDateParam as string);
-      endDateObj.setHours(23, 59, 59, 999);
-      
-      // Validate date format
-      if (isNaN(endDateObj.getTime())) {
-        return errorResponseHandler(
-          "Invalid end date format",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
-      }
-    } else {
-      endDateObj = new Date(startDateObj);
-      endDateObj.setDate(endDateObj.getDate() + 6);
-      endDateObj.setHours(23, 59, 59, 999);
-    }
-    
-    // Validate date range
-    if (startDateObj > endDateObj) {
-      return errorResponseHandler(
-        "Start date cannot be after end date",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-    
-    // Limit date range to 7 days maximum
-    const maxEndDate = new Date(startDateObj);
-    maxEndDate.setDate(maxEndDate.getDate() + 6);
-    maxEndDate.setHours(23, 59, 59, 999);
-    
-    if (endDateObj > maxEndDate) {
-      endDateObj = maxEndDate;
-    }
+    // Set end of day for the same date
+    const endDateObj = new Date(dateObj);
+    endDateObj.setHours(23, 59, 59, 999);
 
     // Get venues based on location
     if (lngQuery && latQuery) {
@@ -222,7 +187,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
           near: { type: "Point", coordinates: [lng, lat] },
           distanceField: "distance",
           spherical: true,
-          maxDistance: 3000000,
+          maxDistance: 30000,
         },
       };
 
@@ -302,100 +267,82 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       nearbyVenues = nearbyVenues.filter((venue: any) => venue.courts.length > 0);
     }
 
-    // Get all bookings for the date range
+    // Get all bookings for the specific date
     const bookings = await bookingModel.find({
       venueId: { $in: nearbyVenues.map((venue: any) => venue._id) },
       bookingDate: {
-        $gte: startDateObj,
+        $gte: dateObj,
         $lte: endDateObj
-      }
+      },
+      bookingPaymentStatus: true
     }).select("venueId courtId bookingDate bookingSlots").lean();
 
-    // Create a map of booked slots by venue, court, and date
-    const bookedSlots: Record<string, Record<string, Record<string, string[]>>> = {};
+    // Create a map of booked slots by venue and court for the specific date
+    const bookedSlots: Record<string, Record<string, string[]>> = {};
     
     bookings.forEach((booking: any) => {
       const venueId = booking.venueId.toString();
       const courtId = booking.courtId.toString();
-      
-      // Use local date string to avoid timezone issues
-      const bookingDate = new Date(booking.bookingDate);
-      const bookingDateString = bookingDate.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
       
       if (!bookedSlots[venueId]) {
         bookedSlots[venueId] = {};
       }
       
       if (!bookedSlots[venueId][courtId]) {
-        bookedSlots[venueId][courtId] = {};
+        bookedSlots[venueId][courtId] = [];
       }
       
-      if (!bookedSlots[venueId][courtId][bookingDateString]) {
-        bookedSlots[venueId][courtId][bookingDateString] = [];
-      }
-      
-      bookedSlots[venueId][courtId][bookingDateString].push(
+      bookedSlots[venueId][courtId].push(
         ...(Array.isArray(booking.bookingSlots) ? booking.bookingSlots : [booking.bookingSlots])
       );
     });
 
-    // Generate array of dates in the range
-    const dateRange: Date[] = [];
-    let currentDate = new Date(startDateObj);
-    
-    while (currentDate <= endDateObj) {
-      dateRange.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    // Create result array with venues for each date
+    // Create result array with venues for the specific date
     const result: any[] = [];
     
-    dateRange.forEach(date => {
-      const dateString = date.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
+    const dateString = dateObj.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
+    
+    nearbyVenues.forEach(venue => {
+      const venueId = venue._id.toString();
+      const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
       
-      nearbyVenues.forEach(venue => {
-        const venueId = venue._id.toString();
-        const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
+      const courtsWithAvailability = venue.courts.map((court: any) => {
+        const courtId = court._id.toString();
+        const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
         
-        const courtsWithAvailability = venue.courts.map((court: any) => {
-          const courtId = court._id.toString();
-          const courtBookedSlots = bookedSlots[venueId]?.[courtId]?.[dateString] || [];
-          
-          // Calculate available slots
-          const availableSlots = venueTimeslots.filter(
-            (slot: string) => !courtBookedSlots.includes(slot)
-          );
-          
-          return {
-            ...court,
-            availableSlots
-          };
-        });
-        
-        // Only include courts that have available slots
-        const courtsWithSlots = courtsWithAvailability.filter(
-          (court: any) => court.availableSlots.length > 0
+        // Calculate available slots
+        const availableSlots = venueTimeslots.filter(
+          (slot: string) => !courtBookedSlots.includes(slot)
         );
         
-        // Only add venue for this date if it has courts with available slots
-        if (courtsWithSlots.length > 0) {
-          // Clone venue without timeslots
-          const { timeslots, ...venueWithoutTimeslots } = venue;
-          
-          result.push({
-            ...venueWithoutTimeslots,
-            date: date.toLocaleDateString('en-CA'), // Format: YYYY-MM-DD without timezone issues
-            formattedDate: new Intl.DateTimeFormat('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            }).format(date),
-            courts: courtsWithSlots
-          });
-        }
+        return {
+          ...court,
+          availableSlots
+        };
       });
+      
+      // Only include courts that have available slots
+      const courtsWithSlots = courtsWithAvailability.filter(
+        (court: any) => court.availableSlots.length > 0
+      );
+      
+      // Only add venue if it has courts with available slots
+      if (courtsWithSlots.length > 0) {
+        // Clone venue without timeslots
+        const { timeslots, ...venueWithoutTimeslots } = venue;
+        
+        result.push({
+          ...venueWithoutTimeslots,
+          date: dateString,
+          formattedDate: new Intl.DateTimeFormat('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          }).format(dateObj),
+          courts: courtsWithSlots
+        });
+      }
     });
 
     return {

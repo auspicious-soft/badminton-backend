@@ -5,6 +5,7 @@ import {
   getAdminDetails,
   getEmployees,
   getEmployeesById,
+  getMatches,
   getUsers,
   getUsersById,
   getVenue,
@@ -36,5 +37,8 @@ router.get("/get-venue-by-id", getVenueById);
 //Users routes
 router.get("/get-users", getUsers);
 router.get("/get-users/:id", getUsersById);
+
+//Matches routes
+router.get("/get-matches", getMatches);
 
 export { router };

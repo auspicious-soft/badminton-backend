@@ -20,7 +20,7 @@ import mongoose from "mongoose";
 import { venueModel } from "src/models/venue/venue-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { usersModel } from "src/models/user/user-schema";
-
+import { object } from "webidl-conversions";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -773,11 +773,10 @@ export const getUsersService = async (payload: any, res: Response) => {
   const pageNumber = parseInt(page) || 1;
   const limitNumber = parseInt(limit) || 10;
   const offset = (pageNumber - 1) * limitNumber;
-  
+
   // Default sort is by fullName A-Z, unless explicitly changed
-  const order = payload.sortBy === "createdAt" 
-    ? (payload.order || "desc")
-    : "asc"; // Always asc for fullName sorting
+  const order =
+    payload.sortBy === "createdAt" ? payload.order || "desc" : "asc"; // Always asc for fullName sorting
 
   // Validate order
   if (order && !["asc", "desc"].includes(order)) {
@@ -805,17 +804,17 @@ export const getUsersService = async (payload: any, res: Response) => {
       { $match: searchQuery },
       {
         $addFields: {
-          sortField: payload.sortBy === "createdAt"
-            ? "$createdAt"
-            : { $toLower: "$fullName" } // Default to fullName sorting
-        }
+          sortField:
+            payload.sortBy === "createdAt"
+              ? "$createdAt"
+              : { $toLower: "$fullName" }, // Default to fullName sorting
+        },
       },
-      { 
-        $sort: { 
-          sortField: payload.sortBy === "createdAt" 
-            ? (order === "asc" ? 1 : -1) 
-            : 1  // Always ascending for fullName
-        } 
+      {
+        $sort: {
+          sortField:
+            payload.sortBy === "createdAt" ? (order === "asc" ? 1 : -1) : 1, // Always ascending for fullName
+        },
       },
       { $skip: offset },
       { $limit: limitNumber },
@@ -826,9 +825,9 @@ export const getUsersService = async (payload: any, res: Response) => {
           phoneNumber: 1,
           profilePic: 1,
           createdAt: 1,
-          _id: 1
-        }
-      }
+          _id: 1,
+        },
+      },
     ];
 
     const users = await usersModel.aggregate(pipeline as any);
@@ -845,8 +844,8 @@ export const getUsersService = async (payload: any, res: Response) => {
         limit: limitNumber,
         totalPages: Math.ceil(totalUsers / limitNumber),
         order,
-        sortBy: payload.sortBy || "fullName"
-      }
+        sortBy: payload.sortBy || "fullName",
+      },
     };
   } catch (error) {
     return errorResponseHandler(
@@ -859,7 +858,7 @@ export const getUsersService = async (payload: any, res: Response) => {
 
 export const getUsersByIdService = async (payload: any, res: Response) => {
   const { id } = payload.params;
-  const user = await usersModel.findById(id).lean();
+  const user: any = await usersModel.findById(id).lean();
   if (!user)
     return errorResponseHandler(
       "User not found",
@@ -868,10 +867,250 @@ export const getUsersByIdService = async (payload: any, res: Response) => {
     );
   delete user.token;
   delete user.password;
-  delete user.otp
+  delete user.otp;
+
+  // Static stats until we don't have api from client to get all these data
+  user["stats"] = {
+    totalMatches: 0,
+    padlelMatches: 0,
+    pickleballMatches: 0,
+    loyaltyPoints: 0,
+    level: 0,
+    lastMonthLevel: 0,
+    level6MonthsAgo: 0,
+    level1YearAgo: 0,
+    improvement: 0,
+    confidence: "10%",
+  };
+
+  // Get all bookings where this user is a player
+  const bookingData = await bookingModel
+    .find({
+      $or: [
+        { "team1.playerId": new mongoose.Types.ObjectId(id) },
+        { "team2.playerId": new mongoose.Types.ObjectId(id) },
+      ],
+    })
+    .populate("venueId", "courtId")
+    .lean();
+
+  // Process each booking to add player details
+  const processedBookings = await Promise.all(
+    bookingData.map(async (booking) => {
+      // Process team1 players
+      const team1WithUserData = await Promise.all(
+        booking.team1.map(async (player: any) => {
+          const userData = await usersModel
+            .findById(player.playerId)
+            .select("fullName profilePic")
+            .lean();
+          return {
+            ...player,
+            userData: userData || { fullName: "Unknown", profilePic: null },
+          };
+        })
+      );
+
+      // Process team2 players
+      const team2WithUserData = await Promise.all(
+        booking.team2.map(async (player: any) => {
+          const userData = await usersModel
+            .findById(player.playerId)
+            .select("fullName profilePic")
+            .lean();
+          return {
+            ...player,
+            userData: userData || { fullName: "Unknown", profilePic: null },
+          };
+        })
+      );
+
+      // Get venue details
+      let venueData: any = null;
+      if (booking.venueId) {
+        venueData = await venueModel
+          .findById(booking.venueId)
+          .select("name city state image courts")
+          .lean();
+      }
+
+      // Get court details
+      let courtData = null;
+      if (venueData.courts) {
+        courtData = venueData.courts.find(
+          (court: any) => court._id.toString() === booking.courtId.toString()
+        );
+      }
+      delete venueData.courts;
+
+      // Return processed booking with all details
+      return {
+        ...booking,
+        team1: team1WithUserData,
+        team2: team2WithUserData,
+        venue: venueData,
+        court: courtData,
+      };
+    })
+  );
+
+  // Split into upcoming and completed matches
+  const currentDate = new Date();
+  const upcomingMatches = processedBookings.filter(
+    (booking) => new Date(booking.bookingDate) > currentDate
+  );
+
+  const completedMatches = processedBookings.filter(
+    (booking) => new Date(booking.bookingDate) < currentDate
+  );
+
   return {
     success: true,
     message: "User retrieved successfully",
-    data: user,
+    data: {
+      ...user,
+      upcomingMatches: upcomingMatches || [],
+      completedMatches: completedMatches || [],
+    },
   };
+};
+
+//******************** Handle Matches *************************
+
+export const getMatchesService = async (payload: any, res: Response) => {
+  const {
+    page,
+    limit,
+    search,
+    type = "upcoming",
+    gameType = "all",
+    date = new Date(),
+  } = payload.query;
+  const pageNumber = parseInt(page) || 1;
+  const limitNumber = parseInt(limit) || 10;
+  const offset = (pageNumber - 1) * limitNumber;
+
+  if (!["upcoming", "completed", "cancelled"].includes(type)) {
+    return errorResponseHandler(
+      "Invalid type. Must be either 'upcoming', 'completed' or 'cancelled'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  try {
+    const currentDate = new Date();
+    let matchQuery: any = {};
+    matchQuery.bookingPaymentStatus = true;
+    if (type === "upcoming") {
+      matchQuery.bookingDate = { $gt: currentDate };
+    } else if (type === "completed") {
+      matchQuery.bookingDate = { $lt: currentDate };
+    } else if (type === "cancelled") {
+      matchQuery.cancellationReason = { $ne: null };
+    }
+
+    // Add game type filter if specified
+    if (gameType !== "all") {
+      matchQuery.gameType = gameType;
+    }
+
+    // Add search query if provided
+    if (search) {
+      matchQuery.$or = [
+        { "venue.name": { $regex: search, $options: "i" } },
+        { "court.name": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Count total matches
+    const totalMatches = await bookingModel.countDocuments(matchQuery);
+
+    // Get matches with pagination
+    const bookings = await bookingModel
+      .find(matchQuery)
+      .populate("venueId", "name city state image")
+      .skip(offset)
+      .limit(limitNumber)
+      .sort({ bookingDate: type === "upcoming" ? 1 : -1 })
+      .lean();
+
+    // Process each booking to add player details
+    const processedBookings = await Promise.all(
+      bookings.map(async (booking: any) => {
+        // Process team1 players
+        const team1WithUserData = await Promise.all(
+          booking.team1.map(async (player: any) => {
+            const userData = await usersModel
+              .findById(player.playerId)
+              .select("fullName profilePic")
+              .lean();
+            return {
+              ...player,
+              userData: userData || { fullName: "Unknown", profilePic: null },
+            };
+          })
+        );
+
+        // Process team2 players
+        const team2WithUserData = await Promise.all(
+          booking.team2.map(async (player: any) => {
+            const userData = await usersModel
+              .findById(player.playerId)
+              .select("fullName profilePic")
+              .lean();
+            return {
+              ...player,
+              userData: userData || { fullName: "Unknown", profilePic: null },
+            };
+          })
+        );
+
+        // Get court details
+        let courtData = null;
+        if (booking.venueId) {
+          const venueData = await venueModel
+            .findById(booking.venueId)
+            .select("courts")
+            .lean();
+
+          if (venueData?.courts) {
+            courtData = venueData.courts.find(
+              (court: any) =>
+                court._id.toString() === booking.courtId.toString()
+            );
+          }
+        }
+
+        return {
+          ...booking,
+          team1: team1WithUserData,
+          team2: team2WithUserData,
+          court: courtData,
+        };
+      })
+    );
+
+    return {
+      success: true,
+      message: `${type} matches retrieved successfully`,
+      data: processedBookings,
+      meta: {
+        total: totalMatches,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: offset + limitNumber < totalMatches,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalMatches / limitNumber),
+        type,
+        gameType,
+      },
+    };
+  } catch (error) {
+    return errorResponseHandler(
+      "Error retrieving matches: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
 };
