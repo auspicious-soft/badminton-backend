@@ -26,6 +26,7 @@ import {
   validateUserForLogin,
 } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
+import jwt from "jsonwebtoken";
 
 configDotenv();
 export interface UserPayload {
@@ -47,7 +48,7 @@ const sanitizeUser = (user: any): UserDocument => {
 };
 
 export const loginUserService = async (
-  userData: UserDocument,
+  userData: UserDocument | any,
   authType: string,
   res: Response
 ) => {
@@ -90,6 +91,33 @@ export const loginUserService = async (
   };
 };
 
+export const socialLoginService = async (
+  userData: any,
+  authType: any,
+  res: Response
+) => {
+  const { idToken, location } = userData;
+
+  const decodedToken = jwt.decode(idToken) as any;
+
+  const { email, given_name, family_name, picture } = decodedToken;
+
+  const result = await loginUserService(
+    {
+      email,
+      firstName: given_name,
+      lastName: family_name,
+      profilePic: picture,
+      location,
+      emailVerified: true,
+    },
+    authType,
+    res
+  );
+
+  return result;
+};
+
 const createNewUser = async (userData: any, authType: string) => {
   let newUser = new usersModel({
     email: userData.email,
@@ -99,6 +127,7 @@ const createNewUser = async (userData: any, authType: string) => {
     fcmToken: userData.fcmToken,
     profilePic: userData.profilePic,
     password: null,
+    location: userData.location || { type: "Point", coordinates: [0, 0] },
     token: generateUserToken(userData, true),
   });
 

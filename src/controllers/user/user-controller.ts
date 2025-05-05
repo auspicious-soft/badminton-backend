@@ -13,6 +13,7 @@ import {
   changePasswordService,
   updateCurrentUserDetailsService,
   verifyOtpPasswordForgetService,
+  socialLoginService,
 } from "src/services/user/user-service";
 import { newPassswordAfterOTPVerifiedService } from "src/services/admin/admin-service";
 import {
@@ -23,11 +24,14 @@ import {
 export const userSignup = async (req: Request, res: Response) => {
   try {
     const authType =
-      req.body.email && req.body.phoneNumber
-        ? "Email-Phone"
-        : null
-    if(authType == null){
-      return res.status(httpStatusCode.BAD_REQUEST).json({ success: false, message: "Both Email and Phone number is required" });
+      req.body.email && req.body.phoneNumber ? "Email-Phone" : null;
+    if (authType == null) {
+      return res
+        .status(httpStatusCode.BAD_REQUEST)
+        .json({
+          success: false,
+          message: "Both Email and Phone number is required",
+        });
     }
     const user = await signUpService(req.body, authType, res);
     return res.status(httpStatusCode.OK).json(user);
@@ -42,6 +46,27 @@ export const userSignup = async (req: Request, res: Response) => {
 export const loginUser = async (req: Request, res: Response) => {
   try {
     const loginResponse = await loginUserService(
+      req.body,
+      req.body.authType,
+      res
+    );
+    return res.status(httpStatusCode.OK).json(loginResponse);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const socialLogin = async (req: Request, res: Response) => {
+  try {
+    !["Google", "Apple", "Facebook"].includes(req.body.authType)
+      ? res
+          .status(httpStatusCode.BAD_REQUEST)
+          .json({ success: false, message: "Invalid Auth Type" })
+      : null;
+      
+    const loginResponse = await socialLoginService(
       req.body,
       req.body.authType,
       res
@@ -82,7 +107,6 @@ export const forgotPasswordUser = async (req: Request, res: Response) => {
   }
 };
 
-
 export const verifyOtpPasswordReset = async (req: Request, res: Response) => {
   const { otp } = req.body;
   try {
@@ -108,8 +132,6 @@ export const verifyOtpPasswordForget = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-
-
 
 export const newPassswordAfterOTPVerifiedUser = async (
   req: Request,
@@ -223,7 +245,6 @@ export const changePasswordUser = async (req: Request, res: Response) => {
 
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
-
     const verificationResult: any = await verifyOTPService(req.body, req, res);
 
     res.status(200).json({
@@ -240,7 +261,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
 };
 export const resendOTP = async (req: Request, res: Response) => {
   try {
-    const response = await generateAndSendOTP("",req.body);
+    const response = await generateAndSendOTP("", req.body);
     res.status(200).json({
       success: true,
       data: { response },

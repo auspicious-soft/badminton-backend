@@ -9,6 +9,7 @@ import {
   loginUser,
   newPassswordAfterOTPVerifiedUser,
   resendOTP,
+  socialLogin,
   userSignup,
   verifyOTP,
   verifyOtpPasswordForget,
@@ -26,6 +27,7 @@ router.post("/forgot-password", forgotPassword);
 router.patch("/new-password-otp-verified", newPassswordAfterOTPVerified);
 
 //userAuth routes
+router.post("/social-login", socialLogin)
 router.post("/user-signup", userSignup);
 router.post("/verify-otp", checkOTPAuth, verifyOTP);
 router.post("/user-login", loginUser);
