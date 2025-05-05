@@ -117,12 +117,16 @@ export const socialLoginService = async (
   const decodedToken = jwt.decode(idToken) as any;
 
   const { email, given_name, family_name, picture } = decodedToken;
+  
+  // Create fullName from given_name and family_name
+  const fullName = `${given_name || ''} ${family_name || ''}`.trim();
 
   const result = await loginUserService(
     {
       email,
       firstName: given_name,
       lastName: family_name,
+      fullName: fullName, // Add fullName
       profilePic: picture,
       location,
       emailVerified: true,
@@ -135,10 +139,14 @@ export const socialLoginService = async (
 };
 
 const createNewUser = async (userData: any, authType: string) => {
+  // Set fullName from firstName and lastName
+  const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+  
   let newUser = new usersModel({
     email: userData.email,
     lastName: userData.lastName,
     firstName: userData.firstName,
+    fullName: fullName || null, // Use computed fullName or null if empty
     authType: authType,
     fcmToken: userData.fcmToken,
     profilePic: userData.profilePic,
@@ -171,6 +179,12 @@ export const signUpService = async (
       res
     );
   }
+  
+  // Set fullName if firstName and/or lastName are provided
+  if (!userData.fullName && (userData.firstName || userData.lastName)) {
+    userData.fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+  }
+  
   const query = getSignUpQueryByAuthType(userData, authType);
   const existingUser = await usersModel.findOne(query);
   const existingUserResponse = existingUser
@@ -372,6 +386,11 @@ export const createUserService = async (payload: any, res: Response) => {
       httpStatusCode.BAD_REQUEST,
       res
     );
+
+  // Set fullName if firstName and/or lastName are provided
+  if (!payload.fullName && (payload.firstName || payload.lastName)) {
+    payload.fullName = `${payload.firstName || ''} ${payload.lastName || ''}`.trim();
+  }
 
   // Hash the password before saving the user
   // const hashedPassword = bcrypt.hashSync(payload.password, 10);

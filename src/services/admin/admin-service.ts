@@ -203,6 +203,11 @@ export const createEmployeeService = async (payload: any, res: Response) => {
       res
     );
 
+  // Set fullName if firstName and lastName are provided
+  if (!payload.fullName && (payload.firstName || payload.lastName)) {
+    payload.fullName = `${payload.firstName || ''} ${payload.lastName || ''}`.trim();
+  }
+
   payload.password = await hashPasswordIfEmailAuth(payload, "Email");
   const identifier = customAlphabet("0123456789", 5);
   payload.identifier = identifier();

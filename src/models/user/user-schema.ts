@@ -134,4 +134,13 @@ const usersSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add pre-save hook to ensure fullName is set
+usersSchema.pre('save', function(next) {
+  // If fullName is not set but firstName or lastName is provided, create fullName
+  if (!this.fullName && (this.firstName || this.lastName)) {
+    this.fullName = `${this.firstName || ''} ${this.lastName || ''}`.trim();
+  }
+  next();
+});
+
 export const usersModel = mongoose.model<UserDocument>("users", usersSchema);
