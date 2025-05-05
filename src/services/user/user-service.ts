@@ -458,11 +458,12 @@ export const verifyOTPService = async (
     });
 
     if (!user) {
-      errorResponseHandler(
-        "Invalid or expired Email OTP",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
+      // errorResponseHandler(
+      //   "Invalid or expired Email OTP",
+      //   httpStatusCode.BAD_REQUEST,
+      //   res
+      // );
+      throw new Error("Invalid or expired Email OTP");
     }
     if (user) {
       user.emailVerified = true;
