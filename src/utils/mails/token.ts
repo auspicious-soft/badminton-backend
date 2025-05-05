@@ -8,7 +8,8 @@ export const generatePasswordResetToken = async (email: string | null, phoneNumb
   console.log('email: ', email);
   const genId = customAlphabet('0123456789', 6)
   const token = genId()
-  const expires = new Date(new Date().getTime() + 3600 * 1000)
+  // Change expiry time to 2 minutes
+  const expires = new Date(new Date().getTime() + 2 * 60 * 1000)
 
   if (!phoneNumber && !email) {
     throw new Error("Either phone number or email is required")
@@ -26,9 +27,11 @@ export const generatePasswordResetToken = async (email: string | null, phoneNumb
     expires,
     email: email || null,
   }
+  
   const newPasswordResetToken = new passwordResetTokenModel(tokenData)
-  const response = await newPasswordResetToken.save()
-  return response
+  await newPasswordResetToken.save()
+  
+  return newPasswordResetToken;
 }
 
 export const getPasswordResetTokenByToken = async (token: string) => {
@@ -43,7 +46,8 @@ export const getPasswordResetTokenByToken = async (token: string) => {
 export const generatePasswordResetTokenByPhone = async(phoneNumber: string) => {
   const genId = customAlphabet('0123456789', 6)
   const token = genId()
-  const expires = new Date(new Date().getTime() + 3600 * 1000)
+  // Change expiry time to 2 minutes
+  const expires = new Date(new Date().getTime() + 2 * 60 * 1000)
 
   const existingToken = await passwordResetTokenModel.findOne({ phoneNumber })
   if (existingToken) {

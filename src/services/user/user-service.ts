@@ -66,6 +66,14 @@ export const loginUserService = async (
     user = await createNewUser(userData, authType); // You should implement the createNewUser function as per your needs
   }
 
+  if(authType !== user.authType){
+    return errorResponseHandler(
+      `Wrong Login method!!, Try login from ${user.authType}`,
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
   let validationResponse = await validateUserForLogin(
     user,
     user.authType,
@@ -198,7 +206,7 @@ export const forgotPasswordUserService = async (
     .select("+password");
   if (!user)
     return errorResponseHandler(
-      "Phone number not found",
+      "User not found",
       httpStatusCode.NOT_FOUND,
       res
     );
@@ -212,7 +220,23 @@ export const forgotPasswordUserService = async (
       httpStatusCode.BAD_REQUEST,
       res
     );
-  await generatePasswordResetToken(email, phoneNumber);
+  
+  // Generate the password reset token
+  const passwordResetToken = await generatePasswordResetToken(email, phoneNumber);
+  
+  // Send OTP via email if email is provided
+  if (email && passwordResetToken) {
+    await sendEmailVerificationMail(email, passwordResetToken.token, "eng");
+  }
+  
+  // Send OTP via SMS if phone number is provided
+  if (phoneNumber && passwordResetToken) {
+    await generatePasswordResetTokenByPhoneWithTwilio(
+      phoneNumber,
+      passwordResetToken.token,
+      passwordResetToken.expires
+    );
+  }
 
   let verification = false;
   let token = generateUserToken(user as any, verification);
@@ -220,7 +244,11 @@ export const forgotPasswordUserService = async (
   return {
     success: true,
     token,
-    message: "Password reset email sent with otp",
+    message: email && phoneNumber 
+      ? "Password reset OTP sent to your email and phone" 
+      : email 
+        ? "Password reset OTP sent to your email" 
+        : "Password reset OTP sent to your phone",
   };
 };
 
@@ -285,7 +313,7 @@ export const verifyOtpPasswordResetService = async (
   const existingToken = await getPasswordResetTokenByToken(token);
   if (!existingToken)
     return errorResponseHandler(
-      "Invalid token",
+      "Invalid OTP",
       httpStatusCode.BAD_REQUEST,
       res
     );
@@ -303,7 +331,7 @@ export const verifyOtpPasswordForgetService = async (
   const existingToken = await getPasswordResetTokenByToken(token);
   if (!existingToken)
     return errorResponseHandler(
-      "Invalid token",
+      "Invalid OTP",
       httpStatusCode.BAD_REQUEST,
       res
     );
@@ -406,7 +434,8 @@ export const generateAndSendOTP = async (
 
   const otpEmail = Math.floor(100000 + Math.random() * 900000).toString();
   const otpPhone = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 20 * 60 * 1000); // OTP expires in 20 minutes
+  // Change expiry time to 2 minutes
+  const expiresAt = new Date(Date.now() + 2 * 60 * 1000); // OTP expires in 2 minutes
 
   let user;
   if (email) {

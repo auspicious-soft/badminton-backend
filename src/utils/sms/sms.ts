@@ -1,6 +1,4 @@
 // import twilio
-import { customAlphabet } from "nanoid";
-import { passwordResetTokenModel } from "../../models/password-token-schema";
 import twilio from "twilio";
 import { configDotenv } from "dotenv";
 configDotenv();
@@ -10,23 +8,8 @@ const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_
 export const generatePasswordResetTokenByPhoneWithTwilio = async (phoneNumber: string ,token: string, expiresAt: Date) => {
 
   try {
-    // const genId = customAlphabet('0123456789', 6);
-    // const token = genId();
-    // const expires = new Date(new Date().getTime() + 3600 * 1000); // Token valid for 1 hour
-
-    // const existingToken = await passwordResetTokenModel.findOne({ phoneNumber });
-    // if (existingToken) {
-    //   await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
-    // }
-
-    // const newPasswordResetToken = new passwordResetTokenModel({
-    //   phoneNumber,
-    //   token,
-    //   expires,
-    // });
-    // await newPasswordResetToken.save();
-
-    const message = `Your password reset token is: ${token}. It is valid for 1 hour.`;
+    // Update message to reflect 2-minute expiry
+    const message = `Your password reset token is: ${token}. It is valid for 2 minutes.`;
     const res =  await client.messages.create({
         body: message,
         from: process.env.TWILIO_PHONE_NUMBER as string,
