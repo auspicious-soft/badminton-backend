@@ -59,6 +59,14 @@ export const loginUserService = async (
     ],
   });
 
+  if (!user) {
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
   if (
     !user &&
     (authType === "Google" || authType === "Apple" || authType === "Facebook")
