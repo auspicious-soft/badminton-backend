@@ -74,7 +74,7 @@ export const loginUserService = async (
     user = await createNewUser(userData, authType); // You should implement the createNewUser function as per your needs
   }
 
-  if(authType !== user.authType){
+  if (authType !== user.authType) {
     return errorResponseHandler(
       `Wrong Login method!!, Try login from ${user.authType}`,
       httpStatusCode.BAD_REQUEST,
@@ -117,9 +117,9 @@ export const socialLoginService = async (
   const decodedToken = jwt.decode(idToken) as any;
 
   const { email, given_name, family_name, picture } = decodedToken;
-  
+
   // Create fullName from given_name and family_name
-  const fullName = `${given_name || ''} ${family_name || ''}`.trim();
+  const fullName = `${given_name || ""} ${family_name || ""}`.trim();
 
   const result = await loginUserService(
     {
@@ -140,8 +140,10 @@ export const socialLoginService = async (
 
 const createNewUser = async (userData: any, authType: string) => {
   // Set fullName from firstName and lastName
-  const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-  
+  const fullName = `${userData.firstName || ""} ${
+    userData.lastName || ""
+  }`.trim();
+
   let newUser = new usersModel({
     email: userData.email,
     lastName: userData.lastName,
@@ -179,12 +181,25 @@ export const signUpService = async (
       res
     );
   }
-  
+
+  if (authType === "Email-Phone") {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (userData.email && !emailRegex.test(userData.email)) {
+      return errorResponseHandler(
+        "Invalid email format",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+  }
+
   // Set fullName if firstName and/or lastName are provided
   if (!userData.fullName && (userData.firstName || userData.lastName)) {
-    userData.fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+    userData.fullName = `${userData.firstName || ""} ${
+      userData.lastName || ""
+    }`.trim();
   }
-  
+
   const query = getSignUpQueryByAuthType(userData, authType);
   const existingUser = await usersModel.findOne(query);
   const existingUserResponse = existingUser
@@ -222,9 +237,20 @@ export const forgotPasswordUserService = async (
   payload: any,
   res: Response
 ) => {
-  const { phoneNumber, email } = payload;
+  const { email } = payload;
+  
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (email && !emailRegex.test(email)) {
+      return errorResponseHandler(
+        "Invalid email format",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+  }
   const user = await usersModel
-    .findOne({ $or: [{ email }, { phoneNumber }] })
+    .findOne({email})
     .select("+password");
   if (!user)
     return errorResponseHandler(
@@ -242,23 +268,26 @@ export const forgotPasswordUserService = async (
       httpStatusCode.BAD_REQUEST,
       res
     );
-  
+
   // Generate the password reset token
-  const passwordResetToken = await generatePasswordResetToken(email, phoneNumber);
-  
+  const passwordResetToken = await generatePasswordResetToken(
+    email,
+    ""
+  );
+
   // Send OTP via email if email is provided
   if (email && passwordResetToken) {
     await sendEmailVerificationMail(email, passwordResetToken.token, "eng");
   }
-  
+
   // Send OTP via SMS if phone number is provided
-  if (phoneNumber && passwordResetToken) {
-    await generatePasswordResetTokenByPhoneWithTwilio(
-      phoneNumber,
-      passwordResetToken.token,
-      passwordResetToken.expires
-    );
-  }
+  // if (phoneNumber && passwordResetToken) {
+  //   await generatePasswordResetTokenByPhoneWithTwilio(
+  //     phoneNumber,
+  //     passwordResetToken.token,
+  //     passwordResetToken.expires
+  //   );
+  // }
 
   let verification = false;
   let token = generateUserToken(user as any, verification);
@@ -266,11 +295,8 @@ export const forgotPasswordUserService = async (
   return {
     success: true,
     token,
-    message: email && phoneNumber 
-      ? "Password reset OTP sent to your email and phone" 
-      : email 
-        ? "Password reset OTP sent to your email" 
-        : "Password reset OTP sent to your phone",
+    message: "Password reset OTP sent to your email"
+
   };
 };
 
@@ -334,11 +360,7 @@ export const verifyOtpPasswordResetService = async (
 ) => {
   const existingToken = await getPasswordResetTokenByToken(token);
   if (!existingToken)
-    return errorResponseHandler(
-      "Invalid OTP",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
+    return errorResponseHandler("Invalid OTP", httpStatusCode.BAD_REQUEST, res);
 
   const hasExpired = new Date(existingToken.expires) < new Date();
   if (hasExpired)
@@ -352,11 +374,7 @@ export const verifyOtpPasswordForgetService = async (
 ) => {
   const existingToken = await getPasswordResetTokenByToken(token);
   if (!existingToken)
-    return errorResponseHandler(
-      "Invalid OTP",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
+    return errorResponseHandler("Invalid OTP", httpStatusCode.BAD_REQUEST, res);
 
   const hasExpired = new Date(existingToken.expires) < new Date();
   if (hasExpired)
@@ -389,7 +407,9 @@ export const createUserService = async (payload: any, res: Response) => {
 
   // Set fullName if firstName and/or lastName are provided
   if (!payload.fullName && (payload.firstName || payload.lastName)) {
-    payload.fullName = `${payload.firstName || ''} ${payload.lastName || ''}`.trim();
+    payload.fullName = `${payload.firstName || ""} ${
+      payload.lastName || ""
+    }`.trim();
   }
 
   // Hash the password before saving the user

@@ -1,24 +1,27 @@
 import { customAlphabet } from "nanoid";
-import { passwordResetTokenModel } from "../../models/password-token-schema"
+import { passwordResetTokenModel } from "../../models/password-token-schema";
 
-
-
-export const generatePasswordResetToken = async (email: string | null, phoneNumber: string | null) => {
-  console.log('phoneNumber: ', phoneNumber);
-  console.log('email: ', email);
-  const genId = customAlphabet('0123456789', 6)
-  const token = genId()
+export const generatePasswordResetToken = async (
+  email: string | null,
+  phoneNumber: string | null
+) => {
+  console.log("phoneNumber: ", phoneNumber);
+  console.log("email: ", email);
+  const genId = customAlphabet("0123456789", 6);
+  const token = genId();
   // Change expiry time to 2 minutes
-  const expires = new Date(new Date().getTime() + 2 * 60 * 1000)
+  const expires = new Date(new Date().getTime() + 2 * 60 * 1000);
 
   if (!phoneNumber && !email) {
-    throw new Error("Either phone number or email is required")
+    throw new Error("Either phone number or email is required");
   }
 
-  const existingToken = await passwordResetTokenModel.findOne({ $or: [{ phoneNumber }, { email }] })
-  console.log('existingToken: ', existingToken);
+  const existingToken = await passwordResetTokenModel.findOne({
+    $or: [{ phoneNumber }, { email }],
+  });
+  console.log("existingToken: ", existingToken);
   if (existingToken) {
-    await passwordResetTokenModel.findByIdAndDelete(existingToken._id)
+    await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
   }
 
   const tokenData = {
@@ -26,13 +29,13 @@ export const generatePasswordResetToken = async (email: string | null, phoneNumb
     token,
     expires,
     email: email || null,
-  }
-  
-  const newPasswordResetToken = new passwordResetTokenModel(tokenData)
-  await newPasswordResetToken.save()
-  
+  };
+
+  const newPasswordResetToken = new passwordResetTokenModel(tokenData);
+  await newPasswordResetToken.save();
+
   return newPasswordResetToken;
-}
+};
 
 export const getPasswordResetTokenByToken = async (token: string) => {
   try {
@@ -41,23 +44,25 @@ export const getPasswordResetTokenByToken = async (token: string) => {
   } catch {
     return null;
   }
-}
+};
 
-export const generatePasswordResetTokenByPhone = async(phoneNumber: string) => {
-  const genId = customAlphabet('0123456789', 6)
-  const token = genId()
+export const generatePasswordResetTokenByPhone = async (
+  phoneNumber: string
+) => {
+  const genId = customAlphabet("0123456789", 6);
+  const token = genId();
   // Change expiry time to 2 minutes
-  const expires = new Date(new Date().getTime() + 2 * 60 * 1000)
+  const expires = new Date(new Date().getTime() + 2 * 60 * 1000);
 
-  const existingToken = await passwordResetTokenModel.findOne({ phoneNumber })
+  const existingToken = await passwordResetTokenModel.findOne({ phoneNumber });
   if (existingToken) {
-    await passwordResetTokenModel.findByIdAndDelete(existingToken._id)
+    await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
   }
   const newPasswordResetToken = new passwordResetTokenModel({
     phoneNumber,
     token,
-    expires
-  })
-  const response = await newPasswordResetToken.save()
-  return response
-}
+    expires,
+  });
+  const response = await newPasswordResetToken.save();
+  return response;
+};
