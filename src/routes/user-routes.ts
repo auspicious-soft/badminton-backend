@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { acceptFriendRequest, bookCourt, getCourts, getOpenMatches, getVenues, joinOpenCourt, searchFriend, sendRequest, userHome, userNotifications } from "src/controllers/user/user-home-controller";
+import { acceptFriendRequest, bookCourt, getCourts, getOpenMatches, getUser, getVenues, joinOpenCourt, searchFriend, sendRequest, userHome, userNotifications } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
 // import {  getAllAuthorsForUser, getAuthorCountries, getAuthorForUser } from "src/controllers/authors/authors-controller";
 // import {  getAllBookLivesWithBlogs, getBookLive } from "src/controllers/book-lives/book-lives-controller";
@@ -31,6 +31,7 @@ import { validateBookingRequest } from "src/middleware/booking-validation";
 
 const router = Router();
 
+router.get("/get-user", getUser);
 router.get("/user-home-screen", userHome);
 router.get("/get-venues", getVenues)
 router.get("/get-courts", getCourts)

@@ -202,10 +202,16 @@ export const signUpService = async (
 
   const query = getSignUpQueryByAuthType(userData, authType);
   const existingUser = await usersModel.findOne(query);
-  const existingUserResponse = existingUser
-    ? handleExistingUser(existingUser as any, authType, res)
-    : null;
-  if (existingUserResponse) return existingUserResponse;
+
+  const existingUserResponse =
+    existingUser && existingUser?.emailVerified
+      ? handleExistingUser(existingUser as any, authType, res)
+      : existingUser && existingUser?.emailVerified === false
+      ? await usersModel.deleteOne({ _id: existingUser._id }).lean()
+      : null;
+
+  if (existingUserResponse && existingUserResponse?.acknowledged === false)
+    return existingUserResponse;
   const newUserData = { ...userData, authType };
   newUserData.password = await hashPasswordIfEmailAuth(userData, authType);
   const user = await usersModel.create(newUserData);
@@ -238,7 +244,7 @@ export const forgotPasswordUserService = async (
   res: Response
 ) => {
   const { email } = payload;
-  
+
   if (email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (email && !emailRegex.test(email)) {
@@ -249,9 +255,7 @@ export const forgotPasswordUserService = async (
       );
     }
   }
-  const user = await usersModel
-    .findOne({email})
-    .select("+password");
+  const user = await usersModel.findOne({ email }).select("+password");
   if (!user)
     return errorResponseHandler(
       "User not found",
@@ -270,10 +274,7 @@ export const forgotPasswordUserService = async (
     );
 
   // Generate the password reset token
-  const passwordResetToken = await generatePasswordResetToken(
-    email,
-    ""
-  );
+  const passwordResetToken = await generatePasswordResetToken(email, "");
 
   // Send OTP via email if email is provided
   if (email && passwordResetToken) {
@@ -295,8 +296,7 @@ export const forgotPasswordUserService = async (
   return {
     success: true,
     token,
-    message: "Password reset OTP sent to your email"
-
+    message: "Password reset OTP sent to your email",
   };
 };
 
@@ -656,5 +656,27 @@ export const updateCurrentUserDetailsService = async (
     data: {
       data: updatedUser,
     },
+  };
+};
+
+export const getUserServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const userId = userData.id;
+  const user = await usersModel
+    .findById(userId)
+    .lean()
+    .select("-__v -password -otp");
+  if (!user) {
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  return {
+    success: true,
+    message: "User retrieved successfully",
+    data: user,
   };
 };
