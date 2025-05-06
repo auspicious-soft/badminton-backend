@@ -111,7 +111,7 @@ export const validateUserForLogin = async (
   if (authType === "Email-Phone" && user.emailVerified === false) {
     await sendOTPIfNeeded(userData, authType);
     return errorResponseHandler(
-      "Email not verified, verfication email sent to your email",
+      "Email not verified, Please sign up again",
       httpStatusCode.BAD_REQUEST,
       res
     );

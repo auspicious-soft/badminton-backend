@@ -316,9 +316,9 @@ export const newPassswordAfterOTPVerifiedUserService = async (
   if (!existingToken || !existingToken.isVerified)
     return errorResponseHandler("Invalid OTP", httpStatusCode.BAD_REQUEST, res);
 
-  const hasExpired = new Date(existingToken.expires) < new Date();
-  if (hasExpired)
-    return errorResponseHandler("OTP expired", httpStatusCode.BAD_REQUEST, res);
+  // const hasExpired = new Date(existingToken.expires) < new Date();
+  // if (hasExpired)
+  //   return errorResponseHandler("OTP expired", httpStatusCode.BAD_REQUEST, res);
 
   let existingUser: any;
 
