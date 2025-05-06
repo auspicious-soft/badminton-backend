@@ -17,6 +17,7 @@ import {
 } from "src/controllers/user/user-controller";
 import { checkOTPAuth } from "src/middleware/check-auth";
 import { sendEmailVerificationMail } from "src/utils/mails/mail";
+import { generatePasswordResetTokenByPhoneWithTwilio } from "src/utils/sms/sms";
 
 const router = Router();
 
@@ -44,11 +45,39 @@ router.patch(
   newPassswordAfterOTPVerifiedUser
 );
 
-router.post("/test", (req, res) => {
-  sendEmailVerificationMail("ya@yopmail.com", "777777", "eng");
+// router.get("/test", async (req, res) => {
+//   // sendEmailVerificationMail("ya@yopmail.com", "777777", "eng");
+
+//   const response = await fetch(`https://2factor.in/API/V1/f40eb2dd-2a4e-11f0-8b17-0200cd936042/SMS/9882211037/AUTOGEN`, {
+//     method: 'GET'
+//   });
+
+//   const data = await response.json();
+//   console.log("data: ", data);
+//   res.status(200).json({
+//     success: true,
+//     message: "Email sent successfully",
+//     data: data,
+//   });
+// });
+router.get("/test", async (req, res) => {
+  // sendEmailVerificationMail("ya@yopmail.com", "777777", "eng");
+      await generatePasswordResetTokenByPhoneWithTwilio(
+      "9816996929",
+      "585858",
+      new Date(Date.now() + 10 * 60 * 1000),
+    );
+
+  // const response = await fetch(`https://2factor.in/API/V1/f40eb2dd-2a4e-11f0-8b17-0200cd936042/SMS/9882211037/AUTOGEN`, {
+  //   method: 'GET'
+  // });
+
+  // const data = await response.json();
+  // console.log("data: ", data);
   res.status(200).json({
     success: true,
     message: "Email sent successfully",
+    // data: data,
   });
 });
 
