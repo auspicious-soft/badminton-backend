@@ -17,7 +17,7 @@ import {
 } from "src/controllers/user/user-controller";
 import { checkOTPAuth } from "src/middleware/check-auth";
 import { sendEmailVerificationMail } from "src/utils/mails/mail";
-import { generatePasswordResetTokenByPhoneWithTwilio } from "src/utils/sms/sms";
+import { generateTwilioVerificationOTP } from "src/utils/sms/sms";
 
 const router = Router();
 
@@ -62,7 +62,7 @@ router.patch(
 // });
 router.get("/test", async (req, res) => {
   // sendEmailVerificationMail("ya@yopmail.com", "777777", "eng");
-      await generatePasswordResetTokenByPhoneWithTwilio(
+      await generateTwilioVerificationOTP(
       "9816996929",
       "585858",
       new Date(Date.now() + 10 * 60 * 1000),

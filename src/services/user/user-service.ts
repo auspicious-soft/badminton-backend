@@ -15,7 +15,7 @@ import {
   sendEmailVerificationMail,
 } from "src/utils/mails/mail";
 import { passwordResetTokenModel } from "src/models/password-token-schema";
-import { generatePasswordResetTokenByPhoneWithTwilio } from "src/utils/sms/sms";
+import { generateTwilioVerificationOTP } from "src/utils/sms/sms";
 import {
   generateUserToken,
   getSignUpQueryByAuthType,
@@ -283,7 +283,7 @@ export const forgotPasswordUserService = async (
 
   // Send OTP via SMS if phone number is provided
   // if (phoneNumber && passwordResetToken) {
-  //   await generatePasswordResetTokenByPhoneWithTwilio(
+  //   await generateTwilioVerificationOTP(
   //     phoneNumber,
   //     passwordResetToken.token,
   //     passwordResetToken.expires
@@ -519,7 +519,7 @@ export const generateAndSendOTP = async (
   // Send OTP via the respective method
   if (phoneNumber) {
     // await generateOtpWithTwilio(phoneNumber, otpPhone);
-    await generatePasswordResetTokenByPhoneWithTwilio(
+    await generateTwilioVerificationOTP(
       phoneNumber,
       otpPhone,
       expiresAt

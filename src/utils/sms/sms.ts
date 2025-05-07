@@ -5,7 +5,7 @@ configDotenv();
 const client = twilio(process.env.TWILIO_ACCOUNT_SID as string, process.env.TWILIO_AUTH_TOKEN as string);
 // const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
 
-export const generatePasswordResetTokenByPhoneWithTwilio = async (phoneNumber: string ,token: string, expiresAt: Date) => {
+export const generateTwilioVerificationOTP = async (phoneNumber: string ,token: string, expiresAt: Date) => {
 
   try {
     // Update message to reflect 2-minute expiry

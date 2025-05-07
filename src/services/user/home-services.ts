@@ -688,31 +688,122 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
 
 export const searchFriendServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { search } = req.query;
+  const { search, page = "1", limit = "10", status = "" } = req.query;
+  
+  // Parse pagination parameters
+  const pageNumber = parseInt(page as string) || 1;
+  const limitNumber = parseInt(limit as string) || 10;
+  const offset = (pageNumber - 1) * limitNumber;
 
-  if (!search) {
-    // Get all friendships where the user is involved (both accepted and pending)
-    const friendships = await friendsModel
-      .find({
-        $or: [{ userId: userData.id }, { friendId: userData.id }],
-      })
+  // Get all friendships where the user is involved (both accepted and pending)
+  const friendships = await friendsModel
+    .find({
+      $or: [{ userId: userData.id }, { friendId: userData.id }],
+    })
+    .lean();
+
+  // Filter friendships based on status parameter
+  let filteredFriendships = friendships;
+  if (status === "friends") {
+    filteredFriendships = friendships.filter(f => f.status === "accepted");
+  } else if (status === "requests-sent") {
+    filteredFriendships = friendships.filter(
+      f => f.status === "pending" && f.userId.toString() === userData.id.toString()
+    );
+  } else if (status === "requests-received") {
+    filteredFriendships = friendships.filter(
+      f => f.status === "pending" && f.friendId.toString() === userData.id.toString()
+    );
+  }
+
+  // If status filter is applied, return only those specific users
+  if (["friends", "requests-sent", "requests-received"].includes(status as string)) {
+    // Get user IDs based on filtered friendships
+    const userIds = filteredFriendships.map(f => 
+      f.userId.toString() === userData.id.toString() ? f.friendId : f.userId
+    );
+    
+    // Get total count for pagination
+    const totalFilteredUsers = userIds.length;
+    
+    // Apply pagination to user IDs
+    const paginatedUserIds = userIds.slice(offset, offset + limitNumber);
+    
+    // Get user details for paginated IDs
+    const filteredUsers = await usersModel
+      .find({ _id: { $in: paginatedUserIds } })
+      .select("fullName profilePic")
       .lean();
+    
+    // Map users with their friendship status
+    const usersWithStatus = filteredUsers.map(user => {
+      const friendship = filteredFriendships.find(
+        f => 
+          (f.userId.toString() === user._id.toString() && f.friendId.toString() === userData.id) ||
+          (f.userId.toString() === userData.id && f.friendId.toString() === user._id.toString())
+      );
+      
+      let friendshipStatus = "not_connected";
+      let requestId = null;
+      
+      if (friendship) {
+        if (friendship.status === "accepted") {
+          friendshipStatus = "accepted";
+        } else if (friendship.status === "pending") {
+          if (friendship.userId.toString() === userData.id) {
+            friendshipStatus = "request_sent";
+          } else {
+            friendshipStatus = "request_received";
+            requestId = friendship._id;
+          }
+        }
+      }
+      
+      return {
+        _id: user._id,
+        fullName: user.fullName,
+        profilePic: user.profilePic,
+        friendshipStatus,
+        ...(requestId && { requestId })
+      };
+    });
+    
+    return {
+      success: true,
+      message: `${status} retrieved successfully`,
+      data: usersWithStatus,
+      meta: {
+        total: totalFilteredUsers,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: offset + limitNumber < totalFilteredUsers,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalFilteredUsers / limitNumber),
+        status: status,
+      }
+    };
+  }
 
+  // If search is not provided and no status filter, return all users with pagination
+  if (!search) {
     // Get all user IDs from friendships
-    const userIds = friendships.map((friendship) =>
+    const connectedUserIds = friendships.map((friendship) =>
       friendship.userId.toString() === userData.id.toString()
         ? friendship.friendId
         : friendship.userId
     );
 
-    // Fetch all users' details
-    const friendUsers = await usersModel
-      .find({ _id: { $in: userIds } })
+    // Add current user ID to the list of IDs to exclude
+    connectedUserIds.push(userData.id);
+
+    // Get connected users with their friendship status
+    const connectedUsers = await usersModel
+      .find({ _id: { $in: connectedUserIds, $ne: userData.id } })
       .select("fullName profilePic")
       .lean();
 
-    // Map users with their friendship status and request details
-    const usersWithStatus = friendUsers.map((user) => {
+    // Map connected users with their friendship status and request details
+    const connectedUsersWithStatus = connectedUsers.map((user) => {
       const friendship = friendships.find(
         (f) =>
           (f.userId.toString() === user._id.toString() &&
@@ -741,14 +832,55 @@ export const searchFriendServices = async (req: Request, res: Response) => {
       return result;
     });
 
+    // Count total not connected users for pagination
+    const totalNotConnectedUsers = await usersModel.countDocuments({ 
+      _id: { $nin: connectedUserIds } 
+    });
+
+    // Fetch users who are not connected to the current user with pagination
+    const notConnectedUsers = await usersModel
+      .find({ _id: { $nin: connectedUserIds } })
+      .select("fullName profilePic")
+      .skip(offset)
+      .limit(limitNumber)
+      .sort({ fullName: 1 }) // Sort by name
+      .lean();
+
+    // Add friendshipStatus to each user
+    const usersWithStatus = notConnectedUsers.map((user) => ({
+      _id: user._id,
+      fullName: user.fullName,
+      profilePic: user.profilePic,
+      friendshipStatus: "not_connected"
+    }));
+
+    // For the first page, prioritize showing connected users
+    const allUsers = pageNumber === 1 
+      ? [...connectedUsersWithStatus, ...usersWithStatus].slice(0, limitNumber)
+      : usersWithStatus;
+
+    // Calculate total for pagination
+    const totalUsers = connectedUsersWithStatus.length + totalNotConnectedUsers;
+
     return {
       success: true,
-      message: "All connections retrieved successfully",
-      data: usersWithStatus,
+      message: "All users retrieved successfully",
+      data: allUsers,
+      meta: {
+        total: totalUsers,
+        connected: connectedUsersWithStatus.length,
+        notConnected: totalNotConnectedUsers,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: pageNumber * limitNumber < totalUsers,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalUsers / limitNumber),
+        status: "all",
+      }
     };
   }
 
-  // If search term is provided, keep existing search functionality
+  // If search term is provided, implement pagination for search results
   const searchQuery = {
     _id: { $ne: userData.id },
     $or: [
@@ -758,15 +890,16 @@ export const searchFriendServices = async (req: Request, res: Response) => {
     ],
   };
 
+  // Count total matching users for pagination
+  const totalSearchResults = await usersModel.countDocuments(searchQuery);
+
+  // Get paginated search results
   const users = await usersModel
     .find(searchQuery)
     .select("fullName profilePic")
-    .lean();
-
-  const friendships = await friendsModel
-    .find({
-      $or: [{ userId: userData.id }, { friendId: userData.id }],
-    })
+    .skip(offset)
+    .limit(limitNumber)
+    .sort({ fullName: 1 }) // Sort by name
     .lean();
 
   const usersWithFriendshipStatus = users?.map((user) => {
@@ -805,6 +938,15 @@ export const searchFriendServices = async (req: Request, res: Response) => {
     success: true,
     message: "Users retrieved successfully",
     data: usersWithFriendshipStatus,
+    meta: {
+      total: totalSearchResults,
+      hasPreviousPage: pageNumber > 1,
+      hasNextPage: offset + limitNumber < totalSearchResults,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPages: Math.ceil(totalSearchResults / limitNumber),
+      status: "search",
+    }
   };
 };
 
