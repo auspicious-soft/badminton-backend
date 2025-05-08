@@ -21,6 +21,7 @@ import { venueModel } from "src/models/venue/venue-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { object } from "webidl-conversions";
+import { courtModel } from "src/models/venue/court-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -205,7 +206,9 @@ export const createEmployeeService = async (payload: any, res: Response) => {
 
   // Set fullName if firstName and lastName are provided
   if (!payload.fullName && (payload.firstName || payload.lastName)) {
-    payload.fullName = `${payload.firstName || ''} ${payload.lastName || ''}`.trim();
+    payload.fullName = `${payload.firstName || ""} ${
+      payload.lastName || ""
+    }`.trim();
   }
 
   payload.password = await hashPasswordIfEmailAuth(payload, "Email");
@@ -480,12 +483,18 @@ export const createVenueService = async (payload: any, res: Response) => {
     );
   }
 
-  const result = await venueModel.create(payload);
+  let result = await venueModel.create(payload);
+  const createCourts = await courtModel.insertMany(
+    payload.courts.map((court: any) => ({
+      ...court,
+      venueId: result._id,
+    }))
+  );
 
   return {
     success: true,
     message: "Venue created successfully",
-    data: result,
+    data: { venue: result, courts: createCourts },
   };
 };
 
@@ -500,9 +509,10 @@ export const updateVenueService = async (payload: any, res: Response) => {
     isActive?: boolean;
     gamesAvailable?: string[];
     facilities?: { name: string; isActive: boolean }[];
-    courts?: { name: string; isActive: boolean; games: string }[];
     employees?: { employeeId: string; isActive: boolean }[];
     location?: any;
+    timeslots?: any;
+    openingHours?: any;
   }
 
   const {
@@ -514,10 +524,11 @@ export const updateVenueService = async (payload: any, res: Response) => {
     image,
     gamesAvailable,
     facilities,
-    courts,
     employees,
     isActive,
     location,
+    timeslots,
+    openingHours,
   } = payload as UpdateVenuePayload;
 
   if (!venueId || !mongoose.Types.ObjectId.isValid(venueId)) {
@@ -550,6 +561,8 @@ export const updateVenueService = async (payload: any, res: Response) => {
       (game) => game as "Padel" | "Pickleball"
     );
   }
+  if (timeslots) venue.timeslots = timeslots;
+  if (openingHours) venue.openingHours = openingHours;
 
   // **Replace Facilities, Courts, and Employees with New Data**
   if (facilities) {
@@ -564,13 +577,6 @@ export const updateVenueService = async (payload: any, res: Response) => {
     }));
   }
 
-  if (courts) {
-    venue.courts = courts.map((court) => ({
-      ...court,
-      games: court.games as "Padel" | "Pickleball",
-    }));
-  }
-
   if (employees) {
     venue.employees = employees.map((emp) => ({
       employeeId: new mongoose.Types.ObjectId(emp.employeeId),
@@ -580,10 +586,12 @@ export const updateVenueService = async (payload: any, res: Response) => {
 
   await venue.save();
 
+  const courts = await courtModel.find({ venueId: venue._id }).lean();
+
   return {
     success: true,
     message: "Venue updated successfully",
-    data: venue,
+    data: { venue, courts },
   };
 };
 
@@ -668,106 +676,12 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
     }));
   }
 
-  // Get completed bookings with player details
-  const completedBookings = await bookingModel.aggregate([
-    {
-      $match: {
-        venueId: new mongoose.Types.ObjectId(id),
-        bookingPaymentStatus: true,
-      },
-    },
-    // Lookup for team1 players
-    {
-      $lookup: {
-        from: "users",
-        let: { team1Players: "$team1.playerId" },
-        pipeline: [
-          {
-            $match: {
-              $expr: { $in: ["$_id", "$$team1Players"] },
-            },
-          },
-          {
-            $project: {
-              fullName: 1,
-              email: 1,
-              phoneNumber: 1,
-              profileImage: 1,
-            },
-          },
-        ],
-        as: "team1Players",
-      },
-    },
-    // Lookup for team2 players
-    {
-      $lookup: {
-        from: "users",
-        let: { team2Players: "$team2.playerId" },
-        pipeline: [
-          {
-            $match: {
-              $expr: { $in: ["$_id", "$$team2Players"] },
-            },
-          },
-          {
-            $project: {
-              fullName: 1,
-              email: 1,
-              phoneNumber: 1,
-              profileImage: 1,
-            },
-          },
-        ],
-        as: "team2Players",
-      },
-    },
-    // Project fields and combine players
-    {
-      $project: {
-        bookingDate: 1,
-        bookingSlots: 1,
-        players: {
-          $concatArrays: ["$team1Players", "$team2Players"],
-        },
-      },
-    },
-    // If search is provided, filter matches where at least one player matches
-    ...(search
-      ? [
-          {
-            $match: {
-              players: {
-                $elemMatch: {
-                  fullName: { $regex: search, $options: "i" },
-                },
-              },
-            },
-          },
-        ]
-      : []),
-    // Sort by booking date (newest first)
-    {
-      $sort: { bookingDate: -1 },
-    },
-  ]);
-
-  // Add matches to venue data
-  const matches = completedBookings.map((booking) => ({
-    bookingDate: booking.bookingDate,
-    bookingSlots: booking.bookingSlots,
-    players: booking.players.map((player: any) => ({
-      fullName: player.fullName,
-      email: player.email,
-      phoneNumber: player.phoneNumber,
-      profileImage: player.profileImage,
-    })),
-  }));
+  const courts = await courtModel.find({ venueId: id }).lean();
 
   return {
     success: true,
     message: "Venue retrieved successfully",
-    data: { ...venue, matches },
+    data: { venue, courts },
   };
 };
 
@@ -1079,12 +993,12 @@ export const getMatchesService = async (payload: any, res: Response) => {
             .select("courts")
             .lean();
 
-          if (venueData?.courts) {
-            courtData = venueData.courts.find(
-              (court: any) =>
-                court._id.toString() === booking.courtId.toString()
-            );
-          }
+          // if (venueData?.courts) {
+          //   courtData = venueData.courts.find(
+          //     (court: any) =>
+          //       court._id.toString() === booking.courtId.toString()
+          //   );
+          // }
         }
 
         return {
@@ -1118,4 +1032,10 @@ export const getMatchesService = async (payload: any, res: Response) => {
       res
     );
   }
+};
+
+//************************* Handle Products *************************
+
+export const createProductService = async (payload: any, res: Response) => {
+  console.log(payload);
 };

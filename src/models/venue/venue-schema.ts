@@ -12,11 +12,6 @@ export interface VenueDocument extends Document {
     name: (typeof FIXED_FACILITIES)[number];
     isActive: boolean;
   }[];
-  courts: {
-    name: string;
-    isActive: boolean;
-    games: (typeof FIXED_GAMES)[number];
-  }[];
   employees: {
     employeeId: mongoose.Types.ObjectId;
     isActive: boolean;
@@ -26,6 +21,7 @@ export interface VenueDocument extends Document {
   updatedAt?: Date;
   venueInfo?: string;
   timeslots?: any;
+  openingHours?: any;
   location?: {
     type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
@@ -36,6 +32,8 @@ export interface VenueDocument extends Document {
     temperature: number;
     lastUpdated: Date;
   };
+  contactInfo?:string;
+
 }
 
 const venueSchema = new Schema<VenueDocument>(
@@ -61,21 +59,6 @@ const venueSchema = new Schema<VenueDocument>(
         isActive: {
           type: Boolean,
           default: true,
-        },
-      },
-    ],
-
-    courts: [
-      {
-        name: { type: String, required: true, trim: true },
-        isActive: {
-          type: Boolean,
-          default: true,
-        },
-        games: {
-          type: String,
-          enum: FIXED_GAMES,
-          required: true,
         },
       },
     ],
@@ -123,6 +106,27 @@ const venueSchema = new Schema<VenueDocument>(
         "21:00",
       ],
     },
+    openingHours: [
+      {
+        day: {
+          type: String,
+          enum: [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+          ],
+          required: true,
+        },
+        hours: {
+          type: [String],
+          default: ["06:00", "21:00"],
+        },
+      },
+    ],
     location: {
       type: {
         type: String,
