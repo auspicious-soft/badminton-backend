@@ -263,7 +263,7 @@ export const createNotification = async ({
   message: string;
   category: string;
   priority?: "HIGH" | "MEDIUM" | "LOW";
-  referenceId?: string;
+  referenceId?: string | mongoose.Types.ObjectId | any;
   referenceType?: string;
   metadata?: Record<string, any>;
   notificationType?: "PUSH" | "IN_APP" | "BOTH";

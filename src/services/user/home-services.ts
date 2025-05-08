@@ -6,6 +6,8 @@ import { bookingModel } from "src/models/venue/booking-schema";
 import { friendsModel } from "src/models/user/friends-schema";
 import { usersModel } from "src/models/user/user-schema";
 import mongoose from "mongoose";
+import { createNotification } from "src/models/notification/notification-schema";
+import { courtModel } from "src/models/venue/court-schema";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
@@ -139,211 +141,234 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
 export const getVenuesServices = async (req: Request, res: Response) => {
   try {
-    let nearbyVenues = [];
-    const { 
-      date: dateParam,
-      distance = "ASC", 
-      game = "all", 
-      lng: lngQuery = null, 
-      lat: latQuery = null 
-    } = req.query;
-    
-    let lng: number | null = null;
-    let lat: number | null = null;
+    const { date, distance = "ASC", game = "all", lng, lat } = req.query;
 
-    // Set default date to today if not provided
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Parse the date parameter if provided
-    let dateObj;
-    if (dateParam) {
-      dateObj = new Date(dateParam as string);
-      dateObj.setHours(0, 0, 0, 0);
-      
-      // Validate date format
-      if (isNaN(dateObj.getTime())) {
-        return errorResponseHandler(
-          "Invalid date format",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
-      }
-    } else {
-      dateObj = new Date(today);
+    if (!lng || !lat || !date) {
+      return errorResponseHandler(
+        "Invalid Payload",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
     }
-    
-    // Set end of day for the same date
-    const endDateObj = new Date(dateObj);
-    endDateObj.setHours(23, 59, 59, 999);
 
-    // Get venues based on location
-    if (lngQuery && latQuery) {
-      lng = Number(lngQuery);
-      lat = Number(latQuery);
-      
-      const geoNearStage: any = {
+    // Convert coordinates to numbers
+    const lngNum = Number(lng);
+    const latNum = Number(lat);
+
+    // Parse the input date
+    const requestDate = new Date(date as string);
+    requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
+
+    // End of the requested day
+    const endOfDay = new Date(requestDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Check if the requested date is today
+    const today = new Date();
+    const isRequestedDateToday =
+      requestDate.toDateString() === today.toDateString();
+    const currentHour = today.getHours();
+
+    // Step 1: Get venues based on location
+    const geoQuery: any = { isActive: true };
+
+    // Only filter venues by game if game is specified
+    if (game !== "all") {
+      geoQuery.gamesAvailable = { $in: [game] };
+    }
+
+    const venues = await venueModel.aggregate([
+      {
         $geoNear: {
-          near: { type: "Point", coordinates: [lng, lat] },
+          near: { type: "Point", coordinates: [lngNum, latNum] },
           distanceField: "distance",
           spherical: true,
-          maxDistance: 30000,
+          maxDistance: 30000000,
+          query: geoQuery,
         },
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          address: 1,
+          city: 1,
+          state: 1,
+          image: 1,
+          gamesAvailable: 1,
+          timeslots: 1,
+          weather: 1,
+          distance: { $round: [{ $divide: ["$distance", 1000] }, 1] },
+        },
+      },
+      { $sort: { distance: distance === "ASC" ? 1 : -1 } },
+    ]);
+
+    if (venues.length === 0) {
+      return {
+        success: true,
+        message: "No venues found",
+        data: [],
       };
-
-      const matchStage: any = {
-        isActive: true,
-      };
-
-      if (game !== "all") {
-        matchStage.gamesAvailable = { $in: [game] };
-      }
-
-      const pipeline: any[] = [
-        geoNearStage,
-        {
-          $match: matchStage,
-        },
-        {
-          $project: {
-            name: 1,
-            city: 1,
-            state: 1,
-            image: 1,
-            courts: {
-              $filter: {
-                input: "$courts",
-                as: "court",
-                cond: {
-                  $and: [
-                    { $eq: ["$$court.isActive", true] },
-                    ...(game !== "all" ? [{ $eq: ["$$court.games", game] }] : []),
-                  ]
-                },
-              },
-            },
-            distance: {
-              $round: [{ $divide: ["$distance", 1000] }, 1],
-            },
-            weather: 1,
-            timeslots: 1,
-          },
-        },
-        // Only include venues that have at least one matching court
-        {
-          $match: {
-            "courts.0": { $exists: true }
-          }
-        },
-        {
-          $sort: {
-            distance: distance === "ASC" ? 1 : -1,
-          },
-        },
-      ];
-
-      nearbyVenues = await venueModel.aggregate(pipeline);
-    } else {
-      const query: any = { isActive: true };
-      
-      if (game !== "all") {
-        query.gamesAvailable = { $in: [game] };
-      }
-      
-      nearbyVenues = await venueModel
-        .find(query)
-        .select("name city state image weather courts timeslots")
-        .lean();
-        
-      // Filter courts by game type
-      nearbyVenues = nearbyVenues.map((venue: any) => ({
-        ...venue,
-        courts: venue.courts.filter((court: any) => 
-          court.isActive && (game === "all" || court.games === game)
-        )
-      }));
-      
-      // Remove venues with no matching courts
-      nearbyVenues = nearbyVenues.filter((venue: any) => venue.courts.length > 0);
     }
 
-    // Get all bookings for the specific date
-    const bookings = await bookingModel.find({
-      venueId: { $in: nearbyVenues.map((venue: any) => venue._id) },
-      bookingDate: {
-        $gte: dateObj,
-        $lte: endDateObj
-      },
-      bookingPaymentStatus: true
-    }).select("venueId courtId bookingDate bookingSlots").lean();
+    // Step 2: Get all courts for these venues
+    const venueIds = venues.map((venue: any) => venue._id);
+    console.log(`Venue IDs: ${venueIds.length}`, venueIds);
 
-    // Create a map of booked slots by venue and court for the specific date
+    // Base query to get active courts for the venues
+    let courtsQuery: any = {
+      venueId: { $in: venueIds },
+      isActive: true,
+    };
+
+    // Filter courts by game type if specified
+    if (game !== "all") {
+      courtsQuery.games = game;
+    }
+
+    const courts = await courtModel
+      .find(courtsQuery)
+      .select("_id name venueId games hourlyRate image")
+      .lean();
+
+    // Group courts by venue ID
+    const courtsByVenue: Record<string, any[]> = {};
+    courts.forEach((court: any) => {
+      const venueId = court.venueId.toString();
+      if (!courtsByVenue[venueId]) {
+        courtsByVenue[venueId] = [];
+      }
+      courtsByVenue[venueId].push(court);
+    });
+
+    // Log which venues have courts after game filtering
+    venueIds.forEach((id) => {
+      const venueIdStr = id.toString();
+      console.log(
+        `Venue ${venueIdStr} has ${
+          courtsByVenue[venueIdStr]?.length || 0
+        } courts after game filtering`
+      );
+    });
+
+    // Step 3: Get all bookings for the specific date
+    const bookings = await bookingModel
+      .find({
+        venueId: { $in: venueIds },
+        bookingDate: {
+          $gte: requestDate,
+          $lte: endOfDay,
+        },
+      })
+      .lean();
+
+    // Create a map of booked slots by venue and court
     const bookedSlots: Record<string, Record<string, string[]>> = {};
-    
+
     bookings.forEach((booking: any) => {
-      const venueId = booking.venueId.toString();
-      const courtId = booking.courtId.toString();
-      
+      // Handle different ObjectId formats
+      const venueId =
+        typeof booking.venueId === "object" && booking.venueId !== null
+          ? booking.venueId.toString
+            ? booking.venueId.toString()
+            : String(booking.venueId)
+          : booking.venueId;
+
+      const courtId =
+        typeof booking.courtId === "object" && booking.courtId !== null
+          ? booking.courtId.toString
+            ? booking.courtId.toString()
+            : String(booking.courtId)
+          : booking.courtId;
+
       if (!bookedSlots[venueId]) {
         bookedSlots[venueId] = {};
       }
-      
+
       if (!bookedSlots[venueId][courtId]) {
         bookedSlots[venueId][courtId] = [];
       }
-      
-      bookedSlots[venueId][courtId].push(
-        ...(Array.isArray(booking.bookingSlots) ? booking.bookingSlots : [booking.bookingSlots])
-      );
-    });
 
-    // Create result array with venues for the specific date
-    const result: any[] = [];
-    
-    const dateString = dateObj.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
-    
-    nearbyVenues.forEach(venue => {
-      const venueId = venue._id.toString();
-      const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
-      
-      const courtsWithAvailability = venue.courts.map((court: any) => {
-        const courtId = court._id.toString();
-        const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
-        
-        // Calculate available slots
-        const availableSlots = venueTimeslots.filter(
-          (slot: string) => !courtBookedSlots.includes(slot)
-        );
-        
-        return {
-          ...court,
-          availableSlots
-        };
-      });
-      
-      // Only include courts that have available slots
-      const courtsWithSlots = courtsWithAvailability.filter(
-        (court: any) => court.availableSlots.length > 0
-      );
-      
-      // Only add venue if it has courts with available slots
-      if (courtsWithSlots.length > 0) {
-        // Clone venue without timeslots
-        const { timeslots, ...venueWithoutTimeslots } = venue;
-        
-        result.push({
-          ...venueWithoutTimeslots,
-          date: dateString,
-          formattedDate: new Intl.DateTimeFormat('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          }).format(dateObj),
-          courts: courtsWithSlots
-        });
+      // Handle both array and string cases for bookingSlots
+      if (Array.isArray(booking.bookingSlots)) {
+        bookedSlots[venueId][courtId].push(...booking.bookingSlots);
+      } else {
+        bookedSlots[venueId][courtId].push(booking.bookingSlots);
       }
     });
+
+    // Format the date for display
+    const dateString = requestDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const formattedDate = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(requestDate);
+
+    // Format the result - include ALL venues, but only include courts that match the game filter
+    const result = venues.map((venue: any) => {
+      const venueId = venue._id.toString();
+      const venueCourts = courtsByVenue[venueId] || [];
+
+      // Include empty courts array if no courts found for this venue with the selected game
+      const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
+
+      // Add availability to each court (if any)
+      const courtsWithAvailability = venueCourts.map((court: any) => {
+        const courtId = court._id.toString();
+        const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
+
+        // Filter available slots
+        const availableSlots = venueTimeslots.filter((slot: string) => {
+          // Skip booked slots
+          if (courtBookedSlots.includes(slot)) {
+            return false;
+          }
+
+          // For today only, filter out past time slots
+          if (isRequestedDateToday) {
+            const slotHour = parseInt(slot.split(":")[0], 10);
+            if (slotHour <= currentHour) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        return {
+          ...court,
+          availableSlots,
+        };
+      });
+
+      return {
+        _id: venue._id,
+        name: venue.name,
+        address: venue.address,
+        city: venue.city,
+        state: venue.state,
+        image: venue.image,
+        gamesAvailable: venue.gamesAvailable,
+        facilities: venue.facilities,
+        weather: venue.weather,
+        venueInfo: venue.venueInfo,
+        distance: venue.distance,
+        date: dateString,
+        formattedDate: formattedDate,
+        courts: courtsWithAvailability,
+        hasFilteredCourts: courtsWithAvailability.length > 0,
+      };
+    });
+
+    console.log(`Returning ${result.length} venues in the final result`);
+    console.log(
+      `Venues with filtered courts: ${
+        result.filter((v) => v.hasFilteredCourts).length
+      }`
+    );
 
     return {
       success: true,
@@ -351,6 +376,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       data: result,
     };
   } catch (error) {
+    console.error("Error in getVenuesServices:", error);
     return errorResponseHandler(
       "Error retrieving venues: " + (error as Error).message,
       httpStatusCode.INTERNAL_SERVER_ERROR,
@@ -360,33 +386,180 @@ export const getVenuesServices = async (req: Request, res: Response) => {
 };
 
 export const getCourtsServices = async (req: Request, res: Response) => {
-  const userData = req.user as any;
-  const { venueId } = req.query;
-  if (!venueId)
-    return errorResponseHandler(
-      "Venue ID is required",
-      httpStatusCode.BAD_REQUEST,
-      res
+  try {
+    const userData = req.user as any;
+    const { venueId, date, game } = req.query;
+
+    if (!venueId) {
+      return errorResponseHandler(
+        "Venue ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Find the venue
+    const venueData = await venueModel
+      .findById(venueId)
+      .select("-location -employees")
+      .lean();
+
+    if (!venueData) {
+      return errorResponseHandler(
+        "Venue not found",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Get courts for this venue, filtered by game if specified
+    let courtsQuery: any = {
+      venueId: venueId,
+      isActive: true,
+    };
+
+    if (game && game !== "all") {
+      courtsQuery.games = game;
+    }
+
+    const courts = await courtModel
+      .find(courtsQuery)
+      .select("_id name venueId games hourlyRate image")
+      .lean();
+
+    console.log(
+      `Found ${courts.length} courts for venue ${venueId} with game filter: ${
+        game || "all"
+      }`
     );
 
-  const venueData = await venueModel
-    .findById(venueId)
-    .select("-location -employees ")
-    .lean();
-  if (!venueData)
+    // If date is provided, get availability for that date
+    if (date) {
+      // Parse the input date
+      const requestDate = new Date(date as string);
+      requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
+
+      // End of the requested day
+      const endOfDay = new Date(requestDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Check if the requested date is today
+      const today = new Date();
+      const isRequestedDateToday =
+        requestDate.toDateString() === today.toDateString();
+      const currentHour = today.getHours();
+
+      // Get all bookings for this venue on the specified date
+      const bookings = await bookingModel
+        .find({
+          venueId: venueId,
+          bookingDate: {
+            $gte: requestDate,
+            $lte: endOfDay,
+          },
+        })
+        .lean();
+
+      console.log(
+        `Found ${bookings.length} bookings for venue ${venueId} on ${date}`
+      );
+
+      // Create a map of booked slots by court
+      const bookedSlots: Record<string, string[]> = {};
+
+      bookings.forEach((booking: any) => {
+        const courtId =
+          typeof booking.courtId === "object" && booking.courtId !== null
+            ? booking.courtId.toString
+              ? booking.courtId.toString()
+              : String(booking.courtId)
+            : booking.courtId;
+
+        if (!bookedSlots[courtId]) {
+          bookedSlots[courtId] = [];
+        }
+
+        // Handle both array and string cases for bookingSlots
+        if (Array.isArray(booking.bookingSlots)) {
+          bookedSlots[courtId].push(...booking.bookingSlots);
+        } else {
+          bookedSlots[courtId].push(booking.bookingSlots);
+        }
+      });
+
+      // Format the date for display
+      const dateString = requestDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+      const formattedDate = new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }).format(requestDate);
+
+      // Add availability to each court
+      const courtsWithAvailability = courts.map((court: any) => {
+        const courtId = court._id.toString();
+        const courtBookedSlots = bookedSlots[courtId] || [];
+        const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
+
+        // Filter available slots
+        const availableSlots = venueTimeslots.filter((slot: string) => {
+          // Skip booked slots
+          if (courtBookedSlots.includes(slot)) {
+            return false;
+          }
+
+          // For today only, filter out past time slots
+          if (isRequestedDateToday) {
+            const slotHour = parseInt(slot.split(":")[0], 10);
+            if (slotHour <= currentHour) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        return {
+          ...court,
+          availableSlots,
+        };
+      });
+
+      // Add date information to the venue data
+      const venueWithAvailability = {
+        ...venueData,
+        courts: courtsWithAvailability,
+        date: dateString,
+        formattedDate: formattedDate,
+      };
+
+      return {
+        success: true,
+        message: "Courts retrieved successfully",
+        data: venueWithAvailability,
+      };
+    } else {
+      // If no date provided, just return the venue with its courts
+      const venueWithCourts = {
+        ...venueData,
+        courts: courts,
+      };
+
+      return {
+        success: true,
+        message: "Courts retrieved successfully",
+        data: venueWithCourts,
+      };
+    }
+  } catch (error) {
+    console.error("Error in getCourtsServices:", error);
     return errorResponseHandler(
-      "Venue not found",
-      httpStatusCode.BAD_REQUEST,
+      "Error retrieving courts: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
       res
     );
-
-  const data = venueData;
-
-  return {
-    success: true,
-    message: "Courts retrieved successfully",
-    data: data,
-  };
+  }
 };
 
 export const getOpenMatchesServices = async (req: Request, res: Response) => {
@@ -688,250 +861,69 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
 
 export const searchFriendServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { search, page = "1", limit = "10", status = "" } = req.query;
-  
+  const { search, page = "1", limit = "10" } = req.query;
+
   // Parse pagination parameters
   const pageNumber = parseInt(page as string) || 1;
   const limitNumber = parseInt(limit as string) || 10;
   const offset = (pageNumber - 1) * limitNumber;
 
-  // Get all friendships where the user is involved (both accepted and pending)
+  // Get all friendships where the user is involved (excluding blocked)
   const friendships = await friendsModel
     .find({
       $or: [{ userId: userData.id }, { friendId: userData.id }],
+      status: { $ne: "blocked" }, // Exclude blocked friendships
     })
     .lean();
 
-  // Filter friendships based on status parameter
-  let filteredFriendships = friendships;
-  if (status === "friends") {
-    filteredFriendships = friendships.filter(f => f.status === "accepted");
-  } else if (status === "requests-sent") {
-    filteredFriendships = friendships.filter(
-      f => f.status === "pending" && f.userId.toString() === userData.id.toString()
-    );
-  } else if (status === "requests-received") {
-    filteredFriendships = friendships.filter(
-      f => f.status === "pending" && f.friendId.toString() === userData.id.toString()
-    );
-  }
+  // Get all accepted friendships
+  const acceptedFriendships = friendships.filter(
+    (f) => f.status === "accepted"
+  );
 
-  // If status filter is applied, return only those specific users
-  if (["friends", "requests-sent", "requests-received"].includes(status as string)) {
-    // Get user IDs based on filtered friendships
-    const userIds = filteredFriendships.map(f => 
-      f.userId.toString() === userData.id.toString() ? f.friendId : f.userId
-    );
-    
-    // Get total count for pagination
-    const totalFilteredUsers = userIds.length;
-    
-    // Apply pagination to user IDs
-    const paginatedUserIds = userIds.slice(offset, offset + limitNumber);
-    
-    // Get user details for paginated IDs
-    const filteredUsers = await usersModel
-      .find({ _id: { $in: paginatedUserIds } })
-      .select("fullName profilePic")
-      .lean();
-    
-    // Map users with their friendship status
-    const usersWithStatus = filteredUsers.map(user => {
-      const friendship = filteredFriendships.find(
-        f => 
-          (f.userId.toString() === user._id.toString() && f.friendId.toString() === userData.id) ||
-          (f.userId.toString() === userData.id && f.friendId.toString() === user._id.toString())
-      );
-      
-      let friendshipStatus = "not_connected";
-      let requestId = null;
-      
-      if (friendship) {
-        if (friendship.status === "accepted") {
-          friendshipStatus = "accepted";
-        } else if (friendship.status === "pending") {
-          if (friendship.userId.toString() === userData.id) {
-            friendshipStatus = "request_sent";
-          } else {
-            friendshipStatus = "request_received";
-            requestId = friendship._id;
-          }
-        }
-      }
-      
-      return {
-        _id: user._id,
-        fullName: user.fullName,
-        profilePic: user.profilePic,
-        friendshipStatus,
-        ...(requestId && { requestId })
-      };
-    });
-    
-    return {
-      success: true,
-      message: `${status} retrieved successfully`,
-      data: usersWithStatus,
-      meta: {
-        total: totalFilteredUsers,
-        hasPreviousPage: pageNumber > 1,
-        hasNextPage: offset + limitNumber < totalFilteredUsers,
-        page: pageNumber,
-        limit: limitNumber,
-        totalPages: Math.ceil(totalFilteredUsers / limitNumber),
-        status: status,
-      }
-    };
-  }
+  // Extract friend IDs from accepted friendships
+  const friendIds = acceptedFriendships.map((f) =>
+    f.userId.toString() === userData.id.toString() ? f.friendId : f.userId
+  );
 
-  // If search is not provided and no status filter, return all users with pagination
-  if (!search) {
-    // Get all user IDs from friendships
-    const connectedUserIds = friendships.map((friendship) =>
-      friendship.userId.toString() === userData.id.toString()
-        ? friendship.friendId
-        : friendship.userId
-    );
+  // Build search query
+  const searchQuery: any = {
+    _id: { $ne: userData.id }, // Exclude current user
+  };
 
-    // Add current user ID to the list of IDs to exclude
-    connectedUserIds.push(userData.id);
-
-    // Get connected users with their friendship status
-    const connectedUsers = await usersModel
-      .find({ _id: { $in: connectedUserIds, $ne: userData.id } })
-      .select("fullName profilePic")
-      .lean();
-
-    // Map connected users with their friendship status and request details
-    const connectedUsersWithStatus = connectedUsers.map((user) => {
-      const friendship = friendships.find(
-        (f) =>
-          (f.userId.toString() === user._id.toString() &&
-            f.friendId.toString() === userData.id) ||
-          (f.userId.toString() === userData.id &&
-            f.friendId.toString() === user._id.toString())
-      );
-
-      let result: any = {
-        _id: user._id,
-        fullName: user.fullName,
-        profilePic: user.profilePic,
-      };
-
-      if (friendship?.status === "pending") {
-        if (friendship.friendId.toString() === userData.id.toString()) {
-          result.friendshipStatus = "request_received";
-          result.requestId = friendship._id;
-        } else {
-          result.friendshipStatus = "request_sent";
-        }
-      } else {
-        result.friendshipStatus = friendship?.status;
-      }
-
-      return result;
-    });
-
-    // Count total not connected users for pagination
-    const totalNotConnectedUsers = await usersModel.countDocuments({ 
-      _id: { $nin: connectedUserIds } 
-    });
-
-    // Fetch users who are not connected to the current user with pagination
-    const notConnectedUsers = await usersModel
-      .find({ _id: { $nin: connectedUserIds } })
-      .select("fullName profilePic")
-      .skip(offset)
-      .limit(limitNumber)
-      .sort({ fullName: 1 }) // Sort by name
-      .lean();
-
-    // Add friendshipStatus to each user
-    const usersWithStatus = notConnectedUsers.map((user) => ({
-      _id: user._id,
-      fullName: user.fullName,
-      profilePic: user.profilePic,
-      friendshipStatus: "not_connected"
-    }));
-
-    // For the first page, prioritize showing connected users
-    const allUsers = pageNumber === 1 
-      ? [...connectedUsersWithStatus, ...usersWithStatus].slice(0, limitNumber)
-      : usersWithStatus;
-
-    // Calculate total for pagination
-    const totalUsers = connectedUsersWithStatus.length + totalNotConnectedUsers;
-
-    return {
-      success: true,
-      message: "All users retrieved successfully",
-      data: allUsers,
-      meta: {
-        total: totalUsers,
-        connected: connectedUsersWithStatus.length,
-        notConnected: totalNotConnectedUsers,
-        hasPreviousPage: pageNumber > 1,
-        hasNextPage: pageNumber * limitNumber < totalUsers,
-        page: pageNumber,
-        limit: limitNumber,
-        totalPages: Math.ceil(totalUsers / limitNumber),
-        status: "all",
-      }
-    };
-  }
-
-  // If search term is provided, implement pagination for search results
-  const searchQuery = {
-    _id: { $ne: userData.id },
-    $or: [
+  // Add search term if provided
+  if (search) {
+    searchQuery.$or = [
       { fullName: { $regex: new RegExp(String(search), "i") } },
       { email: { $regex: new RegExp(String(search), "i") } },
       { phoneNumber: { $regex: new RegExp(String(search), "i") } },
-    ],
-  };
+    ];
+  }
 
   // Count total matching users for pagination
-  const totalSearchResults = await usersModel.countDocuments(searchQuery);
+  const totalUsers = await usersModel.countDocuments(searchQuery);
 
-  // Get paginated search results
+  // Get paginated users
   const users = await usersModel
     .find(searchQuery)
-    .select("fullName profilePic")
+    .select("fullName profilePic email")
     .skip(offset)
     .limit(limitNumber)
     .sort({ fullName: 1 }) // Sort by name
     .lean();
 
-  const usersWithFriendshipStatus = users?.map((user) => {
-    const friendship = friendships.find(
-      (f) =>
-        (f.userId.toString() === user._id.toString() &&
-          f.friendId.toString() === userData.id) ||
-        (f.userId.toString() === userData.id &&
-          f.friendId.toString() === user._id.toString())
-    );
+  // Map users with simplified friendship status (true/false)
+  const usersWithFriendshipStatus = users.map((user) => {
+    // Check if this user is in the friendIds array (meaning they're friends)
+    const isFriend = friendIds.map(String).includes(user._id.toString());
 
-    let result: any = {
+    return {
       _id: user._id,
       fullName: user.fullName,
       profilePic: user.profilePic,
-      friendshipStatus: "not_connected",
+      email: user.email,
+      isFriend, // Simple boolean indicating friendship status
     };
-
-    if (friendship) {
-      if (friendship.status === "pending") {
-        if (friendship.userId.toString() === userData.id) {
-          result.friendshipStatus = "request_sent";
-        } else {
-          result.friendshipStatus = "request_received";
-          result.requestId = friendship._id;
-        }
-      } else {
-        result.friendshipStatus = friendship.status;
-      }
-    }
-
-    return result;
   });
 
   return {
@@ -939,14 +931,13 @@ export const searchFriendServices = async (req: Request, res: Response) => {
     message: "Users retrieved successfully",
     data: usersWithFriendshipStatus,
     meta: {
-      total: totalSearchResults,
+      total: totalUsers,
       hasPreviousPage: pageNumber > 1,
-      hasNextPage: offset + limitNumber < totalSearchResults,
+      hasNextPage: offset + limitNumber < totalUsers,
       page: pageNumber,
       limit: limitNumber,
-      totalPages: Math.ceil(totalSearchResults / limitNumber),
-      status: "search",
-    }
+      totalPages: Math.ceil(totalUsers / limitNumber),
+    },
   };
 };
 
@@ -961,25 +952,53 @@ export const sendRequestServices = async (req: Request, res: Response) => {
     };
   }
 
+  // Prevent sending request to yourself
+  if (userData.id === friendId) {
+    return {
+      success: false,
+      message: "You cannot send a friend request to yourself",
+    };
+  }
+
   const friend = await usersModel.findById(friendId);
   if (!friend) {
     return {
       success: false,
-      message: "Friend not found",
+      message: "User not found",
     };
   }
 
-  const existingRequest = await friendsModel.findOne({
+  const existingRelationship = await friendsModel.findOne({
     $or: [
       { userId: userData.id, friendId },
       { userId: friendId, friendId: userData.id },
     ],
   });
-  if (existingRequest) {
-    return {
-      success: false,
-      message: "Request already sent or received",
-    };
+
+  if (existingRelationship) {
+    // Provide more specific error messages based on relationship status
+    if (existingRelationship.status === "pending") {
+      return {
+        success: false,
+        message:
+          existingRelationship.userId.toString() === userData.id.toString()
+            ? "You have already sent a friend request to this user"
+            : "This user has already sent you a friend request",
+      };
+    } else if (existingRelationship.status === "accepted") {
+      return {
+        success: false,
+        message: "You are already friends with this user",
+      };
+    } else if (existingRelationship.status === "blocked") {
+      return {
+        success: false,
+        message:
+          existingRelationship.userId.toString() === userData.id.toString()
+            ? "You have blocked this user"
+            : "You cannot send a request to this user",
+      };
+    }
   }
 
   const request = await friendsModel.create({
@@ -988,9 +1007,28 @@ export const sendRequestServices = async (req: Request, res: Response) => {
     status: "pending",
   });
 
+  // Create notification for the recipient
+  try {
+    await createNotification({
+      recipientId: friendId,
+      senderId: userData.id,
+      type: "FRIEND_REQUEST",
+      title: "New Friend Request",
+      message: `${
+        userData.fullName || userData.email
+      } sent you a friend request.`,
+      category: "FRIEND", // Changed from SOCIAL to FRIEND
+      referenceId: request._id,
+      referenceType: "users", // Changed from friends to users
+    });
+  } catch (error) {
+    console.error("Failed to create notification:", error);
+    // Continue execution even if notification fails
+  }
+
   return {
     success: true,
-    message: "Request sent successfully",
+    message: "Friend request sent successfully",
     data: request,
   };
 };
@@ -1000,7 +1038,7 @@ export const acceptFriendRequestServices = async (
   res: Response
 ) => {
   const userData = req.user as any;
-  const { requestId } = req.body;
+  const { requestId, status } = req.body;
 
   // Input validation
   if (!requestId) {
@@ -1011,13 +1049,12 @@ export const acceptFriendRequestServices = async (
     };
   }
 
-  // Validate requestId format
-  if (!mongoose.Types.ObjectId.isValid(requestId)) {
-    return errorResponseHandler(
-      "Invalid request ID",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
+  if (!["accepted", "rejected"].includes(status)) {
+    return {
+      success: false,
+      message: "Invalid status. Must be either 'accepted' or 'rejected'",
+      statusCode: 400,
+    };
   }
 
   // Find the friend request
@@ -1028,33 +1065,278 @@ export const acceptFriendRequestServices = async (
   });
 
   if (!friendRequest) {
-    return errorResponseHandler(
-      "Request not found or already accepted/rejected",
-      httpStatusCode.NOT_FOUND,
-      res
-    );
+    return {
+      success: false,
+      message: "Request not found or already processed",
+      statusCode: 404,
+    };
   }
 
   // Update the friend request status
-  await friendsModel.findByIdAndUpdate(
+  const updatedRequest = await friendsModel.findByIdAndUpdate(
     requestId,
     {
       $set: {
-        status: "accepted",
+        status,
         updatedAt: new Date(),
       },
     },
     { new: true }
   );
 
-  // You might want to emit a notification event here
-  // emitNotification(friendRequest.userId, 'FRIEND_REQUEST_ACCEPTED', {
-  //   from: userData.id,
-  //   requestId: requestId
-  // });
+  // Send notification to the requester
+  if (status === "accepted") {
+    try {
+      await createNotification({
+        recipientId: friendRequest.userId,
+        senderId: userData.id,
+        type: "FRIEND_REQUEST_ACCEPTED",
+        title: "Friend Request Accepted",
+        message: `${
+          userData.fullName || userData.email
+        } accepted your friend request.`,
+        category: "FRIEND", // Changed from SOCIAL to FRIEND
+        referenceId: requestId,
+        referenceType: "users", // Changed from friends to users
+      });
+    } catch (error) {
+      console.error("Failed to create notification:", error);
+      // Continue execution even if notification fails
+    }
+  }
 
   return {
     success: true,
-    message: "Friend request accepted successfully",
+    message: `Friend request ${status} successfully`,
+    data: updatedRequest,
   };
+};
+
+export const blockUserServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return {
+      success: false,
+      message: "User ID is required",
+    };
+  }
+
+  // Check if user exists
+  const user = await usersModel.findById(userId);
+  if (!user) {
+    return {
+      success: false,
+      message: "User not found",
+    };
+  }
+
+  // Check if trying to block yourself
+  if (userData.id === userId) {
+    return {
+      success: false,
+      message: "You cannot block yourself",
+    };
+  }
+
+  // Find existing relationship
+  const existingRelationship = await friendsModel.findOne({
+    $or: [
+      { userId: userData.id, friendId: userId },
+      { userId: userId, friendId: userData.id },
+    ],
+  });
+
+  // If relationship exists
+  if (existingRelationship) {
+    // If already blocked by current user, unblock by deleting the entry
+    if (
+      existingRelationship.status === "blocked" &&
+      existingRelationship.userId.toString() === userData.id.toString()
+    ) {
+      await friendsModel.findByIdAndDelete(existingRelationship._id);
+      return {
+        success: true,
+        message: "User unblocked successfully",
+      };
+    }
+
+    // If it's any other relationship status, update to blocked
+    const updatedRelationship = await friendsModel.findByIdAndUpdate(
+      existingRelationship._id,
+      {
+        $set: {
+          status: "blocked",
+          userId: userData.id, // Ensure current user is the blocker
+          friendId: userId, // Ensure target user is the blocked
+          updatedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    return {
+      success: true,
+      message: "User blocked successfully",
+      data: updatedRelationship,
+    };
+  }
+
+  // If no relationship exists, create a new blocked relationship
+  const blockedRelationship = await friendsModel.create({
+    userId: userData.id,
+    friendId: userId,
+    status: "blocked",
+  });
+
+  return {
+    success: true,
+    message: "User blocked successfully",
+    data: blockedRelationship,
+  };
+};
+
+export const getFriendsServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { status } = req.query;
+
+  if (!["friends-requests", "blocked"].includes(status as string)) {
+    return errorResponseHandler(
+      "Invalid status. Must be either 'friends-requests' or 'blocked'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  if (status === "blocked") {
+    // Get blocked users with their details
+    const blockedRelationships = await friendsModel
+      .find({
+        userId: userData.id,
+        status: "blocked",
+      })
+      .lean();
+
+    // Get the user details for blocked users
+    const blockedUserIds = blockedRelationships.map((rel) => rel.friendId);
+    const blockedUsers = await usersModel
+      .find({
+        _id: { $in: blockedUserIds },
+      })
+      .select("fullName email profilePic")
+      .lean();
+
+    // Map user details to relationships
+    const blockedWithDetails = blockedRelationships.map((rel) => {
+      const userDetails =
+        blockedUsers.find(
+          (user) => user._id.toString() === rel.friendId.toString()
+        ) || {};
+
+      return {
+        relationshipId: rel._id,
+        blockedUserId: rel.friendId,
+        status: rel.status,
+        updatedAt: rel.updatedAt,
+        ...userDetails,
+      };
+    });
+
+    return {
+      success: true,
+      message: "Blocked users retrieved successfully",
+      data: blockedWithDetails,
+    };
+  } else {
+    // Get accepted friends
+    const friendRelationships = await friendsModel
+      .find({
+        $or: [
+          { userId: userData.id, status: "accepted" },
+          { friendId: userData.id, status: "accepted" },
+        ],
+      })
+      .lean();
+
+    // Get friend user IDs
+    const friendIds = friendRelationships.map((rel) =>
+      rel.userId.toString() === userData.id.toString()
+        ? rel.friendId
+        : rel.userId
+    );
+
+    // Get friend user details
+    const friendUsers = await usersModel
+      .find({
+        _id: { $in: friendIds },
+      })
+      .select("fullName email profilePic")
+      .lean();
+
+    // Map user details to relationships
+    const friendsWithDetails = friendRelationships.map((rel) => {
+      const friendId =
+        rel.userId.toString() === userData.id.toString()
+          ? rel.friendId
+          : rel.userId;
+
+      const userDetails =
+        friendUsers.find(
+          (user) => user._id.toString() === friendId.toString()
+        ) || {};
+
+      return {
+        relationshipId: rel._id,
+        friendId: friendId,
+        status: rel.status,
+        updatedAt: rel.updatedAt,
+        ...userDetails,
+      };
+    });
+
+    // Get pending friend requests received by the current user
+    const requestRelationships = await friendsModel
+      .find({
+        friendId: userData.id, // Current user is the recipient
+        status: "pending",
+      })
+      .lean();
+
+    // Get requester user IDs (users who sent the requests)
+    const requesterIds = requestRelationships.map((rel) => rel.userId);
+
+    // Get requester user details
+    const requesterUsers = await usersModel
+      .find({
+        _id: { $in: requesterIds },
+      })
+      .select("fullName email profilePic")
+      .lean();
+
+    // Map user details to relationships
+    const requestsWithDetails = requestRelationships.map((rel) => {
+      const userDetails =
+        requesterUsers.find(
+          (user) => user._id.toString() === rel.userId.toString()
+        ) || {};
+
+      return {
+        relationshipId: rel._id,
+        requesterId: rel.userId, // ID of the user who sent the request
+        status: rel.status,
+        updatedAt: rel.updatedAt,
+        ...userDetails,
+      };
+    });
+
+    return {
+      success: true,
+      message: "Friends and requests retrieved successfully",
+      data: {
+        friends: friendsWithDetails,
+        requests: requestsWithDetails,
+      },
+    };
+  }
 };

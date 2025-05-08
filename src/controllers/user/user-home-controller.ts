@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
 import { errorParser } from "../../lib/errors/error-response-handler";
-import {acceptFriendRequestServices, getCourtsServices, getOpenMatchesServices, getVenuesServices, searchFriendServices, sendRequestServices, userHomeServices } from "src/services/user/home-services";
+import {acceptFriendRequestServices, blockUserServices, getCourtsServices, getFriendsServices, getOpenMatchesServices, getVenuesServices, searchFriendServices, sendRequestServices, userHomeServices } from "src/services/user/home-services";
 import { bookCourtServices, joinOpenBookingServices, userNotificationServices } from "src/services/user/booking-services";
 import { getUserServices } from "src/services/user/user-service";
 
@@ -134,6 +134,30 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
     const response = await acceptFriendRequestServices(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const blockUser = async (req: Request, res: Response) => {
+  try {
+    console.log("req.body: ", req.user);
+    const response = await blockUserServices(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const getFriends = async (req: Request, res: Response) => {
+  try {
+    console.log("req.body: ", req.user);
+    const response = await getFriendsServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
