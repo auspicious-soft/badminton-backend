@@ -903,8 +903,8 @@ export const getMatchesService = async (payload: any, res: Response) => {
     limit,
     search,
     type = "upcoming",
-    gameType = "all",
-    date = new Date(),
+    game = "all", // Changed from gameType to game to match the URL parameter
+    date,
   } = payload.query;
   const pageNumber = parseInt(page) || 1;
   const limitNumber = parseInt(limit) || 10;
@@ -922,42 +922,73 @@ export const getMatchesService = async (payload: any, res: Response) => {
     const currentDate = new Date();
     let matchQuery: any = {};
     matchQuery.bookingPaymentStatus = true;
-    if (type === "upcoming") {
-      matchQuery.bookingDate = { $gt: currentDate };
-    } else if (type === "completed") {
-      matchQuery.bookingDate = { $lt: currentDate };
-    } else if (type === "cancelled") {
-      matchQuery.cancellationReason = { $ne: null };
+    
+    // Handle date filter if provided in YYYY-MM-DD format
+    if (date) {
+      // Parse the date string and create start/end of the specified day
+      const parsedDate = new Date(date);
+      
+      if (!isNaN(parsedDate.getTime())) {
+        // Set to beginning of day (00:00:00)
+        const startOfDay = new Date(parsedDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        // Set to end of day (23:59:59.999)
+        const endOfDay = new Date(parsedDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        // Filter bookings for the specified date
+        matchQuery.bookingDate = { 
+          $gte: startOfDay,
+          $lte: endOfDay 
+        };
+      }
+    } else {
+      // If no date is provided, use the type filter
+      if (type === "upcoming") {
+        matchQuery.bookingDate = { $gt: currentDate };
+      } else if (type === "completed") {
+        matchQuery.bookingDate = { $lt: currentDate };
+      }
     }
-
-    // Add game type filter if specified
-    if (gameType !== "all") {
-      matchQuery.gameType = gameType;
+    
+    // Always apply cancellation filter for cancelled type
+    if (type === "cancelled") {
+      matchQuery.cancellationReason = { $ne: null };
     }
 
     // Add search query if provided
     if (search) {
       matchQuery.$or = [
-        { "venue.name": { $regex: search, $options: "i" } },
-        { "court.name": { $regex: search, $options: "i" } },
+        { "venueId.name": { $regex: search, $options: "i" } },
+        { "courtId.name": { $regex: search, $options: "i" } },
       ];
     }
 
-    // Count total matches
-    const totalMatches = await bookingModel.countDocuments(matchQuery);
-
-    // Get matches with pagination
+    // First, get all bookings without game filtering
     const bookings = await bookingModel
       .find(matchQuery)
       .populate("venueId", "name city state image")
-      .skip(offset)
-      .limit(limitNumber)
+      .populate("courtId", "name games hourlyRate image")
       .sort({ bookingDate: type === "upcoming" ? 1 : -1 })
       .lean();
 
-    // Process each booking to add player details
+    // Filter by game type if specified
+    let filteredBookings = bookings;
+    if (game !== "all") {
+      filteredBookings = bookings.filter(booking => 
+        booking.courtId && 
+        (booking.courtId as any).games === game // Use the game parameter for filtering
+      );
+    }
+
+    // Apply pagination after filtering
+    const totalMatches = filteredBookings.length;
+    const paginatedBookings = filteredBookings.slice(offset, offset + limitNumber);
+
+    // Process each booking to add player details and remove duplication
     const processedBookings = await Promise.all(
-      bookings.map(async (booking: any) => {
+      paginatedBookings.map(async (booking: any) => {
         // Process team1 players
         const team1WithUserData = await Promise.all(
           booking.team1.map(async (player: any) => {
@@ -986,27 +1017,24 @@ export const getMatchesService = async (payload: any, res: Response) => {
           })
         );
 
-        // Get court details
-        let courtData = null;
-        if (booking.venueId) {
-          const venueData = await venueModel
-            .findById(booking.venueId)
-            .select("courts")
-            .lean();
+        // Extract venue and court data
+        const venue = booking.venueId;
+        const court = booking.courtId;
+        
+        // Create a clean booking object without the duplicated data
+        const cleanBooking = { ...booking };
+        
+        // Remove the populated objects to avoid duplication
+        delete cleanBooking.venueId;
+        delete cleanBooking.courtId;
 
-          // if (venueData?.courts) {
-          //   courtData = venueData.courts.find(
-          //     (court: any) =>
-          //       court._id.toString() === booking.courtId.toString()
-          //   );
-          // }
-        }
-
+        // Return the cleaned booking with venue and court data
         return {
-          ...booking,
+          ...cleanBooking,
           team1: team1WithUserData,
           team2: team2WithUserData,
-          court: courtData,
+          venue,
+          court,
         };
       })
     );
@@ -1023,7 +1051,8 @@ export const getMatchesService = async (payload: any, res: Response) => {
         limit: limitNumber,
         totalPages: Math.ceil(totalMatches / limitNumber),
         type,
-        gameType,
+        gameType: game, // Return the game parameter in the response
+        date: date || null,
       },
     };
   } catch (error) {
