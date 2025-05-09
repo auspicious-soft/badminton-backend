@@ -1,7 +1,6 @@
 import { Router } from "express";
 import {
   createEmployee,
-  createProduct,
   createVenue,
   getAdminDetails,
   getEmployees,
@@ -17,6 +16,13 @@ import {
   updateVenue,
 } from "../controllers/admin/admin-controller";
 import { createUpdateCourt } from "src/controllers/admin/court-controller";
+import {
+  addQuantityToProduct,
+  createProduct,
+  getProductById,
+  getProducts,
+  updateProduct,
+} from "src/controllers/admin/product-controller";
 
 const router = Router();
 
@@ -30,11 +36,10 @@ router.post("/logout-employee", logoutEmployee);
 router.get("/get-admin-details", getAdminDetails);
 router.put("/update-admin-details", updateAdminDetails);
 
-
 //Courts routes
 
-router.post("/court", createUpdateCourt)
-router.patch("/court/:id", createUpdateCourt)
+router.post("/court", createUpdateCourt);
+router.patch("/court/:id", createUpdateCourt);
 
 //Venue routes
 router.post("/create-venue", createVenue);
@@ -50,6 +55,7 @@ router.get("/get-users/:id", getUsersById);
 router.get("/get-matches", getMatches);
 
 //Products routes
-router.post("/products", createProduct)
+router.route("/products").post(createProduct).get(getProducts);
+router.route("/products/:id").patch(updateProduct).get(getProductById).put(addQuantityToProduct);
 
 export { router };

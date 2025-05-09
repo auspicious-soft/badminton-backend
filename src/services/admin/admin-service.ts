@@ -22,6 +22,7 @@ import { bookingModel } from "src/models/venue/booking-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { object } from "webidl-conversions";
 import { courtModel } from "src/models/venue/court-schema";
+import { productModel } from "src/models/admin/products-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -1034,8 +1035,3 @@ export const getMatchesService = async (payload: any, res: Response) => {
   }
 };
 
-//************************* Handle Products *************************
-
-export const createProductService = async (payload: any, res: Response) => {
-  console.log(payload);
-};
