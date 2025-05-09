@@ -23,35 +23,47 @@ export const checkAuth = async (
     if (!token)
       return res
         .status(httpStatusCode.UNAUTHORIZED)
-        .json({ success: false, message: "Unauthorized token missing" });
+        .json({ 
+          success: false, 
+          message: "Unauthorized: token missing",
+          timestamp: new Date().toISOString()
+        });
 
     const decoded = jwt.verify(
       token,
       process.env.AUTH_SECRET as string
     ) as JwtPayload & { id: string };
-    console.log("decoded", decoded);
+    
     const user = await usersModel.findOne({
       _id: decoded?.id,
       isBlocked: false,
     });
+    
     if (!user || !decoded.verificationToken ) {
       return res.status(httpStatusCode.UNAUTHORIZED).json({
         success: false,
-        message: "Unauthorized user not found",
+        message: "Unauthorized: user not found or invalid token",
+        timestamp: new Date().toISOString()
       });
     }
 
     if (!decoded)
       return res.status(httpStatusCode.UNAUTHORIZED).json({
         success: false,
-        message: "Unauthorized token invalid or expired",
+        message: "Unauthorized: token invalid or expired",
+        timestamp: new Date().toISOString()
       });
+      
     req.user = decoded as JwtPayload;
     next();
   } catch (error) {
     return res
       .status(httpStatusCode.UNAUTHORIZED)
-      .json({ success: false, message: "Unauthorized" });
+      .json({ 
+        success: false, 
+        message: "Unauthorized: invalid authentication",
+        timestamp: new Date().toISOString()
+      });
   }
 };
 

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
-import { errorParser } from "../../lib/errors/error-response-handler";
+import { errorParser, formatErrorResponse } from "../../lib/errors/error-response-handler";
 import {
   createUserService,
   deleteUserService,
@@ -31,15 +31,13 @@ export const userSignup = async (req: Request, res: Response) => {
         .json({
           success: false,
           message: "Both Email and Phone number is required",
+          timestamp: new Date().toISOString()
         });
     }
     const user = await signUpService(req.body, authType, res);
     return res.status(httpStatusCode.OK).json(user);
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 
@@ -52,10 +50,7 @@ export const loginUser = async (req: Request, res: Response) => {
     );
     return res.status(httpStatusCode.OK).json(loginResponse);
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 export const socialLogin = async (req: Request, res: Response) => {
@@ -100,10 +95,7 @@ export const forgotPasswordUser = async (req: Request, res: Response) => {
     const response = await forgotPasswordUserService(req.body, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 

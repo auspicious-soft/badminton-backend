@@ -19,6 +19,11 @@ export const userHomeServices = async (req: Request, res: Response) => {
   if (lngQuery && latQuery) {
     lng = Number(lngQuery);
     lat = Number(latQuery);
+
+    // Define a reasonable maximum distance
+    // 30 km in meters = 30,000 meters
+    const MAX_NEARBY_DISTANCE = 30000; // 30 km in meters
+
     const geoNearStage: any = {
       $geoNear: {
         near: { type: "Point", coordinates: [lng, lat] },
@@ -28,8 +33,13 @@ export const userHomeServices = async (req: Request, res: Response) => {
     };
 
     if (nearBy !== "false") {
-      geoNearStage.$geoNear.maxDistance = 30000;
+      geoNearStage.$geoNear.maxDistance = MAX_NEARBY_DISTANCE;
+    } else {
+      // If not nearby, still use a reasonable maximum distance
+      // 100 km in meters = 100,000 meters
+      geoNearStage.$geoNear.maxDistance = 100000; // 100 km in meters
     }
+
     const pipeline: any[] = [
       geoNearStage,
       {
@@ -177,13 +187,18 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       geoQuery.gamesAvailable = { $in: [game] };
     }
 
+    // Earth's radius is approximately 6371 km
+    // 100 km in meters = 100,000 meters
+    // This is a reasonable maximum distance for venue searches
+    const MAX_SEARCH_DISTANCE = 100000; // 100 km in meters
+
     const venues = await venueModel.aggregate([
       {
         $geoNear: {
           near: { type: "Point", coordinates: [lngNum, latNum] },
           distanceField: "distance",
           spherical: true,
-          maxDistance: 30000000,
+          maxDistance: MAX_SEARCH_DISTANCE,
           query: geoQuery,
         },
       },
@@ -564,9 +579,9 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
 export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { date, distance, game, location } = req.body;
+  const { date, distance = "ASC", game = "all", lng, lat } = req.query;
 
-  if (!date || !distance || !game || !location?.coordinates?.length) {
+  if (!date || !lng || !lat) {
     return errorResponseHandler(
       "Invalid Payload",
       httpStatusCode.BAD_REQUEST,
@@ -574,288 +589,350 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     );
   }
 
-  const [lng, lat] = location.coordinates;
+  // Convert coordinates to numbers
+  const lngNum = Number(lng);
+  const latNum = Number(lat);
 
-  const pipeline: any[] = [
-    // Initial match for public games
-    {
-      $match: {
-        askToJoin: true,
-        bookingDate: { $gte: new Date(date) },
+  // Parse the input date and handle timezone consistently
+  const requestDate = new Date(date as string);
+  // Set to beginning of day in local timezone
+  requestDate.setHours(0, 0, 0, 0);
+
+  // End of the requested day in local timezone
+  const endOfDay = new Date(requestDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  console.log(`Request date: ${requestDate.toISOString()}`);
+  console.log(`End of day: ${endOfDay.toISOString()}`);
+
+  // Check if the requested date is today (comparing dates in local timezone)
+  const today = new Date();
+  const isRequestedDateToday =
+    requestDate.getDate() === today.getDate() &&
+    requestDate.getMonth() === today.getMonth() &&
+    requestDate.getFullYear() === today.getFullYear();
+
+  const currentHour = today.getHours();
+  console.log(
+    `Is today: ${isRequestedDateToday}, Current hour: ${currentHour}`
+  );
+
+  // First, get bookings with askToJoin = true and for the specified date
+  const bookings = await bookingModel
+    .find({
+      askToJoin: true,
+      bookingDate: {
+        $gte: requestDate,
+        $lte: endOfDay,
       },
-    },
-    // Lookup venue details
-    {
-      $lookup: {
-        from: "venues",
-        localField: "venueId",
-        foreignField: "_id",
-        as: "venue",
-      },
-    },
-    { $unwind: "$venue" },
-    // Match active venues
-    {
-      $match: {
-        "venue.isActive": true,
-      },
-    },
-    // Match the specific court's game type
-    {
-      $addFields: {
-        matchingCourt: {
-          $filter: {
-            input: "$venue.courts",
-            as: "court",
-            cond: {
-              $and: [
-                { $eq: ["$$court._id", "$courtId"] },
-                { $eq: ["$$court.isActive", true] },
-                ...(game !== "all" ? [{ $eq: ["$$court.games", game] }] : []),
-              ],
-            },
-          },
-        },
-      },
-    },
-    // Only keep bookings where we found a matching court
-    {
-      $match: {
-        "matchingCourt.0": { $exists: true },
-      },
-    },
-    // Calculate distance
-    {
-      $addFields: {
-        venueLocation: "$venue.location",
-        distance: {
-          $cond: {
-            if: { $eq: ["$venue.location.coordinates", [0, 0]] },
-            then: null,
-            else: {
-              $divide: [
-                {
-                  $multiply: [
-                    6371,
-                    {
-                      $acos: {
-                        $add: [
-                          {
-                            $multiply: [
-                              { $sin: { $degreesToRadians: lat } },
-                              {
-                                $sin: {
-                                  $degreesToRadians: {
-                                    $arrayElemAt: [
-                                      "$venue.location.coordinates",
-                                      1,
-                                    ],
-                                  },
-                                },
-                              },
-                            ],
-                          },
-                          {
-                            $multiply: [
-                              { $cos: { $degreesToRadians: lat } },
-                              {
-                                $cos: {
-                                  $degreesToRadians: {
-                                    $arrayElemAt: [
-                                      "$venue.location.coordinates",
-                                      1,
-                                    ],
-                                  },
-                                },
-                              },
-                              {
-                                $cos: {
-                                  $subtract: [
-                                    {
-                                      $degreesToRadians: {
-                                        $arrayElemAt: [
-                                          "$venue.location.coordinates",
-                                          0,
-                                        ],
-                                      },
-                                    },
-                                    { $degreesToRadians: lng },
-                                  ],
-                                },
-                              },
-                            ],
-                          },
-                        ],
-                      },
-                    },
-                  ],
-                },
-                1,
-              ],
-            },
-          },
-        },
-      },
-    },
-    // Filter by distance
-    {
-      $match: {
-        $or: [{ distance: { $lte: 3000 } }, { distance: null }],
-      },
-    },
-    // Add lookup for team1 players with specific fields
-    {
-      $lookup: {
-        from: "users",
-        let: {
-          team1PlayerIds: {
-            $map: {
-              input: "$team1",
-              as: "player",
-              in: "$$player.playerId",
-            },
-          },
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $in: ["$_id", "$$team1PlayerIds"],
-              },
-            },
-          },
-          {
-            $project: {
-              _id: 1,
-              name: "$fullName", // Assuming the field is fullName in users collection
-              image: "$profilePic", // Assuming the field is profilePic in users collection
-            },
-          },
-        ],
-        as: "team1Players",
-      },
-    },
-    // Add lookup for team2 players with specific fields
-    {
-      $lookup: {
-        from: "users",
-        let: {
-          team2PlayerIds: {
-            $map: {
-              input: "$team2",
-              as: "player",
-              in: "$$player.playerId",
-            },
-          },
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $in: ["$_id", "$$team2PlayerIds"],
-              },
-            },
-          },
-          {
-            $project: {
-              _id: 1,
-              name: "$fullName",
-              image: "$profilePic",
-            },
-          },
-        ],
-        as: "team2Players",
-      },
-    },
-    // Final projection
-    {
-      $project: {
-        bookingDate: 1,
-        bookingSlots: 1,
-        askToJoin: 1,
-        isCompetitive: 1,
-        skillRequired: 1,
-        team1: {
-          $map: {
-            input: "$team1",
-            as: "player",
-            in: {
-              playerType: "$$player.playerType",
-              player: {
-                $let: {
-                  vars: {
-                    matchedPlayer: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: "$team1Players",
-                            cond: { $eq: ["$$this._id", "$$player.playerId"] },
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  in: "$$matchedPlayer",
-                },
-              },
-            },
-          },
-        },
-        team2: {
-          $map: {
-            input: "$team2",
-            as: "player",
-            in: {
-              playerType: "$$player.playerType",
-              player: {
-                $let: {
-                  vars: {
-                    matchedPlayer: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: "$team2Players",
-                            cond: { $eq: ["$$this._id", "$$player.playerId"] },
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  in: "$$matchedPlayer",
-                },
-              },
-            },
-          },
-        },
+    })
+    .lean();
+
+  console.log(`Found ${bookings.length} open bookings for date ${date}`);
+
+  if (bookings.length === 0) {
+    return {
+      success: true,
+      message: "No open matches found",
+      data: [],
+    };
+  }
+
+  // Get all venue IDs from the bookings
+  const venueIds = [...new Set(bookings.map((booking) => booking.venueId))];
+
+  // Get all court IDs from the bookings
+  const courtIds = [...new Set(bookings.map((booking) => booking.courtId))];
+
+  // Get venues data
+  const venues = await venueModel
+    .find({
+      _id: { $in: venueIds },
+      isActive: true,
+    })
+    .select("_id name city state image weather location")
+    .lean();
+
+  console.log(`Found ${venues.length} venues for open matches`);
+
+  // Create a map of venues by ID for quick lookup
+  const venuesMap = venues.reduce((map, venue) => {
+    map[venue._id.toString()] = venue;
+    return map;
+  }, {} as Record<string, any>);
+
+  // Get courts data with game filtering if needed
+  let courtsQuery: any = {
+    _id: { $in: courtIds },
+    isActive: true,
+  };
+
+  if (game !== "all") {
+    courtsQuery.games = game;
+  }
+
+  const courts = await courtModel
+    .find(courtsQuery)
+    .select("_id name venueId games hourlyRate image")
+    .lean();
+
+  console.log(
+    `Found ${courts.length} courts for open matches with game filter: ${game}`
+  );
+
+  // Create a map of courts by ID for quick lookup
+  const courtsMap = courts.reduce((map, court) => {
+    map[court._id.toString()] = court;
+    return map;
+  }, {} as Record<string, any>);
+
+  // Get all user IDs from team1 and team2
+  const userIds = new Set<string>();
+  bookings.forEach((booking) => {
+    booking.team1?.forEach((player: any) => {
+      if (player.playerId) userIds.add(player.playerId.toString());
+    });
+    booking.team2?.forEach((player: any) => {
+      if (player.playerId) userIds.add(player.playerId.toString());
+    });
+  });
+
+  // Get user data
+  const users = await usersModel
+    .find({
+      _id: { $in: Array.from(userIds) },
+    })
+    .select("_id fullName profilePic")
+    .lean();
+
+  // Create a map of users by ID for quick lookup
+  const usersMap = users.reduce((map, user) => {
+    map[user._id.toString()] = {
+      _id: user._id,
+      name: user.fullName,
+      image: user.profilePic,
+    };
+    return map;
+  }, {} as Record<string, any>);
+
+  // Process bookings to include venue, court, and player data
+  const processedBookings = bookings
+    .filter((booking) => {
+      // Filter out bookings where the court doesn't match the game filter
+      const courtId = booking.courtId.toString();
+      if (!courtsMap[courtId]) return false;
+
+      // For today, filter out bookings with slots that have already passed
+      if (isRequestedDateToday) {
+        // Handle both array and string cases for bookingSlots
+        const bookingSlotsArray = Array.isArray(booking.bookingSlots)
+          ? booking.bookingSlots
+          : [booking.bookingSlots];
+
+        // Check if all booking slots have passed
+        const allSlotsPassed = bookingSlotsArray.every((slot: string) => {
+          const slotHour = parseInt(slot.split(":")[0], 10);
+          return slotHour <= currentHour;
+        });
+
+        // Skip this booking if all slots have passed
+        if (allSlotsPassed) {
+          console.log(
+            `Filtering out booking ${booking._id} as all slots have passed`
+          );
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .map((booking) => {
+      const venueId = booking.venueId.toString();
+      const courtId = booking.courtId.toString();
+      const venue = venuesMap[venueId];
+      const court = courtsMap[courtId];
+
+      // Skip if venue or court not found (should not happen after filtering)
+      if (!venue || !court) return null;
+
+      // Calculate distance if venue has location
+      let distance = null;
+      if (venue.location?.coordinates?.length === 2) {
+        const [venueLng, venueLat] = venue.location.coordinates;
+        // Haversine formula for distance calculation
+        const R = 6371; // Earth radius in km
+        const dLat = ((venueLat - latNum) * Math.PI) / 180;
+        const dLon = ((venueLng - lngNum) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((latNum * Math.PI) / 180) *
+            Math.cos((venueLat * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        distance = R * c;
+
+        // Limit to reasonable distance (100 km)
+        if (distance > 100) {
+          return null; // Skip venues that are too far away
+        }
+      }
+
+      // For today, filter out booking slots that have already passed
+      let filteredBookingSlots: string[] = Array.isArray(booking.bookingSlots)
+        ? booking.bookingSlots
+        : [booking.bookingSlots];
+
+      if (isRequestedDateToday) {
+        filteredBookingSlots = filteredBookingSlots.filter((slot: string) => {
+          const slotHour = parseInt(slot.split(":")[0], 10);
+          return slotHour > currentHour;
+        });
+      }
+
+      // Process team1 players
+      const team1 = (booking.team1 || []).map((player: any) => {
+        const playerId = player.playerId?.toString();
+        return {
+          playerType: player.playerType,
+          player: playerId ? usersMap[playerId] : null,
+        };
+      });
+
+      // Process team2 players
+      const team2 = (booking.team2 || []).map((player: any) => {
+        const playerId = player.playerId?.toString();
+        return {
+          playerType: player.playerType,
+          player: playerId ? usersMap[playerId] : null,
+        };
+      });
+
+      return {
+        _id: booking._id,
+        bookingDate: booking.bookingDate,
+        bookingSlots: filteredBookingSlots,
+        askToJoin: booking.askToJoin,
+        isCompetitive: booking.isCompetitive,
+        skillRequired: booking.skillRequired,
+        team1,
+        team2,
         venue: {
-          _id: "$venue._id",
-          name: "$venue.name",
-          city: "$venue.city",
-          state: "$venue.state",
-          image: "$venue.image",
-          weather: "$venue.weather",
-          court: { $arrayElemAt: ["$matchingCourt", 0] },
+          _id: venue._id,
+          name: venue.name,
+          city: venue.city,
+          state: venue.state,
+          image: venue.image,
+          weather: venue.weather,
         },
-        distance: { $round: ["$distance", 1] },
-      },
-    },
-    // Sort by distance and date
-    {
-      $sort: {
-        distance: distance === "ASC" ? 1 : -1,
-        bookingDate: 1,
-      },
-    },
-  ];
+        court,
+        distance: distance !== null ? Math.round(distance * 10) / 10 : null,
+      };
+    })
+    .filter((booking) => booking !== null) as any[];
 
-  const openMatches = await bookingModel.aggregate(pipeline);
+  // Sort by distance
+  processedBookings.sort((a, b) => {
+    // Handle null distances (put them at the end)
+    if (a.distance === null && b.distance === null) return 0;
+    if (a.distance === null) return 1;
+    if (b.distance === null) return -1;
+
+    // Sort by distance
+    return distance === "ASC"
+      ? a.distance - b.distance
+      : b.distance - a.distance;
+  });
+
+  console.log(`Returning ${processedBookings.length} processed open matches`);
 
   return {
     success: true,
     message: "Open matches retrieved successfully",
-    data: openMatches,
+    data: processedBookings,
+  };
+};
+
+export const getOpenMatchesByIdServices = async (
+  req: Request,
+  res: Response
+) => {
+  const { id } = req.params;
+
+  // Find the booking by ID
+  const booking = await bookingModel
+    .findOne({
+      _id: id,
+    })
+    .populate("venueId", "name city state image")
+    .populate("courtId", "name games hourlyRate image")
+    .lean();
+
+  if (!booking) {
+    return {
+      success: false,
+      message: "Booking not found",
+    };
+  }
+
+  // Extract all player IDs from both teams
+  const playerIds = new Set<string>();
+
+  booking.team1?.forEach((player: any) => {
+    if (player.playerId) playerIds.add(player.playerId.toString());
+  });
+
+  booking.team2?.forEach((player: any) => {
+    if (player.playerId) playerIds.add(player.playerId.toString());
+  });
+
+  // Get player data (name and image only)
+  const players = await usersModel
+    .find({
+      _id: { $in: Array.from(playerIds) },
+    })
+    .select("_id fullName profilePic")
+    .lean();
+
+  // Create a map of players by ID for quick lookup
+  const playersMap = players.reduce((map, player) => {
+    map[player._id.toString()] = {
+      _id: player._id,
+      name: player.fullName,
+      image: player.profilePic,
+    };
+    return map;
+  }, {} as Record<string, any>);
+
+  // Process team1 players
+  const processedTeam1 = (booking.team1 || []).map((player: any) => {
+    const playerId = player.playerId?.toString();
+    return {
+      ...player,
+      playerData: playerId ? playersMap[playerId] : null,
+    };
+  });
+
+  // Process team2 players
+  const processedTeam2 = (booking.team2 || []).map((player: any) => {
+    const playerId = player.playerId?.toString();
+    return {
+      ...player,
+      playerData: playerId ? playersMap[playerId] : null,
+    };
+  });
+
+  // Create the processed booking with player data
+  const processedBooking = {
+    ...booking,
+    team1: processedTeam1,
+    team2: processedTeam2,
+  };
+
+  return {
+    success: true,
+    message: "Booking retrieved successfully",
+    data: processedBooking,
   };
 };
 
@@ -945,29 +1022,44 @@ export const sendRequestServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const { friendId } = req.body;
 
+  // Input validation
   if (!friendId) {
-    return {
-      success: false,
-      message: "Friend ID is required",
-    };
+    return errorResponseHandler(
+      "Friend ID is required",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Validate friendId is a valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(friendId)) {
+    return errorResponseHandler(
+      "Invalid friend ID format",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
   // Prevent sending request to yourself
   if (userData.id === friendId) {
-    return {
-      success: false,
-      message: "You cannot send a friend request to yourself",
-    };
+    return errorResponseHandler(
+      "You cannot send a friend request to yourself",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
+  // Check if friend exists
   const friend = await usersModel.findById(friendId);
   if (!friend) {
-    return {
-      success: false,
-      message: "User not found",
-    };
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
   }
 
+  // Check existing relationship with consistent query pattern
   const existingRelationship = await friendsModel.findOne({
     $or: [
       { userId: userData.id, friendId },
@@ -976,61 +1068,89 @@ export const sendRequestServices = async (req: Request, res: Response) => {
   });
 
   if (existingRelationship) {
+    // Use constants for status values to avoid typos
+    const STATUS = {
+      PENDING: "pending",
+      ACCEPTED: "accepted",
+      BLOCKED: "blocked",
+      REJECTED: "rejected",
+    };
+
     // Provide more specific error messages based on relationship status
-    if (existingRelationship.status === "pending") {
-      return {
-        success: false,
-        message:
-          existingRelationship.userId.toString() === userData.id.toString()
-            ? "You have already sent a friend request to this user"
-            : "This user has already sent you a friend request",
-      };
-    } else if (existingRelationship.status === "accepted") {
-      return {
-        success: false,
-        message: "You are already friends with this user",
-      };
-    } else if (existingRelationship.status === "blocked") {
-      return {
-        success: false,
-        message:
-          existingRelationship.userId.toString() === userData.id.toString()
-            ? "You have blocked this user"
-            : "You cannot send a request to this user",
-      };
+    if (existingRelationship.status === STATUS.PENDING) {
+      const isRequestSender =
+        existingRelationship.userId.toString() === userData.id.toString();
+      return errorResponseHandler(
+        isRequestSender
+          ? "You have already sent a friend request to this user"
+          : "This user has already sent you a friend request. Check your notifications to respond.",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    } else if (existingRelationship.status === STATUS.ACCEPTED) {
+      return errorResponseHandler(
+        "You are already friends with this user",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    } else if (existingRelationship.status === STATUS.BLOCKED) {
+      const isBlocker =
+        existingRelationship.userId.toString() === userData.id.toString();
+      return errorResponseHandler(
+        isBlocker
+          ? "You have blocked this user. Unblock them first to send a friend request."
+          : "You cannot send a request to this user",
+        httpStatusCode.FORBIDDEN,
+        res
+      );
+    } else if (existingRelationship.status === STATUS.REJECTED) {
+      // Allow re-sending request if previously rejected
+      // Delete the old rejected relationship
+      await friendsModel.findByIdAndDelete(existingRelationship._id);
+      // Continue to create a new request below
     }
   }
 
-  const request = await friendsModel.create({
-    userId: userData.id,
-    friendId,
-    status: "pending",
-  });
-
-  // Create notification for the recipient
+  // Create the friend request with proper error handling
   try {
-    await createNotification({
-      recipientId: friendId,
-      senderId: userData.id,
-      type: "FRIEND_REQUEST",
-      title: "New Friend Request",
-      message: `${
-        userData.fullName || userData.email
-      } sent you a friend request.`,
-      category: "FRIEND", // Changed from SOCIAL to FRIEND
-      referenceId: request._id,
-      referenceType: "users", // Changed from friends to users
+    const request = await friendsModel.create({
+      userId: userData.id,
+      friendId,
+      status: "pending",
     });
-  } catch (error) {
-    console.error("Failed to create notification:", error);
-    // Continue execution even if notification fails
-  }
 
-  return {
-    success: true,
-    message: "Friend request sent successfully",
-    data: request,
-  };
+    // Create notification for the recipient
+    try {
+      await createNotification({
+        recipientId: friendId,
+        senderId: userData.id,
+        type: "FRIEND_REQUEST",
+        title: "New Friend Request",
+        message: `${
+          userData.fullName || userData.email
+        } sent you a friend request.`,
+        category: "FRIEND",
+        referenceId: request._id,
+        referenceType: "users",
+      });
+    } catch (notificationError) {
+      console.error("Failed to create notification:", notificationError);
+      // Continue execution even if notification fails
+    }
+
+    return {
+      success: true,
+      message: "Friend request sent successfully",
+      data: request,
+    };
+  } catch (error) {
+    console.error("Error creating friend request:", error);
+    return errorResponseHandler(
+      "Failed to send friend request. Please try again.",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
 };
 
 export const acceptFriendRequestServices = async (
@@ -1040,161 +1160,240 @@ export const acceptFriendRequestServices = async (
   const userData = req.user as any;
   const { requestId, status } = req.body;
 
-  // Input validation
+  // Input validation with consistent status codes
   if (!requestId) {
-    return {
-      success: false,
-      message: "Request ID is required",
-      statusCode: 400,
-    };
+    return errorResponseHandler(
+      "Request ID is required",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
-  if (!["accepted", "rejected"].includes(status)) {
-    return {
-      success: false,
-      message: "Invalid status. Must be either 'accepted' or 'rejected'",
-      statusCode: 400,
-    };
+  // Validate requestId is a valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(requestId)) {
+    return errorResponseHandler(
+      "Invalid request ID format",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
-  // Find the friend request
-  const friendRequest = await friendsModel.findOne({
-    _id: requestId,
-    friendId: userData.id, // Ensure the request was sent to the current user
-    status: "pending",
-  });
-
-  if (!friendRequest) {
-    return {
-      success: false,
-      message: "Request not found or already processed",
-      statusCode: 404,
-    };
+  // Define valid status values as constants
+  const VALID_STATUSES = ["accepted", "rejected"];
+  if (!VALID_STATUSES.includes(status)) {
+    return errorResponseHandler(
+      "Invalid status. Must be either 'accepted' or 'rejected'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
-  // Update the friend request status
-  const updatedRequest = await friendsModel.findByIdAndUpdate(
-    requestId,
-    {
-      $set: {
-        status,
-        updatedAt: new Date(),
-      },
-    },
-    { new: true }
-  );
+  // Find the friend request with proper error handling
+  try {
+    // Find the friend request
+    const friendRequest = await friendsModel.findOne({
+      _id: requestId,
+      friendId: userData.id, // Ensure the request was sent to the current user
+      status: "pending",
+    });
 
-  // Send notification to the requester
-  if (status === "accepted") {
-    try {
-      await createNotification({
-        recipientId: friendRequest.userId,
-        senderId: userData.id,
-        type: "FRIEND_REQUEST_ACCEPTED",
-        title: "Friend Request Accepted",
-        message: `${
-          userData.fullName || userData.email
-        } accepted your friend request.`,
-        category: "FRIEND", // Changed from SOCIAL to FRIEND
-        referenceId: requestId,
-        referenceType: "users", // Changed from friends to users
-      });
-    } catch (error) {
-      console.error("Failed to create notification:", error);
-      // Continue execution even if notification fails
+    if (!friendRequest) {
+      return errorResponseHandler(
+        "Request not found or already processed",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
     }
-  }
 
-  return {
-    success: true,
-    message: `Friend request ${status} successfully`,
-    data: updatedRequest,
-  };
+    // Update the friend request status with transaction
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+
+      // Update the friend request status
+      const updatedRequest = await friendsModel.findByIdAndUpdate(
+        requestId,
+        {
+          $set: {
+            status,
+            updatedAt: new Date(),
+          },
+        },
+        { new: true, session }
+      );
+
+      // Send notification to the requester if accepted
+      if (status === "accepted") {
+        try {
+          await createNotification({
+            recipientId: friendRequest.userId,
+            senderId: userData.id,
+            type: "FRIEND_REQUEST_ACCEPTED",
+            title: "Friend Request Accepted",
+            message: `${
+              userData.fullName || userData.email
+            } accepted your friend request.`,
+            category: "FRIEND",
+            referenceId: requestId,
+            referenceType: "users",
+          });
+        } catch (notificationError) {
+          console.error("Failed to create notification:", notificationError);
+          // Continue execution even if notification fails
+        }
+      }
+
+      await session.commitTransaction();
+
+      return {
+        success: true,
+        message: `Friend request ${status} successfully`,
+        data: updatedRequest,
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  } catch (error) {
+    console.error("Error processing friend request:", error);
+    return errorResponseHandler(
+      "Failed to process friend request. Please try again.",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
 };
 
 export const blockUserServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const { userId } = req.body;
 
+  // Input validation
   if (!userId) {
-    return {
-      success: false,
-      message: "User ID is required",
-    };
+    return errorResponseHandler(
+      "User ID is required",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
-  // Check if user exists
-  const user = await usersModel.findById(userId);
-  if (!user) {
-    return {
-      success: false,
-      message: "User not found",
-    };
+  // Validate userId is a valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return errorResponseHandler(
+      "Invalid user ID format",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
   // Check if trying to block yourself
   if (userData.id === userId) {
-    return {
-      success: false,
-      message: "You cannot block yourself",
-    };
+    return errorResponseHandler(
+      "You cannot block yourself",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
-  // Find existing relationship
-  const existingRelationship = await friendsModel.findOne({
-    $or: [
-      { userId: userData.id, friendId: userId },
-      { userId: userId, friendId: userData.id },
-    ],
-  });
-
-  // If relationship exists
-  if (existingRelationship) {
-    // If already blocked by current user, unblock by deleting the entry
-    if (
-      existingRelationship.status === "blocked" &&
-      existingRelationship.userId.toString() === userData.id.toString()
-    ) {
-      await friendsModel.findByIdAndDelete(existingRelationship._id);
-      return {
-        success: true,
-        message: "User unblocked successfully",
-      };
+  try {
+    // Check if user exists
+    const user = await usersModel.findById(userId);
+    if (!user) {
+      return errorResponseHandler(
+        "User not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
     }
 
-    // If it's any other relationship status, update to blocked
-    const updatedRelationship = await friendsModel.findByIdAndUpdate(
-      existingRelationship._id,
-      {
-        $set: {
-          status: "blocked",
-          userId: userData.id, // Ensure current user is the blocker
-          friendId: userId, // Ensure target user is the blocked
-          updatedAt: new Date(),
-        },
-      },
-      { new: true }
+    // Use a transaction for consistent state
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+
+      // Find existing relationship
+      const existingRelationship = await friendsModel.findOne({
+        $or: [
+          { userId: userData.id, friendId: userId },
+          { userId: userId, friendId: userData.id },
+        ],
+      });
+
+      let result;
+
+      // If relationship exists
+      if (existingRelationship) {
+        // If already blocked by current user, unblock by deleting the entry
+        if (
+          existingRelationship.status === "blocked" &&
+          existingRelationship.userId.toString() === userData.id.toString()
+        ) {
+          await friendsModel.findByIdAndDelete(existingRelationship._id, {
+            session,
+          });
+          result = {
+            success: true,
+            message: "User unblocked successfully",
+          };
+        } else {
+          // If it's any other relationship status, update to blocked
+          const updatedRelationship = await friendsModel.findByIdAndUpdate(
+            existingRelationship._id,
+            {
+              $set: {
+                status: "blocked",
+                userId: userData.id, // Ensure current user is the blocker
+                friendId: userId, // Ensure target user is the blocked
+                updatedAt: new Date(),
+              },
+            },
+            { new: true, session }
+          );
+
+          result = {
+            success: true,
+            message: "User blocked successfully",
+            data: updatedRelationship,
+          };
+        }
+      } else {
+        // If no relationship exists, create a new blocked relationship
+        const blockedRelationship = await friendsModel.create(
+          [
+            {
+              userId: userData.id,
+              friendId: userId,
+              status: "blocked",
+            },
+          ],
+          { session }
+        );
+
+        result = {
+          success: true,
+          message: "User blocked successfully",
+          data: blockedRelationship[0],
+        };
+      }
+
+      await session.commitTransaction();
+      return result;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  } catch (error) {
+    console.error("Error blocking/unblocking user:", error);
+    return errorResponseHandler(
+      "Failed to process block/unblock request. Please try again.",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
     );
-
-    return {
-      success: true,
-      message: "User blocked successfully",
-      data: updatedRelationship,
-    };
   }
-
-  // If no relationship exists, create a new blocked relationship
-  const blockedRelationship = await friendsModel.create({
-    userId: userData.id,
-    friendId: userId,
-    status: "blocked",
-  });
-
-  return {
-    success: true,
-    message: "User blocked successfully",
-    data: blockedRelationship,
-  };
 };
 
 export const getFriendsServices = async (req: Request, res: Response) => {

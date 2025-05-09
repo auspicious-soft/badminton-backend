@@ -5,7 +5,10 @@ import { bookingModel } from "../../models/venue/booking-schema";
 import { bookingRequestModel } from "../../models/venue/booking-request-schema";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import mongoose from "mongoose";
-import { createNotification, notificationModel } from "src/models/notification/notification-schema";
+import {
+  createNotification,
+  notificationModel,
+} from "src/models/notification/notification-schema";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -122,9 +125,17 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
 export const joinOpenBookingServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { bookingId, requestedPosition, racketA, racketB, racketC, balls } =
-    req.body;
+  const {
+    bookingId,
+    requestedTeam,
+    requestedPosition,
+    racketA,
+    racketB,
+    racketC,
+    balls,
+  } = req.body;
 
+  // Find the booking with more details
   const booking = await bookingModel
     .findOne({
       _id: bookingId,
@@ -141,25 +152,58 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  if (
-    [...booking.team1, ...booking.team2].some(
-      (player) =>
-        player.playerId == userData.id ||
-        player.playerType === requestedPosition
-    )
-  ) {
+  // Get current time in UTC to ensure consistent comparison
+  const now = new Date();
+
+  // Create booking date object and normalize to start of day in UTC
+  const bookingDate = new Date(booking.bookingDate);
+
+  // Get the booking slot time
+  const bookingSlot = booking.bookingSlots;
+  const [slotHour, slotMinute] = bookingSlot
+    .split(":")
+    .map((num) => parseInt(num, 10));
+
+  // Create a date object for the exact booking time
+  const bookingTime = new Date(bookingDate);
+  bookingTime.setHours(slotHour, slotMinute || 0, 0, 0);
+
+  // Compare the full datetime objects
+  if (bookingTime < now) {
     return errorResponseHandler(
-      "You are already in this team or this position is occupied",
+      "Cannot join a booking that has already started or passed",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  const requestedTeam =
-    requestedPosition === "player1" || requestedPosition === "player2"
-      ? "team1"
-      : "team2";
-  
+  // Check if user is already in the requested team
+  if (
+    booking[requestedTeam as keyof typeof booking].some(
+      (player: any) => player.playerId?.toString() === userData.id.toString()
+    )
+  ) {
+    return errorResponseHandler(
+      "You are already in this team",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Check if the requested position is already occupied
+  if (
+    booking[requestedTeam as keyof typeof booking].some(
+      (player: any) => player.playerType === requestedPosition
+    )
+  ) {
+    return errorResponseHandler(
+      "This position is already occupied",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Check if user has already requested to join this booking
   const checkExist = await bookingRequestModel.findOne({
     bookingId,
     requestedBy: userData.id,
@@ -173,6 +217,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     );
   }
 
+  // Create the booking request
   const requestData = {
     bookingId,
     requestedBy: userData.id,
@@ -180,15 +225,17 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     requestedTeam,
     requestedPosition,
     status: "pending",
-    racketA,
-    racketB,
-    racketC,
-    balls,
+    racketA: racketA || 0,
+    racketB: racketB || 0,
+    racketC: racketC || 0,
+    balls: balls || 0,
     playerPayment: 300,
+    paymentStatus: "Pending",
   };
 
   const data = await bookingRequestModel.create(requestData);
 
+  // Create notification for the booking owner
   await createNotification({
     recipientId: booking.userId,
     senderId: userData.id,
@@ -202,15 +249,12 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
 
   return {
     success: true,
-    message: "Court booking initiated",
+    message: "Request to join the game sent successfully",
     data: data,
   };
 };
 
-export const userNotificationServices = async (
-  req: Request,
-  res: Response
-) => {
+export const userNotificationServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
 
   const data = await notificationModel.find({

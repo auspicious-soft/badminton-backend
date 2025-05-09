@@ -6,6 +6,7 @@ import {
 } from "src/lib/errors/error-response-handler";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { venueModel } from "src/models/venue/venue-schema";
+import { courtModel } from "src/models/venue/court-schema";
 
 interface BookingRequestBody {
   venueId: string;
@@ -74,8 +75,7 @@ export const validateBookingRequest = async (
       );
     }
 
-    //Check if booking already exist 
-
+    // Check if booking already exists
     const existingBooking = await bookingModel.findOne({
       venueId,
       courtId,
@@ -156,7 +156,7 @@ export const validateBookingRequest = async (
       );
     }
 
-    // Venue and court validation
+    // Venue validation
     const venue = await venueModel.findById(venueId);
     if (!venue) {
       return errorResponseHandler(
@@ -166,10 +166,15 @@ export const validateBookingRequest = async (
       );
     }
 
-    const court = venue.courts.find((c: any) => c._id.toString() === courtId);
+    // Court validation - now using separate court collection
+    const court = await courtModel.findOne({
+      _id: courtId,
+      venueId: venueId
+    });
+    
     if (!court) {
       return errorResponseHandler(
-        "Court not found in the venue",
+        "Court not found for the specified venue",
         httpStatusCode.NOT_FOUND,
         res
       );
@@ -209,3 +214,4 @@ export const validateBookingRequest = async (
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+

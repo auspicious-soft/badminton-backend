@@ -20,7 +20,7 @@ import {
   getMatchesService,
   createProductService,
 } from "../../services/admin/admin-service";
-import { errorParser } from "../../lib/errors/error-response-handler";
+import { errorParser, formatErrorResponse } from "../../lib/errors/error-response-handler";
 import { httpStatusCode } from "../../lib/constant";
 
 export const login = async (req: Request, res: Response) => {
@@ -28,10 +28,7 @@ export const login = async (req: Request, res: Response) => {
     const response = await loginService(req.body, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 
@@ -69,10 +66,7 @@ export const createEmployee = async (req: Request, res: Response) => {
     const response = await createEmployeeService(req.body, res);
     return res.status(httpStatusCode.CREATED).json(response);
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 
@@ -93,10 +87,7 @@ export const getEmployees = async (req: Request, res: Response) => {
     const response = await getEmployeesService(req.query, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 

@@ -519,11 +519,7 @@ export const generateAndSendOTP = async (
   // Send OTP via the respective method
   if (phoneNumber) {
     // await generateOtpWithTwilio(phoneNumber, otpPhone);
-    await generateTwilioVerificationOTP(
-      phoneNumber,
-      otpPhone,
-      expiresAt
-    );
+    await generateTwilioVerificationOTP(phoneNumber, otpPhone, expiresAt);
   }
   if (email) {
     await sendEmailVerificationMail(email, otpEmail, "eng");
