@@ -190,7 +190,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     // Earth's radius is approximately 6371 km
     // 100 km in meters = 100,000 meters
     // This is a reasonable maximum distance for venue searches
-    const MAX_SEARCH_DISTANCE = 100000; // 100 km in meters
+    const MAX_SEARCH_DISTANCE = 10000000; // 100 km in meters
 
     const venues = await venueModel.aggregate([
       {
@@ -1582,6 +1582,27 @@ export const getFriendsByIdServices = async (req: Request, res: Response) => {
     );
   }
 
+  // Determine detailed friendship status
+  let friendshipStatus = null;
+  let isFriend = false;
+  
+  if (friendship) {
+    if (friendship.status === "accepted") {
+      friendshipStatus = "friends";
+      isFriend = true;
+    } else if (friendship.status === "pending") {
+      // Check if current user sent the request or received it
+      friendshipStatus = friendship.userId.toString() === userData.id.toString() 
+        ? "request_sent" 
+        : "request_received";
+    } else if (friendship.status === "rejected") {
+      friendshipStatus = "rejected";
+    } else if (friendship.status === "blocked" && 
+               friendship.userId.toString() === userData.id.toString()) {
+      friendshipStatus = "blocked_by_me";
+    }
+  }
+
   // Add hardcoded stats
   const userWithStats = {
     ...user,
@@ -1597,8 +1618,9 @@ export const getFriendsByIdServices = async (req: Request, res: Response) => {
       improvement: 0,
       confidence: "10%",
     },
-    friendshipStatus: friendship ? friendship.status : null,
-    isFriend: friendship?.status === "accepted"
+    friendshipStatus: friendshipStatus,
+    isFriend: isFriend,
+    relationshipId: friendship ? friendship._id : null
   };
 
   return {
