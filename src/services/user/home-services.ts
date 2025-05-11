@@ -22,7 +22,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
     // Define a reasonable maximum distance
     // 30 km in meters = 30,000 meters
-    const MAX_NEARBY_DISTANCE = 30000; // 30 km in meters
+    const MAX_NEARBY_DISTANCE = 30000000; // 30 km in meters
 
     const geoNearStage: any = {
       $geoNear: {
@@ -37,7 +37,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
     } else {
       // If not nearby, still use a reasonable maximum distance
       // 100 km in meters = 100,000 meters
-      geoNearStage.$geoNear.maxDistance = 100000; // 100 km in meters
+      geoNearStage.$geoNear.maxDistance = 100000000; // 100 km in meters
     }
 
     const pipeline: any[] = [
