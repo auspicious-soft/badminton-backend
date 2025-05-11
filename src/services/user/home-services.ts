@@ -1539,3 +1539,71 @@ export const getFriendsServices = async (req: Request, res: Response) => {
     };
   }
 };
+
+export const getFriendsByIdServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { id } = req.params;
+
+  if (!id) {
+    return errorResponseHandler(
+      "User ID is required",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Check if user exists
+  const user = await usersModel.findById(id).select("fullName profilePic").lean();
+  
+  if (!user) {
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  // Check friendship status
+  const friendship = await friendsModel.findOne({
+    $or: [
+      { userId: userData.id, friendId: id },
+      { userId: id, friendId: userData.id }
+    ]
+  }).lean();
+
+  // Check if the requested user has blocked the current user
+  if (friendship && 
+      friendship.status === "blocked" && 
+      friendship.userId.toString() === id.toString()) {
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  // Add hardcoded stats
+  const userWithStats = {
+    ...user,
+    stats: {
+      totalMatches: 0,
+      padlelMatches: 0,
+      pickleballMatches: 0,
+      loyaltyPoints: 0,
+      level: 0,
+      lastMonthLevel: 0,
+      level6MonthsAgo: 0,
+      level1YearAgo: 0,
+      improvement: 0,
+      confidence: "10%",
+    },
+    friendshipStatus: friendship ? friendship.status : null,
+    isFriend: friendship?.status === "accepted"
+  };
+
+  return {
+    success: true,
+    message: "User data retrieved successfully",
+    data: userWithStats
+  };
+};
