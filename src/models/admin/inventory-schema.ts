@@ -24,8 +24,7 @@ const productSchema = new Schema<ProductDocument>(
     },
     hourlyRent: {
       type: Number,
-      required: true,
-      min: 0,
+      default: 0,
     },
     venueId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -40,7 +39,6 @@ const productSchema = new Schema<ProductDocument>(
     },
     isUse: {
       type: Number,
-      required: true,
       min: 0,
       default: 0,
     },

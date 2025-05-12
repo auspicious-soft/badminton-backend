@@ -18,7 +18,9 @@ import {
 import { createUpdateCourt } from "src/controllers/admin/court-controller";
 import {
   addQuantityToProduct,
+  createInventory,
   createProduct,
+  getInventory,
   getProductById,
   getProducts,
   updateProduct,
@@ -59,6 +61,6 @@ router.route("/products").post(createProduct).get(getProducts);
 router.route("/products/:id").patch(updateProduct).get(getProductById).put(addQuantityToProduct);
 
 //Inventory routes
-router.route("/inventory").get().post()
+router.route("/inventory").get(getInventory).post(createInventory);
 
 export { router };

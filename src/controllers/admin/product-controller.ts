@@ -7,6 +7,7 @@ import { productModel } from "src/models/admin/products-schema";
 import { venueModel } from "src/models/venue/venue-schema";
 import { Request, Response } from "express";
 import mongoose from "mongoose";
+import { inventoryModel } from "src/models/admin/inventory-schema";
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
@@ -174,12 +175,16 @@ export const getProducts = async (req: Request, res: Response) => {
               return {
                 venueId: venueDetails?._id || item.venueId,
                 quantity: item.quantity,
-                venueName: venueDetails && 'name' in venueDetails 
-                  ? String(venueDetails.name) 
-                  : "Unknown Venue",
-                venueLocation: venueDetails && typeof venueDetails === 'object' && 'address' in venueDetails
-                  ? String(venueDetails.address)
-                  : "Unknown Location",
+                venueName:
+                  venueDetails && "name" in venueDetails
+                    ? String(venueDetails.name)
+                    : "Unknown Venue",
+                venueLocation:
+                  venueDetails &&
+                  typeof venueDetails === "object" &&
+                  "address" in venueDetails
+                    ? String(venueDetails.address)
+                    : "Unknown Location",
               };
             }
             return item;
@@ -192,7 +197,10 @@ export const getProducts = async (req: Request, res: Response) => {
       return transformedProduct;
     });
 
-    const venues = await venueModel.find({isActive: true}).lean().select("_id name");
+    const venues = await venueModel
+      .find({ isActive: true })
+      .lean()
+      .select("_id name");
 
     return res.status(httpStatusCode.OK).json({
       success: true,
@@ -269,9 +277,10 @@ export const getProductById = async (req: Request, res: Response) => {
     }
 
     // Find the product with populated venue information
-    const product = await productModel.findById(id)
-      .populate('venueAndQuantity.venueId', 'name address');
-      
+    const product = await productModel
+      .findById(id)
+      .populate("venueAndQuantity.venueId", "name address");
+
     if (!product) {
       return errorResponseHandler(
         "Product not found",
@@ -285,24 +294,31 @@ export const getProductById = async (req: Request, res: Response) => {
 
     // Transform venueAndQuantity to include venue name and address
     if (productObj.venueAndQuantity) {
-      productObj.venueAndQuantity = productObj.venueAndQuantity.map((item: any) => {
-        if (item.venueId) {
-          // Extract venue details
-          const venueDetails = typeof item.venueId === 'object' ? item.venueId : null;
-          
-          return {
-            venueId: venueDetails?._id || item.venueId,
-            quantity: item.quantity,
-            venueName: venueDetails && 'name' in venueDetails 
-              ? String(venueDetails.name) 
-              : "Unknown Venue",
-            venueLocation: venueDetails && typeof venueDetails === 'object' && 'address' in venueDetails
-              ? String(venueDetails.address)
-              : "Unknown Location",
-          };
+      productObj.venueAndQuantity = productObj.venueAndQuantity.map(
+        (item: any) => {
+          if (item.venueId) {
+            // Extract venue details
+            const venueDetails =
+              typeof item.venueId === "object" ? item.venueId : null;
+
+            return {
+              venueId: venueDetails?._id || item.venueId,
+              quantity: item.quantity,
+              venueName:
+                venueDetails && "name" in venueDetails
+                  ? String(venueDetails.name)
+                  : "Unknown Venue",
+              venueLocation:
+                venueDetails &&
+                typeof venueDetails === "object" &&
+                "address" in venueDetails
+                  ? String(venueDetails.address)
+                  : "Unknown Location",
+            };
+          }
+          return item;
         }
-        return item;
-      });
+      );
     }
 
     // Get total reviews count
@@ -405,81 +421,27 @@ export const addQuantityToProduct = async (req: Request, res: Response) => {
   }
 };
 
-
 export const getInventory = async (req: Request, res: Response) => {
   try {
-    const { search, page, limit } = req.query;
-    const pageNumber = parseInt(page as string) || 1;
-    const limitNumber = parseInt(limit as string) || 10;
-    const offset = (pageNumber - 1) * limitNumber;
+    const { venueId } = req.query;
+    if (!venueId) {
+      errorResponseHandler(
+        "Venue ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
 
-    const searchQuery = search
-      ? {
-          $or: [
-            { productName: { $regex: search, $options: "i" } },
-            { description: { $regex: search, $options: "i" } },
-            { specification: { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
-
-    const totalProducts = await productModel.countDocuments(searchQuery);
-
-    // Use populate to get venue details
-    const products = await productModel
-      .find(searchQuery)
-      .populate("venueAndQuantity.venueId", "name address") // Populate venue details
-      .skip(offset)
-      .limit(limitNumber)
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Transform the response to include venue name directly in venueAndQuantity
-    const transformedProducts = products.map((product) => {
-      const transformedProduct = { ...product };
-
-      // Transform venueAndQuantity to include venue name
-      if (transformedProduct.venueAndQuantity) {
-        transformedProduct.venueAndQuantity =
-          transformedProduct.venueAndQuantity.map((item) => {
-            if (item.venueId) {
-              // Extract venue details
-              const venueDetails =
-                typeof item.venueId === "object" ? item.venueId : null;
-
-              return {
-                venueId: venueDetails?._id || item.venueId,
-                quantity: item.quantity,
-                venueName: venueDetails && 'name' in venueDetails 
-                  ? String(venueDetails.name) 
-                  : "Unknown Venue",
-                venueLocation: venueDetails && typeof venueDetails === 'object' && 'address' in venueDetails
-                  ? String(venueDetails.address)
-                  : "Unknown Location",
-              };
-            }
-            return item;
-          });
-      }
-
-      // Add soldThisMonth field with dummy data
-      (transformedProduct as any).soldThisMonth = 50;
-
-      return transformedProduct;
-    });
+    const inventory = await inventoryModel.find({ venueId }).lean();
+    const venues = await venueModel
+      .find({ isActive: true })
+      .lean()
+      .select("_id name");
 
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: "Products retrieved successfully",
-      data: transformedProducts,
-      meta: {
-        total: totalProducts,
-        hasPreviousPage: pageNumber > 1,
-        hasNextPage: offset + limitNumber < totalProducts,
-        page: pageNumber,
-        limit: limitNumber,
-        totalPages: Math.ceil(totalProducts / limitNumber),
-      },
+      message: "Inventory retrieved successfully",
+      data: { inventory, venues },
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
@@ -489,4 +451,48 @@ export const getInventory = async (req: Request, res: Response) => {
   }
 };
 
+export const createInventory = async (req: Request, res: Response) => {
+  try {
+    const inventoryData = req.body;
+    if (!inventoryData || inventoryData.length === 0) {
+      return errorResponseHandler(
+        "Payload is missing",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
 
+    // Check if inventoryData is an array
+    if (!Array.isArray(inventoryData)) {
+      return errorResponseHandler(
+        "Inventory data must be an array",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Validate each item in the array
+    for (const item of inventoryData) {
+      if (!item.venueId) {
+        return errorResponseHandler(
+          "Venue ID is required for all items",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+    }
+
+    const data = await inventoryModel.insertMany(inventoryData);
+
+    return res.status(httpStatusCode.CREATED).json({
+      success: true,
+      message: "Inventory created successfully",
+      data: data,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};

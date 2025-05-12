@@ -144,6 +144,10 @@ const venueSchema = new Schema<VenueDocument>(
       temperature: { type: Number, default: null },
       lastUpdated: { type: Date, default: null },
     },
+    contactInfo: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );
