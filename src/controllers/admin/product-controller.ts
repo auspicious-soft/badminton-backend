@@ -496,3 +496,104 @@ export const createInventory = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
+export const updateInventory = async (req: Request, res: Response) => {
+  try {
+    let { inventoryId, type, quantity } = req.body;
+
+    quantity = Number(quantity);
+    // Ensure quantity is not negative
+    quantity = Math.max(0, quantity);
+
+    if (type !== "inStock" && type !== "inUse") {
+      return errorResponseHandler(
+        "Type must be either inStock or inUse",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    if (!inventoryId) {
+      return errorResponseHandler(
+        "Inventory ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const checkExist = await inventoryModel.findOne({
+      _id: inventoryId,
+      isActive: true,
+    });
+
+    if (!checkExist) {
+      return errorResponseHandler(
+        "Inventory not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    let response;
+
+    if (type === "inUse") {
+      let inStock = Number(checkExist?.inStock || 0);
+      
+      if (quantity > checkExist.isUse) {
+        // Calculate how many more items are being used
+        const additionalUsed = quantity - checkExist.isUse;
+        
+        // Check if there's enough stock
+        if (inStock < additionalUsed) {
+          return errorResponseHandler(
+            `Not enough items in stock. Available: ${inStock}, Required: ${additionalUsed}`,
+            httpStatusCode.BAD_REQUEST,
+            res
+          );
+        }
+        
+        response = await inventoryModel.findByIdAndUpdate(
+          inventoryId, 
+          {
+            inStock: inStock - additionalUsed,
+            isUse: quantity,
+          },
+          { new: true }
+        );
+      } else {
+        // Calculate how many items are being returned to stock
+        const returnedToStock = checkExist.isUse - quantity;
+        // Add returned items to inStock
+        const newInStock = inStock + returnedToStock;
+        
+        response = await inventoryModel.findByIdAndUpdate(
+          inventoryId, 
+          {
+            inStock: newInStock,
+            isUse: quantity,
+          },
+          { new: true }
+        );
+      }
+    } else {
+      response = await inventoryModel.findByIdAndUpdate(
+        inventoryId, 
+        {
+          inStock: quantity,
+        },
+        { new: true }
+      );
+    }
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Inventory updated successfully",
+      data: response,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};

@@ -23,6 +23,7 @@ import {
   getInventory,
   getProductById,
   getProducts,
+  updateInventory,
   updateProduct,
 } from "src/controllers/admin/product-controller";
 
@@ -58,9 +59,17 @@ router.get("/get-matches", getMatches);
 
 //Products routes
 router.route("/products").post(createProduct).get(getProducts);
-router.route("/products/:id").patch(updateProduct).get(getProductById).put(addQuantityToProduct);
+router
+  .route("/products/:id")
+  .patch(updateProduct)
+  .get(getProductById)
+  .put(addQuantityToProduct);
 
 //Inventory routes
-router.route("/inventory").get(getInventory).post(createInventory);
+router
+  .route("/inventory")
+  .get(getInventory)
+  .post(createInventory)
+  .put(updateInventory);
 
 export { router };

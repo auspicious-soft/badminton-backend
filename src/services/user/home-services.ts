@@ -416,7 +416,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
     // Find the venue
     const venueData = await venueModel
       .findById(venueId)
-      .select("-location -employees")
+      .select("-employees")
       .lean();
 
     if (!venueData) {
