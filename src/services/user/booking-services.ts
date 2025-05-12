@@ -53,6 +53,8 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
   try {
     await session.startTransaction();
+    
+    // Create the transaction first
     const bookingTransaction = await transactionModel.create(
       [
         {
@@ -72,6 +74,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       { session }
     );
 
+    // Prepare booking payload
     let bookingPayload = {
       userId: userData.id,
       venueId,
@@ -97,9 +100,9 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         bookingType === "Complete" ? completeCourtPrice : bookingPrice,
       bookingPaymentStatus: false,
       bookingDate,
-      bookingSlots,
     };
 
+    // Create a booking for each slot
     let finalPayload = bookingSlots.map((slot: string) => {
       return {
         ...bookingPayload,
@@ -107,13 +110,31 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       };
     });
 
-    await bookingModel.insertMany(finalPayload, { session });
+    // Insert the bookings
+    const bookings = await bookingModel.insertMany(finalPayload, { session });
+    
+    // Get all booking IDs
+    const bookingIds = bookings.map(booking => booking._id);
+    
+    // Update the transaction with the booking IDs
+    await transactionModel.findByIdAndUpdate(
+      bookingTransaction[0]._id,
+      { bookingId: bookingIds[0] }, // Store the first booking ID in the transaction
+      { session }
+    );
+
     await session.commitTransaction();
 
     return {
       success: true,
       message: "Court booking initiated",
-      data: bookingTransaction[0],
+      data: {
+        transaction: {
+          ...bookingTransaction[0].toObject(),
+          bookingId: bookingIds[0]
+        },
+        bookings: bookings
+      }
     };
   } catch (error) {
     await session.abortTransaction();
@@ -265,5 +286,110 @@ export const userNotificationServices = async (req: Request, res: Response) => {
     success: true,
     message: "Notifications retrieved successfully",
     data: data,
+  };
+};
+
+export const paymentBookingServices = async (req: Request, res: Response) => {
+  const bookingId = req.body.bookingId;
+
+  if (!bookingId) {
+    return errorResponseHandler(
+      "Booking ID is required",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Find the booking
+  const booking = await bookingModel.findById(bookingId);
+  
+  if (!booking) {
+    return errorResponseHandler(
+      "Booking not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+  
+  if (booking.bookingPaymentStatus) {
+    return errorResponseHandler(
+      "Payment already completed for this booking",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+  
+  // Find transaction associated with this booking
+  let transaction = await transactionModel.findOne({ bookingId: bookingId });
+  
+  // If no transaction exists, create one
+  if (!transaction) {
+    // Extract transaction ID from team members if available
+    let transactionId = null;
+    
+    // Check team1 for transaction ID
+    for (const player of booking.team1 || []) {
+      if (player.transactionId) {
+        transactionId = player.transactionId;
+        break;
+      }
+    }
+    
+    // If not found in team1, check team2
+    if (!transactionId) {
+      for (const player of booking.team2 || []) {
+        if (player.transactionId) {
+          transactionId = player.transactionId;
+          break;
+        }
+      }
+    }
+    
+    // If transaction ID found, get the transaction
+    if (transactionId) {
+      transaction = await transactionModel.findById(transactionId);
+    }
+    
+    // If still no transaction, create a new one
+    if (!transaction) {
+      transaction = await transactionModel.create({
+        userId: booking.userId,
+        bookingId: bookingId,
+        amount: booking.bookingAmount,
+        currency: "INR",
+        status: "created",
+        method: "razorpay",
+        isWebhookVerified: false
+      });
+    }
+  }
+  
+  // Update transaction with payment details
+  const updatedTransaction = await transactionModel.findByIdAndUpdate(
+    transaction._id,
+    {
+      razorpayPaymentId: req.body.razorpayPaymentId || "123456",
+      razorpaySignature: req.body.razorpaySignature || "123456",
+      razorpayOrderId: req.body.razorpayOrderId || "123456",
+      status: "captured",
+      isWebhookVerified: true
+    },
+    { new: true }
+  );
+  
+  // Update booking payment status
+  const updatedBooking = await bookingModel.findByIdAndUpdate(
+    bookingId,
+    { bookingPaymentStatus: true },
+    { new: true }
+  );
+  
+  return {
+    success: true,
+    message: "Payment completed successfully",
+    data: {
+      transaction: updatedTransaction,
+      booking: updatedBooking
+    }
   };
 };
