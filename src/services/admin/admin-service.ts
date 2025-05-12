@@ -253,6 +253,7 @@ export const getEmployeesService = async (payload: any, res: Response) => {
   const offset = (page - 1) * limit;
   const order = payload.order || "desc";
   const status = payload.status || ""; // Remove default "Working" status
+  const sortBy = payload.sortBy === "fullName" || payload.sortBy === "createdAt" ? payload.sortBy : "createdAt";
 
   // Validate status if provided
   if (status && !["Working", "Ex-Employee"].includes(status)) {
@@ -292,40 +293,61 @@ export const getEmployeesService = async (payload: any, res: Response) => {
     };
   }
 
-  // Build sort query
-  const sortBy: any = {};
-  if (payload.sortBy === "fullName") {
-    sortBy.fullName = order === "asc" ? 1 : -1;
-  } else {
-    sortBy.createdAt = order === "asc" ? 1 : -1;
+  try {
+    // Get total count based on search query
+    const totalEmployees = await employeesModel.countDocuments(searchQuery);
+
+    // Build aggregation pipeline for proper sorting
+    const pipeline = [
+      { $match: searchQuery },
+      {
+        $sort: {
+          [sortBy]: order === "asc" ? 1 : -1,
+        },
+      },
+      { $skip: offset },
+      { $limit: limit },
+      {
+        $project: {
+          password: 0,
+          otp: 0,
+        },
+      },
+    ];
+
+    // Execute aggregation with collation for case-insensitive sorting
+    const employees = await employeesModel
+      .aggregate(pipeline as any)
+      .collation({
+        locale: "en",
+        strength: 2, // Case-insensitive sorting
+      })
+      .exec();
+
+    return {
+      success: true,
+      message: "All users retrieved successfully",
+      data: employees,
+      meta: {
+        total: totalEmployees,
+        hasPreviousPage: page > 1,
+        hasNextPage: offset + limit < totalEmployees,
+        page,
+        limit,
+        totalPages: Math.ceil(totalEmployees / limit),
+        status: status || "all", // Return "all" when no status is specified
+        order,
+        sortBy,
+      },
+    };
+  } catch (error) {
+    console.error("Error in getEmployeesService:", error);
+    return errorResponseHandler(
+      "Error retrieving employees",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
   }
-
-  // Get total count based on search query
-  const totalEmployees = await employeesModel.countDocuments(searchQuery);
-
-  // Get employees
-  const employees = await employeesModel
-    .find(searchQuery, "-password -otp")
-    .skip(offset)
-    .limit(limit)
-    .sort(sortBy);
-
-  return {
-    success: true,
-    message: "All users retrieved successfully",
-    data: employees,
-    meta: {
-      total: totalEmployees,
-      hasPreviousPage: page > 1,
-      hasNextPage: offset + limit < totalEmployees,
-      page,
-      limit,
-      totalPages: Math.ceil(totalEmployees / limit),
-      status: status || "all", // Return "all" when no status is specified
-      order,
-      sortBy: payload.sortBy || "createdAt",
-    },
-  };
 };
 
 export const getEmployeeByIdService = async (payload: any, res: Response) => {

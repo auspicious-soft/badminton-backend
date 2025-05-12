@@ -60,7 +60,7 @@ export const newPassswordAfterOTPVerified = async (
 
 // ******************** Handle Employees **************************
 
-export const createEmployee = async (req: Request, res: Response) => {
+export const createEmployee = async (req: Request, res: Response): Promise<Response> => {
   try {
     const response = await createEmployeeService(req.body, res);
     return res.status(httpStatusCode.CREATED).json(response);
