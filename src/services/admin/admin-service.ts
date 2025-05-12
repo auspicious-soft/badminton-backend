@@ -689,24 +689,21 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
 //******************** Handle Users *************************
 
 export const getUsersService = async (payload: any, res: Response) => {
+  // Sorting logic at the top
+  let payload2 = payload.query;
+  const sortBy = payload2.sortBy === "fullName" || payload2.sortBy === "createdAt" ? payload2.sortBy : "fullName";
+  const order = payload2.order === "asc" || payload2.order === "desc" ? payload2.order : "asc";
+
+  // Log sorting parameters for debugging
+  console.log("Sorting Parameters:", { sortBy, order });
+
+  // Pagination and search parameters
   const { page, limit, search } = payload.query;
   const pageNumber = parseInt(page) || 1;
   const limitNumber = parseInt(limit) || 10;
   const offset = (pageNumber - 1) * limitNumber;
 
-  // Default sort is by fullName A-Z, unless explicitly changed
-  const order =
-    payload.sortBy === "createdAt" ? payload.order || "desc" : "asc"; // Always asc for fullName sorting
-
-  // Validate order
-  if (order && !["asc", "desc"].includes(order)) {
-    return errorResponseHandler(
-      "Invalid order. Must be either 'asc' or 'desc'",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
-
+  // Build search query
   const searchQuery = search
     ? {
         $or: [
@@ -718,22 +715,15 @@ export const getUsersService = async (payload: any, res: Response) => {
     : {};
 
   try {
+    // Count total users for pagination
     const totalUsers = await usersModel.countDocuments(searchQuery);
 
+    // Build aggregation pipeline
     const pipeline = [
       { $match: searchQuery },
       {
-        $addFields: {
-          sortField:
-            payload.sortBy === "createdAt"
-              ? "$createdAt"
-              : { $toLower: "$fullName" }, // Default to fullName sorting
-        },
-      },
-      {
         $sort: {
-          sortField:
-            payload.sortBy === "createdAt" ? (order === "asc" ? 1 : -1) : 1, // Always ascending for fullName
+          [sortBy]: order === "asc" ? 1 : -1,
         },
       },
       { $skip: offset },
@@ -750,8 +740,19 @@ export const getUsersService = async (payload: any, res: Response) => {
       },
     ];
 
-    const users = await usersModel.aggregate(pipeline as any);
+    // Log pipeline for debugging
+    console.log("Aggregation Pipeline:", JSON.stringify(pipeline, null, 2));
 
+    // Execute aggregation with collation for case-insensitive sorting
+    const users = await usersModel
+      .aggregate(pipeline as any)
+      .collation({
+        locale: "en",
+        strength: 2, // Case-insensitive sorting
+      })
+      .exec();
+
+    // Return response
     return {
       success: true,
       message: "All users retrieved successfully",
@@ -764,10 +765,11 @@ export const getUsersService = async (payload: any, res: Response) => {
         limit: limitNumber,
         totalPages: Math.ceil(totalUsers / limitNumber),
         order,
-        sortBy: payload.sortBy || "fullName",
+        sortBy,
       },
     };
   } catch (error) {
+    console.error("Error in getUsersService:", error);
     return errorResponseHandler(
       "Error retrieving users",
       httpStatusCode.INTERNAL_SERVER_ERROR,

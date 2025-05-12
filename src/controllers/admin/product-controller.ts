@@ -186,6 +186,9 @@ export const getProducts = async (req: Request, res: Response) => {
           });
       }
 
+      // Add soldThisMonth field with dummy data
+      (transformedProduct as any).soldThisMonth = 50;
+
       return transformedProduct;
     });
 
