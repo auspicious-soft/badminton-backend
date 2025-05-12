@@ -1179,16 +1179,55 @@ export const acceptFriendRequestServices = async (
   }
 
   // Define valid status values as constants
-  const VALID_STATUSES = ["accepted", "rejected"];
+  const VALID_STATUSES = ["accepted", "rejected", "unfriend"];
   if (!VALID_STATUSES.includes(status)) {
     return errorResponseHandler(
-      "Invalid status. Must be either 'accepted' or 'rejected'",
+      "Invalid status. Must be either 'accepted', 'rejected', or 'unfriend'",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  // Find the friend request with proper error handling
+  // Handle unfriend action separately
+  if (status === "unfriend") {
+    try {
+      // Find the friendship record
+      const friendship = await friendsModel.findOne({
+        _id: requestId,
+        status: "accepted", // Must be an accepted friendship
+        $or: [
+          { userId: userData.id },
+          { friendId: userData.id }
+        ]
+      });
+
+      if (!friendship) {
+        return errorResponseHandler(
+          "Friendship not found or already removed",
+          httpStatusCode.NOT_FOUND,
+          res
+        );
+      }
+
+      // Delete the friendship
+      await friendsModel.findByIdAndDelete(requestId);
+
+      return {
+        success: true,
+        message: "Friend removed successfully",
+        data: { relationshipId: requestId }
+      };
+    } catch (error) {
+      console.error("Error removing friend:", error);
+      return errorResponseHandler(
+        "Failed to remove friend. Please try again.",
+        httpStatusCode.INTERNAL_SERVER_ERROR,
+        res
+      );
+    }
+  }
+
+  // Handle accept/reject for pending requests
   try {
     // Find the friend request
     const friendRequest = await friendsModel.findOne({
