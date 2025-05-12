@@ -192,10 +192,13 @@ export const getProducts = async (req: Request, res: Response) => {
       return transformedProduct;
     });
 
+    const venues = await venueModel.find({isActive: true}).lean().select("_id name");
+
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Products retrieved successfully",
       data: transformedProducts,
+      venues,
       meta: {
         total: totalProducts,
         hasPreviousPage: pageNumber > 1,
@@ -402,5 +405,88 @@ export const addQuantityToProduct = async (req: Request, res: Response) => {
   }
 };
 
+
+export const getInventory = async (req: Request, res: Response) => {
+  try {
+    const { search, page, limit } = req.query;
+    const pageNumber = parseInt(page as string) || 1;
+    const limitNumber = parseInt(limit as string) || 10;
+    const offset = (pageNumber - 1) * limitNumber;
+
+    const searchQuery = search
+      ? {
+          $or: [
+            { productName: { $regex: search, $options: "i" } },
+            { description: { $regex: search, $options: "i" } },
+            { specification: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+    const totalProducts = await productModel.countDocuments(searchQuery);
+
+    // Use populate to get venue details
+    const products = await productModel
+      .find(searchQuery)
+      .populate("venueAndQuantity.venueId", "name address") // Populate venue details
+      .skip(offset)
+      .limit(limitNumber)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Transform the response to include venue name directly in venueAndQuantity
+    const transformedProducts = products.map((product) => {
+      const transformedProduct = { ...product };
+
+      // Transform venueAndQuantity to include venue name
+      if (transformedProduct.venueAndQuantity) {
+        transformedProduct.venueAndQuantity =
+          transformedProduct.venueAndQuantity.map((item) => {
+            if (item.venueId) {
+              // Extract venue details
+              const venueDetails =
+                typeof item.venueId === "object" ? item.venueId : null;
+
+              return {
+                venueId: venueDetails?._id || item.venueId,
+                quantity: item.quantity,
+                venueName: venueDetails && 'name' in venueDetails 
+                  ? String(venueDetails.name) 
+                  : "Unknown Venue",
+                venueLocation: venueDetails && typeof venueDetails === 'object' && 'address' in venueDetails
+                  ? String(venueDetails.address)
+                  : "Unknown Location",
+              };
+            }
+            return item;
+          });
+      }
+
+      // Add soldThisMonth field with dummy data
+      (transformedProduct as any).soldThisMonth = 50;
+
+      return transformedProduct;
+    });
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Products retrieved successfully",
+      data: transformedProducts,
+      meta: {
+        total: totalProducts,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: offset + limitNumber < totalProducts,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalProducts / limitNumber),
+      },
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
 
 

@@ -58,4 +58,7 @@ router.get("/get-matches", getMatches);
 router.route("/products").post(createProduct).get(getProducts);
 router.route("/products/:id").patch(updateProduct).get(getProductById).put(addQuantityToProduct);
 
+//Inventory routes
+router.route("/inventory").get().post()
+
 export { router };
