@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getMyMatches, uploadScore } from "src/controllers/user/booking-controller";
 import { acceptFriendRequest, blockUser, bookCourt, bookingPayment, getCourts, getFriends, getFriendsById, getOpenMatches, getOpenMatchesById, getUser, getVenues, joinOpenCourt, searchFriend, sendRequest, userHome, userNotifications } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
 // import {  getAllAuthorsForUser, getAuthorCountries, getAuthorForUser } from "src/controllers/authors/authors-controller";
@@ -43,6 +44,9 @@ router.get("/get-open-matches", getOpenMatches)
 router.get("/open-matches-data-byId/:id", getOpenMatchesById)
 router.post("/join-open-matches", joinOpenCourt)
 router.get("/user-notifications", userNotifications)
+
+router.get("/my-matches", getMyMatches)
+router.post("/upload-score", uploadScore)
 
 router.get("/search-friend", searchFriend)
 router.post("/send-request", sendRequest)

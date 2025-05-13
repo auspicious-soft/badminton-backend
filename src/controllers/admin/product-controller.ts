@@ -423,16 +423,39 @@ export const addQuantityToProduct = async (req: Request, res: Response) => {
 
 export const getInventory = async (req: Request, res: Response) => {
   try {
-    const { venueId } = req.query;
-
-    let inventory;
-
+    const { venueId, page, limit, search } = req.query;
+    
+    // Parse pagination parameters
+    const pageNumber = parseInt(page as string) || 1;
+    const limitNumber = parseInt(limit as string) || 10;
+    const offset = (pageNumber - 1) * limitNumber;
+    
+    // Build query
+    let query: any = {};
+    
+    // Add venueId filter if provided
     if (venueId) {
-      inventory = await inventoryModel.find({ venueId }).lean();
-    }else{
-      inventory = await inventoryModel.find().lean();
+      query.venueId = venueId;
     }
-
+    
+    // Add search filter if provided
+    if (search) {
+      query.productName = { $regex: search, $options: "i" };
+    }
+    
+    // Count total documents for pagination
+    const totalInventory = await inventoryModel.countDocuments(query);
+    
+    // Get paginated inventory
+    const inventory = await inventoryModel
+      .find(query)
+      .skip(offset)
+      .limit(limitNumber)
+      .sort({ createdAt: -1 })
+      .populate({path : "venueId", select:"name"})
+      .lean();
+    
+    // Get venues for dropdown
     const venues = await venueModel
       .find({ isActive: true })
       .lean()
@@ -442,6 +465,14 @@ export const getInventory = async (req: Request, res: Response) => {
       success: true,
       message: "Inventory retrieved successfully",
       data: { inventory, venues },
+      meta: {
+        total: totalInventory,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: offset + limitNumber < totalInventory,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalInventory / limitNumber),
+      },
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
