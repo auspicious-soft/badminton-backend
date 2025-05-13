@@ -424,15 +424,15 @@ export const addQuantityToProduct = async (req: Request, res: Response) => {
 export const getInventory = async (req: Request, res: Response) => {
   try {
     const { venueId } = req.query;
-    if (!venueId) {
-      errorResponseHandler(
-        "Venue ID is required",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
+
+    let inventory;
+
+    if (venueId) {
+      inventory = await inventoryModel.find({ venueId }).lean();
+    }else{
+      inventory = await inventoryModel.find().lean();
     }
 
-    const inventory = await inventoryModel.find({ venueId }).lean();
     const venues = await venueModel
       .find({ isActive: true })
       .lean()
