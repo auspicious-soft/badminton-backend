@@ -7,6 +7,7 @@ import {
 import { bookingModel } from "src/models/venue/booking-schema";
 import { venueModel } from "src/models/venue/venue-schema";
 import { courtModel } from "src/models/venue/court-schema";
+import { getCurrentISTTime } from "../utils";
 
 interface BookingRequestBody {
   venueId: string;
@@ -56,11 +57,7 @@ export const validateBookingRequest = async (
     }
 
     // Date validation using IST
-    const now = new Date();
-    const utcTime = now.getTime();
-    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-    const currentDate = new Date(utcTime + istOffset); // Current time in IST
-    
+    const currentDate = getCurrentISTTime();
     const bookingDateObj = new Date(bookingDate);
     
     // Set hours to 0 for proper date comparison (ignoring time)
@@ -280,6 +277,7 @@ export const validateBookingRequest = async (
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
 
 
 

@@ -20,6 +20,7 @@ import {
   verifyOtpPasswordResetService,
   newPassswordAfterOTPVerifiedUserService,
 } from "../../services/user/user-service";
+import { getCurrentISTTime } from "../../utils";
 
 export const userSignup = async (req: Request, res: Response) => {
   try {
@@ -113,15 +114,15 @@ export const verifyOtpPasswordReset = async (req: Request, res: Response) => {
 };
 
 export const verifyOtpPasswordForget = async (req: Request, res: Response) => {
-  const { otp } = req.body;
   try {
-    const response = await verifyOtpPasswordForgetService(otp, res);
-    return res.status(httpStatusCode.OK).json(response);
+    const { otp, phoneNumber } = req.body;
+    const response = await verifyOtpPasswordForgetService(otp, phoneNumber, res);
+    return res.status(httpStatusCode.OK).json({
+      ...response,
+      verifiedAt: getCurrentISTTime().toISOString() // Use IST time for verification timestamp
+    });
   } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
+    return formatErrorResponse(res, error);
   }
 };
 
@@ -237,18 +238,14 @@ export const changePasswordUser = async (req: Request, res: Response) => {
 
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
-    const verificationResult: any = await verifyOTPService(req.body, req, res);
-
-    res.status(200).json({
-      success: true,
-      data: verificationResult?.user,
-      message: verificationResult?.message,
+    const { otp, phoneNumber } = req.body;
+    const response = await verifyOTPService(otp, phoneNumber, res);
+    return res.status(httpStatusCode.OK).json({
+      ...response,
+      verifiedAt: getCurrentISTTime().toISOString() // Use IST time for verification timestamp
     });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "An error occurred",
-    });
+  } catch (error: any) {
+    return formatErrorResponse(res, error);
   }
 };
 export const resendOTP = async (req: Request, res: Response) => {

@@ -1,5 +1,6 @@
 import { venueModel } from "src/models/venue/venue-schema";
 import dotenv from "dotenv";
+import { getCurrentISTTime } from "../../utils";
 dotenv.config();
 
 export const updateVenueWeather = async () => {
@@ -13,7 +14,8 @@ export const updateVenueWeather = async () => {
       "location.coordinates": { $exists: true, $ne: [0, 0] },
     });
 
-    console.log(`🌦️ Updating weather for ${venues.length} venues`);
+    const currentTime = getCurrentISTTime();
+    console.log(`🌦️ Updating weather for ${venues.length} venues at ${currentTime.toISOString()} IST`);
     
     // Process venues in batches to avoid rate limiting
     const batchSize = 10;
@@ -47,7 +49,7 @@ export const updateVenueWeather = async () => {
               venue.weather = {
                 status: weatherData.current.condition.text,
                 icon: weatherData.current.condition.icon,
-                lastUpdated: new Date(weatherData.current.last_updated),
+                lastUpdated: getCurrentISTTime(), // Use IST time for lastUpdated
                 temperature: weatherData.current.temp_c,
               };
 

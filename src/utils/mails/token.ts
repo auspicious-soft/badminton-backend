@@ -1,5 +1,6 @@
 import { customAlphabet } from "nanoid";
 import { passwordResetTokenModel } from "../../models/password-token-schema";
+import { getCurrentISTTime } from "../index";
 
 export const generatePasswordResetToken = async (
   email: string | null,
@@ -9,8 +10,14 @@ export const generatePasswordResetToken = async (
   console.log("email: ", email);
   const genId = customAlphabet("0123456789", 6);
   const token = genId();
-  // Change expiry time to 2 minutes
-  const expires = new Date(new Date().getTime() + 2 * 60 * 1000);
+  
+  // Get current time in IST
+  const currentTime = getCurrentISTTime();
+  
+  // Set expiry to 2 minutes from current IST time
+  const expires = new Date(currentTime.getTime() + 2 * 60 * 1000);
+  
+  console.log(`Generated token at ${currentTime.toISOString()} IST, expires at ${expires.toISOString()} IST`);
 
   if (!phoneNumber && !email) {
     throw new Error("Either phone number or email is required");

@@ -164,13 +164,23 @@ export const increaseReferredCountAndCredits = async (id: mongoose.Types.ObjectI
 
 /**
  * Get current time in Indian Standard Time (IST)
+ * This function handles both local and production environments correctly
  * @returns Date object representing current time in IST
  */
 export const getCurrentISTTime = (): Date => {
   const now = new Date();
-  const utcTime = now.getTime();
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-  return new Date(utcTime + istOffset);
+  
+  // Get the local timezone offset in minutes
+  const localOffsetMinutes = now.getTimezoneOffset();
+  
+  // IST is UTC+5:30 (or -330 minutes from UTC)
+  const istOffsetMinutes = -330;
+  
+  // Calculate the difference between local timezone and IST in milliseconds
+  const offsetDiffMs = (localOffsetMinutes - istOffsetMinutes) * 60 * 1000;
+  
+  // Apply the difference to get IST time
+  return new Date(now.getTime() + offsetDiffMs);
 };
 
 /**
@@ -180,11 +190,28 @@ export const getCurrentISTTime = (): Date => {
  */
 export const isDateTodayInIST = (date: Date): boolean => {
   const istNow = getCurrentISTTime();
-  const istToday = new Date(istNow);
-  istToday.setHours(0, 0, 0, 0);
   
-  const dateOnly = new Date(date);
-  dateOnly.setHours(0, 0, 0, 0);
-  
-  return dateOnly.getTime() === istToday.getTime();
+  return (
+    date.getFullYear() === istNow.getFullYear() &&
+    date.getMonth() === istNow.getMonth() &&
+    date.getDate() === istNow.getDate()
+  );
+};
+
+/**
+ * Format a date to IST string representation
+ * @param date Date to format
+ * @returns String representation of the date in IST
+ */
+export const formatToISTString = (date: Date): string => {
+  // Create a date string that explicitly mentions IST
+  return date.toLocaleString('en-US', { 
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }) + ' IST';
 };

@@ -23,6 +23,7 @@ import { usersModel } from "src/models/user/user-schema";
 import { object } from "webidl-conversions";
 import { courtModel } from "src/models/venue/court-schema";
 import { productModel } from "src/models/admin/products-schema";
+import { getCurrentISTTime } from "../../utils";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -943,11 +944,8 @@ export const getMatchesService = async (payload: any, res: Response) => {
   }
 
   try {
-    // Get current time in IST (UTC+5:30)
-    const now = new Date();
-    const utcTime = now.getTime();
-    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-    const currentDate = new Date(utcTime + istOffset);
+    // Get current time in IST
+    const currentDate = getCurrentISTTime();
     
     console.log(`Current IST time: ${currentDate.toISOString()}`);
     

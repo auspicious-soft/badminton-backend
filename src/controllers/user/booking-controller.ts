@@ -8,6 +8,7 @@ import {
 import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
 import { object } from "webidl-conversions";
+import { getCurrentISTTime } from "../../utils";
 
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
@@ -28,11 +29,8 @@ export const getMyMatches = async (req: Request, res: Response) => {
       );
     }
 
-    // Get current time in IST (UTC+5:30)
-    const now = new Date();
-    const utcTime = now.getTime();
-    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-    const currentDate = new Date(utcTime + istOffset);
+    // Get current time in IST
+    const currentDate = getCurrentISTTime();
     
     console.log(`Current IST time: ${currentDate.toISOString()}`);
 

@@ -8,6 +8,7 @@ import { usersModel } from "src/models/user/user-schema";
 import mongoose from "mongoose";
 import { createNotification } from "src/models/notification/notification-schema";
 import { courtModel } from "src/models/venue/court-schema";
+import { getCurrentISTTime, isDateTodayInIST } from "../../utils";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
@@ -166,7 +167,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     const lngNum = Number(lng);
     const latNum = Number(lat);
 
-    // Parse the input date and handle timezone consistently
+    // Parse the input date
     const requestDate = new Date(date as string);
     requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
 
@@ -174,20 +175,11 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     const endOfDay = new Date(requestDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Get current time in IST (UTC+5:30)
-    const now = new Date();
-    const utcTime = now.getTime();
-    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-    const istTime = new Date(utcTime + istOffset);
+    // Get current time in IST
+    const istTime = getCurrentISTTime();
     
     // Check if the requested date is today in IST
-    const istToday = new Date(istTime);
-    istToday.setHours(0, 0, 0, 0);
-    
-    const isRequestedDateToday = 
-      requestDate.getFullYear() === istToday.getFullYear() &&
-      requestDate.getMonth() === istToday.getMonth() &&
-      requestDate.getDate() === istToday.getDate();
+    const isRequestedDateToday = isDateTodayInIST(requestDate);
     
     // Get current hour in IST
     const currentHour = istTime.getHours();
@@ -466,7 +458,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
     // If date is provided, get availability for that date
     if (date) {
-      // Parse the input date and convert to IST
+      // Parse the input date
       const requestDate = new Date(date as string);
       requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
 
@@ -474,20 +466,11 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       const endOfDay = new Date(requestDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Get current time in IST (UTC+5:30)
-      const now = new Date();
-      const utcTime = now.getTime();
-      const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-      const istTime = new Date(utcTime + istOffset);
+      // Get current time in IST
+      const istTime = getCurrentISTTime();
       
       // Check if the requested date is today in IST
-      const istToday = new Date(istTime);
-      istToday.setHours(0, 0, 0, 0);
-      
-      const isRequestedDateToday = 
-        requestDate.getFullYear() === istToday.getFullYear() &&
-        requestDate.getMonth() === istToday.getMonth() &&
-        requestDate.getDate() === istToday.getDate();
+      const isRequestedDateToday = isDateTodayInIST(requestDate);
       
       // Get current hour in IST
       const currentHour = istTime.getHours();
@@ -624,7 +607,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const lngNum = Number(lng);
   const latNum = Number(lat);
 
-  // Parse the input date and handle timezone consistently
+  // Parse the input date
   const requestDate = new Date(date as string);
   requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
 
@@ -632,20 +615,11 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const endOfDay = new Date(requestDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  // Get current time in IST (UTC+5:30)
-  const now = new Date();
-  const utcTime = now.getTime();
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
-  const istTime = new Date(utcTime + istOffset);
+  // Get current time in IST
+  const istTime = getCurrentISTTime();
   
   // Check if the requested date is today in IST
-  const istToday = new Date(istTime);
-  istToday.setHours(0, 0, 0, 0);
-  
-  const isRequestedDateToday = 
-    requestDate.getFullYear() === istToday.getFullYear() &&
-    requestDate.getMonth() === istToday.getMonth() &&
-    requestDate.getDate() === istToday.getDate();
+  const isRequestedDateToday = isDateTodayInIST(requestDate);
   
   // Get current hour in IST
   const currentHour = istTime.getHours();
@@ -653,240 +627,249 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
   console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
-  // First, get bookings with askToJoin = true and for the specified date
-  const bookings = await bookingModel
-    .find({
-      askToJoin: true,
-      bookingDate: {
-        $gte: requestDate,
-        $lte: endOfDay,
-      },
-    })
-    .lean();
+  try {
+    // First, get bookings with askToJoin = true and for the specified date
+    const bookings = await bookingModel
+      .find({
+        askToJoin: true,
+        bookingDate: {
+          $gte: requestDate,
+          $lte: endOfDay,
+        },
+      })
+      .lean();
 
-  console.log(`Found ${bookings.length} open bookings for date ${date}`);
+    console.log(`Found ${bookings.length} open bookings for date ${date}`);
 
-  if (bookings.length === 0) {
-    return {
-      success: true,
-      message: "No open matches found",
-      data: [],
-    };
-  }
+    if (bookings.length === 0) {
+      return {
+        success: true,
+        message: "No open matches found",
+        data: [],
+      };
+    }
 
-  // Get all venue IDs from the bookings
-  const venueIds = [...new Set(bookings.map((booking) => booking.venueId))];
+    // Get all venue IDs from the bookings
+    const venueIds = [...new Set(bookings.map((booking) => booking.venueId))];
 
-  // Get all court IDs from the bookings
-  const courtIds = [...new Set(bookings.map((booking) => booking.courtId))];
+    // Get all court IDs from the bookings
+    const courtIds = [...new Set(bookings.map((booking) => booking.courtId))];
 
-  // Get venues data
-  const venues = await venueModel
-    .find({
-      _id: { $in: venueIds },
+    // Get venues data
+    const venues = await venueModel
+      .find({
+        _id: { $in: venueIds },
+        isActive: true,
+      })
+      .select("_id name city state image weather location")
+      .lean();
+
+    console.log(`Found ${venues.length} venues for open matches`);
+
+    // Create a map of venues by ID for quick lookup
+    const venuesMap = venues.reduce((map, venue) => {
+      map[venue._id.toString()] = venue;
+      return map;
+    }, {} as Record<string, any>);
+
+    // Get courts data with game filtering if needed
+    let courtsQuery: any = {
+      _id: { $in: courtIds },
       isActive: true,
-    })
-    .select("_id name city state image weather location")
-    .lean();
-
-  console.log(`Found ${venues.length} venues for open matches`);
-
-  // Create a map of venues by ID for quick lookup
-  const venuesMap = venues.reduce((map, venue) => {
-    map[venue._id.toString()] = venue;
-    return map;
-  }, {} as Record<string, any>);
-
-  // Get courts data with game filtering if needed
-  let courtsQuery: any = {
-    _id: { $in: courtIds },
-    isActive: true,
-  };
-
-  if (game !== "all") {
-    courtsQuery.games = game;
-  }
-
-  const courts = await courtModel
-    .find(courtsQuery)
-    .select("_id name venueId games hourlyRate image")
-    .lean();
-
-  console.log(
-    `Found ${courts.length} courts for open matches with game filter: ${game}`
-  );
-
-  // Create a map of courts by ID for quick lookup
-  const courtsMap = courts.reduce((map, court) => {
-    map[court._id.toString()] = court;
-    return map;
-  }, {} as Record<string, any>);
-
-  // Get all user IDs from team1 and team2
-  const userIds = new Set<string>();
-  bookings.forEach((booking) => {
-    booking.team1?.forEach((player: any) => {
-      if (player.playerId) userIds.add(player.playerId.toString());
-    });
-    booking.team2?.forEach((player: any) => {
-      if (player.playerId) userIds.add(player.playerId.toString());
-    });
-  });
-
-  // Get user data
-  const users = await usersModel
-    .find({
-      _id: { $in: Array.from(userIds) },
-    })
-    .select("_id fullName profilePic")
-    .lean();
-
-  // Create a map of users by ID for quick lookup
-  const usersMap = users.reduce((map, user) => {
-    map[user._id.toString()] = {
-      _id: user._id,
-      name: user.fullName,
-      image: user.profilePic,
     };
-    return map;
-  }, {} as Record<string, any>);
 
-  // Process bookings to include venue, court, and player data
-  const processedBookings = bookings
-    .filter((booking) => {
-      // Filter out bookings where the court doesn't match the game filter
-      const courtId = booking.courtId.toString();
-      if (!courtsMap[courtId]) return false;
+    if (game !== "all") {
+      courtsQuery.games = game;
+    }
 
-      // For today, filter out bookings with slots that have already passed
-      if (isRequestedDateToday) {
-        // Handle both array and string cases for bookingSlots
-        const bookingSlotsArray = Array.isArray(booking.bookingSlots)
+    const courts = await courtModel
+      .find(courtsQuery)
+      .select("_id name venueId games hourlyRate image")
+      .lean();
+
+    console.log(
+      `Found ${courts.length} courts for open matches with game filter: ${game}`
+    );
+
+    // Create a map of courts by ID for quick lookup
+    const courtsMap = courts.reduce((map, court) => {
+      map[court._id.toString()] = court;
+      return map;
+    }, {} as Record<string, any>);
+
+    // Get all user IDs from team1 and team2
+    const userIds = new Set<string>();
+    bookings.forEach((booking) => {
+      booking.team1?.forEach((player: any) => {
+        if (player.playerId) userIds.add(player.playerId.toString());
+      });
+      booking.team2?.forEach((player: any) => {
+        if (player.playerId) userIds.add(player.playerId.toString());
+      });
+    });
+
+    // Get user data
+    const users = await usersModel
+      .find({
+        _id: { $in: Array.from(userIds) },
+      })
+      .select("_id fullName profilePic")
+      .lean();
+
+    // Create a map of users by ID for quick lookup
+    const usersMap = users.reduce((map, user) => {
+      map[user._id.toString()] = {
+        _id: user._id,
+        name: user.fullName,
+        image: user.profilePic,
+      };
+      return map;
+    }, {} as Record<string, any>);
+
+    // Process bookings to include venue, court, and player data
+    const processedBookings = bookings
+      .filter((booking) => {
+        // Filter out bookings where the court doesn't match the game filter
+        const courtId = booking.courtId.toString();
+        if (!courtsMap[courtId]) return false;
+
+        // For today, filter out bookings with slots that have already passed
+        if (isRequestedDateToday) {
+          // Handle both array and string cases for bookingSlots
+          const bookingSlotsArray = Array.isArray(booking.bookingSlots)
+            ? booking.bookingSlots
+            : [booking.bookingSlots];
+
+          // Check if all booking slots have passed
+          const allSlotsPassed = bookingSlotsArray.every((slot: string) => {
+            const slotHour = parseInt(slot.split(":")[0], 10);
+            return slotHour <= currentHour;
+          });
+
+          // Skip this booking if all slots have passed
+          if (allSlotsPassed) {
+            console.log(
+              `Filtering out booking ${booking._id} as all slots have passed`
+            );
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .map((booking) => {
+        const venueId = booking.venueId.toString();
+        const courtId = booking.courtId.toString();
+        const venue = venuesMap[venueId];
+        const court = courtsMap[courtId];
+
+        // Skip if venue or court not found (should not happen after filtering)
+        if (!venue || !court) return null;
+
+        // Calculate distance if venue has location
+        let distance = null;
+        if (venue.location?.coordinates?.length === 2) {
+          const [venueLng, venueLat] = venue.location.coordinates;
+          // Haversine formula for distance calculation
+          const R = 6371; // Earth radius in km
+          const dLat = ((venueLat - latNum) * Math.PI) / 180;
+          const dLon = ((venueLng - lngNum) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((latNum * Math.PI) / 180) *
+              Math.cos((venueLat * Math.PI) / 180) *
+              Math.sin(dLon / 2) *
+              Math.sin(dLon / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          distance = R * c;
+
+          // Limit to reasonable distance (100 km)
+          if (distance > 100) {
+            return null; // Skip venues that are too far away
+          }
+        }
+
+        // For today, filter out booking slots that have already passed
+        let filteredBookingSlots: string[] = Array.isArray(booking.bookingSlots)
           ? booking.bookingSlots
           : [booking.bookingSlots];
 
-        // Check if all booking slots have passed
-        const allSlotsPassed = bookingSlotsArray.every((slot: string) => {
-          const slotHour = parseInt(slot.split(":")[0], 10);
-          return slotHour <= currentHour;
+        if (isRequestedDateToday) {
+          filteredBookingSlots = filteredBookingSlots.filter((slot: string) => {
+            const slotHour = parseInt(slot.split(":")[0], 10);
+            return slotHour > currentHour;
+          });
+        }
+
+        // Process team1 players
+        const team1 = (booking.team1 || []).map((player: any) => {
+          const playerId = player.playerId?.toString();
+          return {
+            playerType: player.playerType,
+            player: playerId ? usersMap[playerId] : null,
+          };
         });
 
-        // Skip this booking if all slots have passed
-        if (allSlotsPassed) {
-          console.log(
-            `Filtering out booking ${booking._id} as all slots have passed`
-          );
-          return false;
-        }
-      }
-
-      return true;
-    })
-    .map((booking) => {
-      const venueId = booking.venueId.toString();
-      const courtId = booking.courtId.toString();
-      const venue = venuesMap[venueId];
-      const court = courtsMap[courtId];
-
-      // Skip if venue or court not found (should not happen after filtering)
-      if (!venue || !court) return null;
-
-      // Calculate distance if venue has location
-      let distance = null;
-      if (venue.location?.coordinates?.length === 2) {
-        const [venueLng, venueLat] = venue.location.coordinates;
-        // Haversine formula for distance calculation
-        const R = 6371; // Earth radius in km
-        const dLat = ((venueLat - latNum) * Math.PI) / 180;
-        const dLon = ((venueLng - lngNum) * Math.PI) / 180;
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((latNum * Math.PI) / 180) *
-            Math.cos((venueLat * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        distance = R * c;
-
-        // Limit to reasonable distance (100 km)
-        if (distance > 100) {
-          return null; // Skip venues that are too far away
-        }
-      }
-
-      // For today, filter out booking slots that have already passed
-      let filteredBookingSlots: string[] = Array.isArray(booking.bookingSlots)
-        ? booking.bookingSlots
-        : [booking.bookingSlots];
-
-      if (isRequestedDateToday) {
-        filteredBookingSlots = filteredBookingSlots.filter((slot: string) => {
-          const slotHour = parseInt(slot.split(":")[0], 10);
-          return slotHour > currentHour;
+        // Process team2 players
+        const team2 = (booking.team2 || []).map((player: any) => {
+          const playerId = player.playerId?.toString();
+          return {
+            playerType: player.playerType,
+            player: playerId ? usersMap[playerId] : null,
+          };
         });
-      }
 
-      // Process team1 players
-      const team1 = (booking.team1 || []).map((player: any) => {
-        const playerId = player.playerId?.toString();
         return {
-          playerType: player.playerType,
-          player: playerId ? usersMap[playerId] : null,
+          _id: booking._id,
+          bookingDate: booking.bookingDate,
+          bookingSlots: filteredBookingSlots,
+          askToJoin: booking.askToJoin,
+          isCompetitive: booking.isCompetitive,
+          skillRequired: booking.skillRequired,
+          team1,
+          team2,
+          venue: {
+            _id: venue._id,
+            name: venue.name,
+            city: venue.city,
+            state: venue.state,
+            image: venue.image,
+            weather: venue.weather,
+          },
+          court,
+          distance: distance !== null ? Math.round(distance * 10) / 10 : null,
         };
-      });
-
-      // Process team2 players
-      const team2 = (booking.team2 || []).map((player: any) => {
-        const playerId = player.playerId?.toString();
-        return {
-          playerType: player.playerType,
-          player: playerId ? usersMap[playerId] : null,
-        };
-      });
-
-      return {
-        _id: booking._id,
-        bookingDate: booking.bookingDate,
-        bookingSlots: filteredBookingSlots,
-        askToJoin: booking.askToJoin,
-        isCompetitive: booking.isCompetitive,
-        skillRequired: booking.skillRequired,
-        team1,
-        team2,
-        venue: {
-          _id: venue._id,
-          name: venue.name,
-          city: venue.city,
-          state: venue.state,
-          image: venue.image,
-          weather: venue.weather,
-        },
-        court,
-        distance: distance !== null ? Math.round(distance * 10) / 10 : null,
-      };
-    })
-    .filter((booking) => booking !== null) as any[];
-
-  // Sort by distance
-  processedBookings.sort((a, b) => {
-    // Handle null distances (put them at the end)
-    if (a.distance === null && b.distance === null) return 0;
-    if (a.distance === null) return 1;
-    if (b.distance === null) return -1;
+      })
+      .filter((booking) => booking !== null) as any[];
 
     // Sort by distance
-    return distance === "ASC"
-      ? a.distance - b.distance
-      : b.distance - a.distance;
-  });
+    processedBookings.sort((a, b) => {
+      // Handle null distances (put them at the end)
+      if (a.distance === null && b.distance === null) return 0;
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
 
-  console.log(`Returning ${processedBookings.length} processed open matches`);
+      // Sort by distance
+      return distance === "ASC"
+        ? a.distance - b.distance
+        : b.distance - a.distance;
+    });
 
-  return {
-    success: true,
-    message: "Open matches retrieved successfully",
-    data: processedBookings,
-  };
+    console.log(`Returning ${processedBookings.length} processed open matches`);
+
+    return {
+      success: true,
+      message: "Open matches retrieved successfully",
+      data: processedBookings,
+    };
+  } catch (error) {
+    console.error("Error in getOpenMatchesServices:", error);
+    return errorResponseHandler(
+      "Error retrieving open matches: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
 };
 
 export const getOpenMatchesByIdServices = async (
