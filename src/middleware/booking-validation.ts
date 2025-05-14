@@ -198,9 +198,9 @@ export const validateBookingRequest = async (
     }
 
     // Skill validation
-    if (skillRequired && (skillRequired < 0 || skillRequired > 10)) {
+    if (skillRequired && (skillRequired < 0 || skillRequired > 100)) {
       return errorResponseHandler(
-        "Skill required must be between 0 and 5",
+        "Skill required must be between 0 and 100",
         httpStatusCode.BAD_REQUEST,
         res
       );
