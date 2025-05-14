@@ -20,6 +20,7 @@ import {
   addQuantityToProduct,
   createInventory,
   createProduct,
+  deleteInventory,
   getInventory,
   getProductById,
   getProducts,
@@ -70,6 +71,7 @@ router
   .route("/inventory")
   .get(getInventory)
   .post(createInventory)
-  .put(updateInventory);
+  .put(updateInventory)
+  .delete(deleteInventory);
 
 export { router };

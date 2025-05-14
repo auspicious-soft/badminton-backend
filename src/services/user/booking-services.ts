@@ -26,26 +26,27 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     bookingType,
   } = req.body;
 
-  let playerType = ["player1", "player2", "player3", "player4"];
   let paidFor: any[] = [];
 
-  // ********************Validattions****************************
+  // ********************Validations****************************
 
   const bookingPrice: number = 600,
     completeCourtPrice: number = 1200,
     playerPayment: number = 300;
 
-  [...team1, ...team2].map((items, indx) => {
-    if (items.playerId && items.playerId === userData.id) {
-      items.paidBy = "Self";
-      items.playerType = playerType[indx];
-      paidFor.push(playerType[indx]);
-    }
-    if (items.playerId && items.playerId !== userData.id) {
-      items.paidBy = "User";
-      items.playerPayment = playerPayment;
-      items.playerType = playerType[indx];
-      paidFor.push(playerType[indx]);
+  // Process all players to set payment information
+  [...team1, ...team2].forEach((item) => {
+    if (item.playerId && item.playerId === userData.id) {
+      item.paidBy = "Self";
+      if (item.playerType) {
+        paidFor.push(item.playerType);
+      }
+    } else if (item.playerId && item.playerId !== userData.id) {
+      item.paidBy = "User";
+      item.playerPayment = playerPayment;
+      if (item.playerType) {
+        paidFor.push(item.playerType);
+      }
     }
   });
 

@@ -424,37 +424,38 @@ export const addQuantityToProduct = async (req: Request, res: Response) => {
 export const getInventory = async (req: Request, res: Response) => {
   try {
     const { venueId, page, limit, search } = req.query;
-    
+
     // Parse pagination parameters
     const pageNumber = parseInt(page as string) || 1;
     const limitNumber = parseInt(limit as string) || 10;
     const offset = (pageNumber - 1) * limitNumber;
-    
+
     // Build query
     let query: any = {};
-    
+    query.isActive = true;
+
     // Add venueId filter if provided
     if (venueId) {
       query.venueId = venueId;
     }
-    
+
     // Add search filter if provided
     if (search) {
       query.productName = { $regex: search, $options: "i" };
     }
-    
+
     // Count total documents for pagination
     const totalInventory = await inventoryModel.countDocuments(query);
-    
+
     // Get paginated inventory
     const inventory = await inventoryModel
       .find(query)
       .skip(offset)
       .limit(limitNumber)
       .sort({ createdAt: -1 })
-      .populate({path : "venueId", select:"name"})
+      .populate({ path: "venueId", select: "name" })
       .lean();
-    
+
     // Get venues for dropdown
     const venues = await venueModel
       .find({ isActive: true })
@@ -528,6 +529,45 @@ export const createInventory = async (req: Request, res: Response) => {
   }
 };
 
+export const deleteInventory = async (req: Request, res: Response) => {
+  try {
+    let { id } = req.query;
+
+    if (!id) {
+      return errorResponseHandler(
+        "Inventory ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const checkExist = await inventoryModel.findOne({
+      _id: id,
+      isActive: true,
+    });
+
+    if (!checkExist) {
+      return errorResponseHandler(
+        "Inventory not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    await inventoryModel.findByIdAndUpdate(id, { isActive: false });
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Inventory deleted successfully",
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
 export const updateInventory = async (req: Request, res: Response) => {
   try {
     let { inventoryId, type, quantity } = req.body;
@@ -569,11 +609,11 @@ export const updateInventory = async (req: Request, res: Response) => {
 
     if (type === "inUse") {
       let inStock = Number(checkExist?.inStock || 0);
-      
+
       if (quantity > checkExist.isUse) {
         // Calculate how many more items are being used
         const additionalUsed = quantity - checkExist.isUse;
-        
+
         // Check if there's enough stock
         if (inStock < additionalUsed) {
           return errorResponseHandler(
@@ -582,9 +622,9 @@ export const updateInventory = async (req: Request, res: Response) => {
             res
           );
         }
-        
+
         response = await inventoryModel.findByIdAndUpdate(
-          inventoryId, 
+          inventoryId,
           {
             inStock: inStock - additionalUsed,
             isUse: quantity,
@@ -596,9 +636,9 @@ export const updateInventory = async (req: Request, res: Response) => {
         const returnedToStock = checkExist.isUse - quantity;
         // Add returned items to inStock
         const newInStock = inStock + returnedToStock;
-        
+
         response = await inventoryModel.findByIdAndUpdate(
-          inventoryId, 
+          inventoryId,
           {
             inStock: newInStock,
             isUse: quantity,
@@ -608,7 +648,7 @@ export const updateInventory = async (req: Request, res: Response) => {
       }
     } else {
       response = await inventoryModel.findByIdAndUpdate(
-        inventoryId, 
+        inventoryId,
         {
           inStock: quantity,
         },
