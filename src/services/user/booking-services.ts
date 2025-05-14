@@ -54,7 +54,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
   try {
     await session.startTransaction();
-    
+
     // Create the transaction first
     const bookingTransaction = await transactionModel.create(
       [
@@ -113,14 +113,14 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
     // Insert the bookings
     const bookings = await bookingModel.insertMany(finalPayload, { session });
-    
+
     // Get all booking IDs
-    const bookingIds = bookings.map(booking => booking._id);
-    
+    const bookingIds = bookings.map((booking) => booking._id);
+
     // Update the transaction with the booking IDs
     await transactionModel.findByIdAndUpdate(
       bookingTransaction[0]._id,
-      { bookingId: bookingIds[0] }, // Store the first booking ID in the transaction
+      { bookingId: bookingIds }, // Store the first booking ID in the transaction
       { session }
     );
 
@@ -132,10 +132,10 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       data: {
         transaction: {
           ...bookingTransaction[0].toObject(),
-          bookingId: bookingIds[0]
+          bookingId: bookingIds,
         },
-        bookings: bookings
-      }
+        bookings: bookings,
+      },
     };
   } catch (error) {
     await session.abortTransaction();
@@ -291,125 +291,113 @@ export const userNotificationServices = async (req: Request, res: Response) => {
 };
 
 export const paymentBookingServices = async (req: Request, res: Response) => {
-  const bookingId = req.body.bookingId;
+  const transactionId = req.body.transactionId;
 
-  if (!bookingId) {
+  if (!transactionId) {
     return errorResponseHandler(
-      "Booking ID is required",
+      "Transaction ID is required",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  // Find the booking
-  const booking = await bookingModel.findById(bookingId);
-  
-  if (!booking) {
+  // Find the transaction
+  const transaction = await transactionModel.findById(transactionId).lean();
+
+  if (!transaction) {
     return errorResponseHandler(
-      "Booking not found",
+      "Transaction not found",
       httpStatusCode.NOT_FOUND,
       res
     );
   }
-  
-  if (booking.bookingPaymentStatus) {
+
+  if (transaction.isWebhookVerified) {
     return errorResponseHandler(
-      "Payment already completed for this booking",
+      "Payment already completed for this transaction",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
-  
-  // Find transaction associated with this booking
-  let transaction: any = await transactionModel.findOne({ bookingId: bookingId });
-  
-  // If no transaction exists, create one
-  if (!transaction) {
-    // Extract transaction ID from team members if available
-    let transactionId = null;
-    
-    // Check team1 for transaction ID
-    for (const player of booking.team1 || []) {
-      if (player.transactionId) {
-        transactionId = player.transactionId;
-        break;
-      }
-    }
-    
-    // If not found in team1, check team2
-    if (!transactionId) {
-      for (const player of booking.team2 || []) {
-        if (player.transactionId) {
-          transactionId = player.transactionId;
-          break;
-        }
-      }
-    }
-    
-    // If transaction ID found, get the transaction
-    if (transactionId) {
-      transaction = await transactionModel.findById(transactionId);
-    }
-    
-    // If still no transaction, create a new one
-    if (!transaction) {
-      transaction = await transactionModel.create({
-        userId: booking.userId,
-        bookingId: bookingId,
-        amount: booking.bookingAmount,
-        currency: "INR",
-        status: "created",
-        method: "razorpay",
-        isWebhookVerified: false
-      });
-    }
+
+  // Get all booking IDs from the transaction
+  const bookingIds = transaction.bookingId || [];
+
+  if (bookingIds.length === 0) {
+    return errorResponseHandler(
+      "No bookings associated with this transaction",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
-  
-  // Update transaction with payment details
-  const updatedTransaction = await transactionModel.findByIdAndUpdate(
-    transaction._id,
-    {
-      razorpayPaymentId: req.body.razorpayPaymentId || "123456",
-      razorpaySignature: req.body.razorpaySignature || "123456",
-      razorpayOrderId: req.body.razorpayOrderId || "123456",
-      status: "captured",
-      isWebhookVerified: true
-    },
-    { new: true }
-  );
-  
-  // Prepare updates for team1 players
-  const updateOperations: any = { bookingPaymentStatus: true };
-  
-  // Update team1 players' payment status
-  booking.team1.forEach((player : any, index : any) => {
-    if (player.transactionId && 
-        player.transactionId.toString() === transaction._id.toString()) {
-      updateOperations[`team1.${index}.paymentStatus`] = "Paid";
-    }
-  });
-  
-  // Update team2 players' payment status
-  booking.team2.forEach((player : any, index : any) => {
-    if (player.transactionId && 
-        player.transactionId.toString() === transaction._id.toString()) {
-      updateOperations[`team2.${index}.paymentStatus`] = "Paid";
-    }
-  });
-  
-  // Update booking with all changes
-  const updatedBooking = await bookingModel.findByIdAndUpdate(
-    bookingId,
-    { $set: updateOperations },
-    { new: true }
-  );
-  
-  return {
-    success: true,
-    message: "Payment completed successfully",
-    data: {
-      transaction: updatedTransaction,
-      booking: updatedBooking
-    }
-  };
+
+  // Start a session for transaction consistency
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    // Update the transaction with payment details
+    const updatedTransaction = await transactionModel.findByIdAndUpdate(
+      transactionId,
+      {
+        razorpayPaymentId: req.body.razorpayPaymentId || "dummy_payment_id",
+        razorpaySignature: req.body.razorpaySignature || "dummy_signature",
+        razorpayOrderId: req.body.razorpayOrderId || "dummy_order_id",
+        status: "captured",
+        isWebhookVerified: true,
+      },
+      { new: true, session }
+    );
+
+    // Get all bookings that need to be updated
+    const bookings = await bookingModel.find({ _id: { $in: bookingIds } });
+
+    // Update each booking
+    const updatedBookings = await Promise.all(
+      bookings.map(async (booking) => {
+        // Prepare updates for team1 players
+        const updateOperations: any = { bookingPaymentStatus: true };
+
+        // Update team1 players' payment status
+        booking.team1.forEach((player: any, index: number) => {
+          if (
+            player.transactionId &&
+            player.transactionId.toString() === transactionId
+          ) {
+            updateOperations[`team1.${index}.paymentStatus`] = "Paid";
+          }
+        });
+
+        // Update team2 players' payment status
+        booking.team2.forEach((player: any, index: number) => {
+          if (
+            player.transactionId &&
+            player.transactionId.toString() === transactionId
+          ) {
+            updateOperations[`team2.${index}.paymentStatus`] = "Paid";
+          }
+        });
+
+        // Update booking with all changes
+        return bookingModel.findByIdAndUpdate(
+          booking._id,
+          { $set: updateOperations },
+          { new: true, session }
+        );
+      })
+    );
+
+    await session.commitTransaction();
+
+    return {
+      success: true,
+      message: "Payment completed successfully",
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 };
