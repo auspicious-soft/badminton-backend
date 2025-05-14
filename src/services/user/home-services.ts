@@ -151,11 +151,12 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
 export const getVenuesServices = async (req: Request, res: Response) => {
   try {
+    const userData = req.user as any;
     const { date, distance = "ASC", game = "all", lng, lat } = req.query;
 
-    if (!lng || !lat || !date) {
+    if (!date || !lng || !lat) {
       return errorResponseHandler(
-        "Invalid Payload",
+        "Date, longitude, and latitude are required",
         httpStatusCode.BAD_REQUEST,
         res
       );
@@ -165,7 +166,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     const lngNum = Number(lng);
     const latNum = Number(lat);
 
-    // Parse the input date
+    // Parse the input date and handle timezone consistently
     const requestDate = new Date(date as string);
     requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
 
@@ -173,11 +174,26 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     const endOfDay = new Date(requestDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Check if the requested date is today
-    const today = new Date();
-    const isRequestedDateToday =
-      requestDate.toDateString() === today.toDateString();
-    const currentHour = today.getHours();
+    // Get current time in IST (UTC+5:30)
+    const now = new Date();
+    const utcTime = now.getTime();
+    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+    const istTime = new Date(utcTime + istOffset);
+    
+    // Check if the requested date is today in IST
+    const istToday = new Date(istTime);
+    istToday.setHours(0, 0, 0, 0);
+    
+    const isRequestedDateToday = 
+      requestDate.getFullYear() === istToday.getFullYear() &&
+      requestDate.getMonth() === istToday.getMonth() &&
+      requestDate.getDate() === istToday.getDate();
+    
+    // Get current hour in IST
+    const currentHour = istTime.getHours();
+    
+    console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
+    console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
     // Step 1: Get venues based on location
     const geoQuery: any = { isActive: true };
@@ -450,7 +466,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
     // If date is provided, get availability for that date
     if (date) {
-      // Parse the input date
+      // Parse the input date and convert to IST
       const requestDate = new Date(date as string);
       requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
 
@@ -458,11 +474,26 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       const endOfDay = new Date(requestDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // Check if the requested date is today
-      const today = new Date();
-      const isRequestedDateToday =
-        requestDate.toDateString() === today.toDateString();
-      const currentHour = today.getHours();
+      // Get current time in IST (UTC+5:30)
+      const now = new Date();
+      const utcTime = now.getTime();
+      const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+      const istTime = new Date(utcTime + istOffset);
+      
+      // Check if the requested date is today in IST
+      const istToday = new Date(istTime);
+      istToday.setHours(0, 0, 0, 0);
+      
+      const isRequestedDateToday = 
+        requestDate.getFullYear() === istToday.getFullYear() &&
+        requestDate.getMonth() === istToday.getMonth() &&
+        requestDate.getDate() === istToday.getDate();
+      
+      // Get current hour in IST
+      const currentHour = istTime.getHours();
+      
+      console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
+      console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
       // Get all bookings for this venue on the specified date
       const bookings = await bookingModel
@@ -524,7 +555,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
             return false;
           }
 
-          // For today only, filter out past time slots
+          // For today only, filter out past time slots based on IST
           if (isRequestedDateToday) {
             const slotHour = parseInt(slot.split(":")[0], 10);
             if (slotHour <= currentHour) {
@@ -595,27 +626,32 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
 
   // Parse the input date and handle timezone consistently
   const requestDate = new Date(date as string);
-  // Set to beginning of day in local timezone
-  requestDate.setHours(0, 0, 0, 0);
+  requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
 
-  // End of the requested day in local timezone
+  // End of the requested day
   const endOfDay = new Date(requestDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  console.log(`Request date: ${requestDate.toISOString()}`);
-  console.log(`End of day: ${endOfDay.toISOString()}`);
-
-  // Check if the requested date is today (comparing dates in local timezone)
-  const today = new Date();
-  const isRequestedDateToday =
-    requestDate.getDate() === today.getDate() &&
-    requestDate.getMonth() === today.getMonth() &&
-    requestDate.getFullYear() === today.getFullYear();
-
-  const currentHour = today.getHours();
-  console.log(
-    `Is today: ${isRequestedDateToday}, Current hour: ${currentHour}`
-  );
+  // Get current time in IST (UTC+5:30)
+  const now = new Date();
+  const utcTime = now.getTime();
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+  const istTime = new Date(utcTime + istOffset);
+  
+  // Check if the requested date is today in IST
+  const istToday = new Date(istTime);
+  istToday.setHours(0, 0, 0, 0);
+  
+  const isRequestedDateToday = 
+    requestDate.getFullYear() === istToday.getFullYear() &&
+    requestDate.getMonth() === istToday.getMonth() &&
+    requestDate.getDate() === istToday.getDate();
+  
+  // Get current hour in IST
+  const currentHour = istTime.getHours();
+  
+  console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
+  console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
   // First, get bookings with askToJoin = true and for the specified date
   const bookings = await bookingModel

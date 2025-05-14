@@ -927,7 +927,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
     limit,
     search,
     type = "upcoming",
-    game = "all", // Changed from gameType to game to match the URL parameter
+    game = "all",
     date,
   } = payload.query;
   const pageNumber = parseInt(page) || 1;
@@ -943,7 +943,14 @@ export const getMatchesService = async (payload: any, res: Response) => {
   }
 
   try {
-    const currentDate = new Date();
+    // Get current time in IST (UTC+5:30)
+    const now = new Date();
+    const utcTime = now.getTime();
+    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+    const currentDate = new Date(utcTime + istOffset);
+    
+    console.log(`Current IST time: ${currentDate.toISOString()}`);
+    
     let matchQuery: any = {};
     matchQuery.bookingPaymentStatus = true;
     

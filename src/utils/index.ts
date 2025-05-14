@@ -161,3 +161,30 @@ export const convertToBoolean = (value: string) => {
 export const increaseReferredCountAndCredits = async (id: mongoose.Types.ObjectId) => {
   await usersModel.findByIdAndUpdate(id, { $inc: { referredCount: 1, creditsLeft: 10 } });
 };
+
+/**
+ * Get current time in Indian Standard Time (IST)
+ * @returns Date object representing current time in IST
+ */
+export const getCurrentISTTime = (): Date => {
+  const now = new Date();
+  const utcTime = now.getTime();
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+  return new Date(utcTime + istOffset);
+};
+
+/**
+ * Check if a date is today in IST
+ * @param date Date to check
+ * @returns Boolean indicating if the date is today in IST
+ */
+export const isDateTodayInIST = (date: Date): boolean => {
+  const istNow = getCurrentISTTime();
+  const istToday = new Date(istNow);
+  istToday.setHours(0, 0, 0, 0);
+  
+  const dateOnly = new Date(date);
+  dateOnly.setHours(0, 0, 0, 0);
+  
+  return dateOnly.getTime() === istToday.getTime();
+};

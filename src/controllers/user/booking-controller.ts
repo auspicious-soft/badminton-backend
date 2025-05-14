@@ -28,6 +28,29 @@ export const getMyMatches = async (req: Request, res: Response) => {
       );
     }
 
+    // Get current time in IST (UTC+5:30)
+    const now = new Date();
+    const utcTime = now.getTime();
+    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours and 30 minutes in milliseconds
+    const currentDate = new Date(utcTime + istOffset);
+    
+    console.log(`Current IST time: ${currentDate.toISOString()}`);
+
+    // Create a query based on the type
+    let query: any = {
+      $or: [
+        { "team1.playerId": userData.id },
+        { "team2.playerId": userData.id },
+      ],
+      bookingPaymentStatus: true,
+    };
+
+    if (type === "upcoming") {
+      query.bookingDate = { $gt: currentDate };
+    } else if (type === "current") {
+      query.bookingDate = { $lte: currentDate };
+    }
+
     if (type === "upcoming") {
       const data = await bookingModel
         .find({
