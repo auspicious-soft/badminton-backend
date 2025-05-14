@@ -320,7 +320,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
   }
   
   // Find transaction associated with this booking
-  let transaction = await transactionModel.findOne({ bookingId: bookingId });
+  let transaction: any = await transactionModel.findOne({ bookingId: bookingId });
   
   // If no transaction exists, create one
   if (!transaction) {
@@ -377,10 +377,29 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
     { new: true }
   );
   
-  // Update booking payment status
+  // Prepare updates for team1 players
+  const updateOperations: any = { bookingPaymentStatus: true };
+  
+  // Update team1 players' payment status
+  booking.team1.forEach((player : any, index : any) => {
+    if (player.transactionId && 
+        player.transactionId.toString() === transaction._id.toString()) {
+      updateOperations[`team1.${index}.paymentStatus`] = "Paid";
+    }
+  });
+  
+  // Update team2 players' payment status
+  booking.team2.forEach((player : any, index : any) => {
+    if (player.transactionId && 
+        player.transactionId.toString() === transaction._id.toString()) {
+      updateOperations[`team2.${index}.paymentStatus`] = "Paid";
+    }
+  });
+  
+  // Update booking with all changes
   const updatedBooking = await bookingModel.findByIdAndUpdate(
     bookingId,
-    { bookingPaymentStatus: true },
+    { $set: updateOperations },
     { new: true }
   );
   
