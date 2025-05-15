@@ -26,7 +26,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     bookingType,
   } = req.body;
 
-  let paidFor: any[] = [];
+  let paidForPlayers: mongoose.Types.ObjectId[] = [];
 
   // ********************Validations****************************
 
@@ -34,18 +34,18 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     completeCourtPrice: number = 1200,
     playerPayment: number = 300;
 
-  // Process all players to set payment information
+  // Process all players to set payment information and collect player IDs for paidFor
   [...team1, ...team2].forEach((item) => {
-    if (item.playerId && item.playerId === userData.id) {
-      item.paidBy = "Self";
-      if (item.playerType) {
-        paidFor.push(item.playerType);
-      }
-    } else if (item.playerId && item.playerId !== userData.id) {
-      item.paidBy = "User";
-      item.playerPayment = playerPayment;
-      if (item.playerType) {
-        paidFor.push(item.playerType);
+    if (item.playerId) {
+      if (item.playerId === userData.id) {
+        item.paidBy = "Self";
+        // Add player ID to paidFor array
+        paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
+      } else if (item.playerId !== userData.id) {
+        item.paidBy = "User";
+        item.playerPayment = playerPayment;
+        // Add player ID to paidFor array
+        paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       }
     }
   });
@@ -55,12 +55,12 @@ export const bookCourtServices = async (req: Request, res: Response) => {
   try {
     await session.startTransaction();
 
-    // Create the transaction first
+    // Create a single transaction for all bookings with player IDs in paidFor
     const bookingTransaction = await transactionModel.create(
       [
         {
           userId: userData.id,
-          paidFor: paidFor,
+          paidFor: paidForPlayers, // Now storing player IDs instead of player types
           amount:
             bookingType === "Complete"
               ? completeCourtPrice * bookingSlots.length
@@ -356,14 +356,18 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
     // Update each booking
     const updatedBookings = await Promise.all(
       bookings.map(async (booking) => {
-        // Prepare updates for team1 players
+        // Prepare updates for team players
         const updateOperations: any = { bookingPaymentStatus: true };
+
+        // Get the player IDs that were paid for
+        const paidForPlayerIds =
+          updatedTransaction?.paidFor?.map((id) => id.toString()) || [];
 
         // Update team1 players' payment status
         booking.team1.forEach((player: any, index: number) => {
           if (
-            player.transactionId &&
-            player.transactionId.toString() === transactionId
+            player.playerId &&
+            paidForPlayerIds.includes(player.playerId.toString())
           ) {
             updateOperations[`team1.${index}.paymentStatus`] = "Paid";
           }
@@ -372,15 +376,15 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
         // Update team2 players' payment status
         booking.team2.forEach((player: any, index: number) => {
           if (
-            player.transactionId &&
-            player.transactionId.toString() === transactionId
+            player.playerId &&
+            paidForPlayerIds.includes(player.playerId.toString())
           ) {
             updateOperations[`team2.${index}.paymentStatus`] = "Paid";
           }
         });
 
-        // Update booking with all changes
-        return bookingModel.findByIdAndUpdate(
+        // Update the booking
+        return await bookingModel.findByIdAndUpdate(
           booking._id,
           { $set: updateOperations },
           { new: true, session }
@@ -400,4 +404,217 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
   } finally {
     await session.endSession();
   }
+};
+
+export const modifyBookingServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const bookingId = req.params.id;
+  const {
+    team1,
+    team2,
+    bookingSlots,
+    askToJoin,
+    isCompetitive,
+    skillRequired,
+    bookingDate,
+  } = req.body;
+
+  const booking = await bookingModel.findById(bookingId).lean();
+
+  if (!booking) {
+    return errorResponseHandler(
+      "Booking not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  if (!booking.bookingPaymentStatus) {
+    return errorResponseHandler(
+      "Payment not completed for this booking",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  if (booking.userId.toString() !== userData.id.toString()) {
+    return errorResponseHandler(
+      "You are not authorized to modify this booking",
+      httpStatusCode.UNAUTHORIZED,
+      res
+    );
+  }
+
+  if (booking.bookingDate < new Date()) {
+    return errorResponseHandler(
+      "You cannot modify a booking that has already started or passed",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Check if booking slot is already taken by another booking
+  if (bookingSlots && bookingSlots !== booking.bookingSlots) {
+    const existingBooking = await bookingModel.findOne({
+      venueId: booking.venueId,
+      courtId: booking.courtId,
+      bookingDate: bookingDate || booking.bookingDate,
+      bookingSlots: bookingSlots,
+      _id: { $ne: bookingId }, // Exclude current booking
+    });
+
+    if (existingBooking) {
+      return errorResponseHandler(
+        `Booking slot ${bookingSlots} is already taken`,
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+  }
+
+  // Get all existing player IDs from the original booking
+  interface PlayerInfo {
+    playerPayment: number;
+    paymentStatus: string;
+    transactionId: mongoose.Types.ObjectId;
+    paidBy: string;
+  }
+
+  interface Player {
+    playerId?: mongoose.Types.ObjectId;
+    playerPayment?: number;
+    paymentStatus?: string;
+    transactionId?: mongoose.Types.ObjectId;
+    paidBy?: string;
+    playerType?: string;
+  }
+
+  const existingPlayerIds: string[] = [
+    ...(booking.team1 || [])
+      .map((player: Player) => player.playerId?.toString())
+      .filter(Boolean),
+    ...(booking.team2 || [])
+      .map((player: Player) => player.playerId?.toString())
+      .filter(Boolean),
+  ];
+
+  // Create a map of existing players with their payment info
+  const existingPlayersMap: { [key: string]: PlayerInfo } = {};
+  [...(booking.team1 || []), ...(booking.team2 || [])].forEach((player) => {
+    if (player.playerId) {
+      existingPlayersMap[player.playerId.toString()] = {
+        playerPayment: player.playerPayment,
+        paymentStatus: player.paymentStatus,
+        transactionId: player.transactionId,
+        paidBy: player.paidBy,
+      };
+    }
+  });
+
+  // Check if any new players are being added
+  interface Player {
+    playerId?: mongoose.Types.ObjectId;
+    playerType?: string;
+  }
+
+  const newTeam1PlayerIds: string[] = (team1 || [])
+    .map((player: Player) => player.playerId?.toString())
+    .filter(Boolean);
+  const newTeam2PlayerIds: string[] = (team2 || [])
+    .map((player: Player) => player.playerId?.toString())
+    .filter(Boolean);
+  const allNewPlayerIds = [...newTeam1PlayerIds, ...newTeam2PlayerIds];
+
+  // Check if any new players are being added
+  const newPlayers = allNewPlayerIds.filter(
+    (id) => !existingPlayerIds.includes(id)
+  );
+  if (newPlayers.length > 0) {
+    return errorResponseHandler(
+      "Cannot add new players to an existing booking. Only existing players can be shuffled.",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Process teams to ensure players are in correct teams based on playerType
+  // and preserve payment information
+  interface Player {
+    playerId?: mongoose.Types.ObjectId;
+    playerType?: string;
+    [key: string]: any;
+  }
+
+  interface ExistingPlayerInfo {
+    playerPayment: number;
+    paymentStatus: string;
+    transactionId: mongoose.Types.ObjectId;
+    paidBy: string;
+  }
+
+  let processedTeam1: Player[] = (team1 || []).map((player: Player) => {
+    if (player.playerId) {
+      const existingInfo: ExistingPlayerInfo =
+        existingPlayersMap[player.playerId.toString()];
+      return {
+        ...player,
+        playerPayment: existingInfo.playerPayment,
+        paymentStatus: existingInfo.paymentStatus,
+        transactionId: existingInfo.transactionId,
+        paidBy: existingInfo.paidBy,
+      };
+    }
+    return player;
+  });
+
+  let processedTeam2: Player[] = (team2 || []).map((player: Player) => {
+    if (player.playerId) {
+      const existingInfo: ExistingPlayerInfo =
+        existingPlayersMap[player.playerId.toString()];
+      return {
+        ...player,
+        playerPayment: existingInfo.playerPayment,
+        paymentStatus: existingInfo.paymentStatus,
+        transactionId: existingInfo.transactionId,
+        paidBy: existingInfo.paidBy,
+      };
+    }
+    return player;
+  });
+
+  // Move players to correct teams based on playerType
+  const allPlayers = [...processedTeam1, ...processedTeam2];
+  processedTeam1 = [];
+  processedTeam2 = [];
+
+  allPlayers.forEach((player) => {
+    if (player.playerType === "player1" || player.playerType === "player2") {
+      processedTeam1.push(player);
+    } else if (
+      player.playerType === "player3" ||
+      player.playerType === "player4"
+    ) {
+      processedTeam2.push(player);
+    }
+  });
+
+  const updatedBooking = await bookingModel.findByIdAndUpdate(
+    bookingId,
+    {
+      team1: processedTeam1,
+      team2: processedTeam2,
+      bookingSlots,
+      bookingDate: bookingDate || booking.bookingDate,
+      askToJoin,
+      isCompetitive,
+      skillRequired,
+    },
+    { new: true }
+  );
+
+  return {
+    success: true,
+    message: "Booking updated successfully",
+    data: updatedBooking,
+  };
 };

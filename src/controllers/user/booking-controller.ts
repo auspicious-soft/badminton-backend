@@ -67,7 +67,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
           select: "games",
         })
         .select(
-          "team1 team2 bookingDate bookingSlots isCompetitive skillRequired gameType"
+          "team1 team2 bookingDate bookingSlots isCompetitive skillRequired askToJoin"
         )
         .lean();
 
@@ -90,7 +90,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
           select: "games",
         })
         .select(
-          "team1 team2 bookingDate bookingSlots isCompetitive skillRequired gameType"
+          "team1 team2 bookingDate bookingSlots isCompetitive skillRequired askToJoin"
         )
         .lean();
 
@@ -122,7 +122,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
           select: "games",
         })
         .select(
-          "team1 team2 bookingDate bookingSlots isCompetitive skillRequired gameType"
+          "team1 team2 bookingDate bookingSlots isCompetitive skillRequired askToJoin"
         )
         .lean();
 

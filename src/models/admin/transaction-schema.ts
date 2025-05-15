@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface TransactionDocument extends Document {
   userId: mongoose.Types.ObjectId;
   bookingId?: mongoose.Types.ObjectId[];
-  paidFor?: any;
+  paidFor?: mongoose.Types.ObjectId[];
   razorpayOrderId: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
@@ -38,10 +38,12 @@ const transactionSchema = new Schema<TransactionDocument>(
         ref: "bookings",
       },
     ],
-    paidFor: {
-      type: Array,
-      default: ["player1", "player2"],
-    },
+    paidFor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "users",
+      },
+    ],
     razorpayOrderId: {
       type: String,
       // required: true,

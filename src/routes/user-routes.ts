@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getMyMatches, uploadScore } from "src/controllers/user/booking-controller";
-import { acceptFriendRequest, blockUser, bookCourt, bookingPayment, getCourts, getFriends, getFriendsById, getOpenMatches, getOpenMatchesById, getUser, getVenues, joinOpenCourt, searchFriend, sendRequest, userHome, userNotifications } from "src/controllers/user/user-home-controller";
+import { acceptFriendRequest, blockUser, bookCourt, bookingPayment, getCourts, getFriends, getFriendsById, getOpenMatches, getOpenMatchesById, getUser, getVenues, joinOpenCourt, modifyBooking, searchFriend, sendRequest, userHome, userNotifications } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
 // import {  getAllAuthorsForUser, getAuthorCountries, getAuthorForUser } from "src/controllers/authors/authors-controller";
 // import {  getAllBookLivesWithBlogs, getBookLive } from "src/controllers/book-lives/book-lives-controller";
@@ -38,6 +38,7 @@ router.get("/get-venues", getVenues)
 router.get("/get-courts", getCourts)
 router.get("/get-booking-data-byId", getCourts)
 router.post("/book-court",validateBookingRequest, bookCourt)
+router.put("/modify-booking/:id", modifyBooking)
 router.post("/booking-payment", bookingPayment)
 
 router.get("/get-open-matches", getOpenMatches)
