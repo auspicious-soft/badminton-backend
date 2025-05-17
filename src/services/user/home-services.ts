@@ -593,9 +593,9 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const { date, distance = "ASC", game = "all", lng, lat } = req.query;
 
-  if (!date || !lng || !lat) {
+  if (!lng || !lat) {
     return errorResponseHandler(
-      "Invalid Payload",
+      "Location coordinates (lng, lat) are required",
       httpStatusCode.BAD_REQUEST,
       res
     );
@@ -605,16 +605,24 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const lngNum = Number(lng);
   const latNum = Number(lat);
 
-  // Parse the input date
-  const requestDate = new Date(date as string);
-  requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
+  // Get current time in IST
+  const istTime = getCurrentISTTime();
+  
+  // Parse the input date or use current date if not provided
+  let requestDate: Date;
+  if (date) {
+    requestDate = new Date(date as string);
+  } else {
+    // Use current IST date if no date provided
+    requestDate = new Date(istTime);
+  }
+  
+  // Set to beginning of day
+  requestDate.setHours(0, 0, 0, 0);
 
   // End of the requested day
   const endOfDay = new Date(requestDate);
   endOfDay.setHours(23, 59, 59, 999);
-
-  // Get current time in IST
-  const istTime = getCurrentISTTime();
   
   // Check if the requested date is today in IST
   const isRequestedDateToday = isDateTodayInIST(requestDate);
@@ -624,6 +632,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   
   console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
   console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
+  console.log(`Using date: ${requestDate.toISOString()} to ${endOfDay.toISOString()}`);
 
   try {
     // First, get bookings with askToJoin = true and for the specified date
@@ -637,7 +646,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       })
       .lean();
 
-    console.log(`Found ${bookings.length} open bookings for date ${date}`);
+    console.log(`Found ${bookings.length} open bookings for date ${requestDate.toLocaleDateString()}`);
 
     if (bookings.length === 0) {
       return {
@@ -853,12 +862,26 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         : b.distance - a.distance;
     });
 
+    // Format the date for response
+    const dateString = requestDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const formattedDate = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(requestDate);
+
     console.log(`Returning ${processedBookings.length} processed open matches`);
 
     return {
       success: true,
       message: "Open matches retrieved successfully",
       data: processedBookings,
+      meta: {
+        date: dateString,
+        formattedDate: formattedDate,
+        isToday: isRequestedDateToday,
+      }
     };
   } catch (error) {
     console.error("Error in getOpenMatchesServices:", error);
