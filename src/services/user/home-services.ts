@@ -683,7 +683,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         _id: { $in: venueIds },
         isActive: true,
       })
-      .select("_id name city state image weather location")
+      .select("_id name city state address image weather location")
       .lean();
 
     console.log(`Found ${venues.length} venues for open matches`);
@@ -873,6 +873,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
             name: venue.name,
             city: venue.city,
             state: venue.state,
+            address: venue.address,
             image: venue.image,
             weather: venue.weather,
           },
@@ -941,7 +942,7 @@ export const getOpenMatchesByIdServices = async (
     .findOne({
       _id: id,
     })
-    .populate("venueId", "name city state image")
+    .populate("venueId", "name city state address image")
     .populate("courtId", "name games hourlyRate image")
     .lean();
 
