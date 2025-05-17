@@ -160,17 +160,27 @@ export const sendRequest = async (req: Request, res: Response) => {
         REJECTED: "rejected",
       };
 
-      // Provide more specific error messages based on relationship status
+      // Handle different relationship statuses
       if (existingRelationship.status === STATUS.PENDING) {
         const isRequestSender =
           existingRelationship.userId.toString() === userData.id.toString();
-        return errorResponseHandler(
-          isRequestSender
-            ? "You have already sent a friend request to this user"
-            : "This user has already sent you a friend request. Check your notifications to respond.",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
+
+        if (isRequestSender) {
+          // If current user sent the request, cancel it by deleting
+          await friendsModel.findByIdAndDelete(existingRelationship._id);
+          return res.status(httpStatusCode.OK).json({
+            success: true,
+            message: "Friend request canceled successfully",
+            data: { relationshipId: existingRelationship._id },
+          });
+        } else {
+          // If the other user sent the request
+          return errorResponseHandler(
+            "This user has already sent you a friend request. Check your notifications to respond.",
+            httpStatusCode.BAD_REQUEST,
+            res
+          );
+        }
       } else if (existingRelationship.status === STATUS.ACCEPTED) {
         return errorResponseHandler(
           "You are already friends with this user",
@@ -642,7 +652,7 @@ export const getFriends = async (req: Request, res: Response) => {
               typeof friend.email === "string" &&
               friend.email.toLowerCase().includes(searchTerm)) ||
             (friend.phoneNumber &&
-              typeof friend.phoneNumber === 'string' &&
+              typeof friend.phoneNumber === "string" &&
               friend.phoneNumber.includes(searchTerm))
           );
         });
