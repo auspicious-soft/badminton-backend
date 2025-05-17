@@ -9,6 +9,7 @@ import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
 import { object } from "webidl-conversions";
 import { getCurrentISTTime } from "../../utils";
+import { createNotification } from "src/models/notification/notification-schema";
 
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
@@ -330,8 +331,17 @@ export const getMyMatches = async (req: Request, res: Response) => {
 export const uploadScore = async (req: Request, res: Response) => {
   try {
     const { bookingId, ...restData } = req.body;
-    console.log(bookingId);
 
+    // Validate bookingId
+    if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
+      return errorResponseHandler(
+        "Valid booking ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Check if booking exists
     const checkExist = await bookingModel.findById(bookingId);
     if (!checkExist) {
       return errorResponseHandler(
@@ -341,26 +351,86 @@ export const uploadScore = async (req: Request, res: Response) => {
       );
     }
 
+    // Validate score data
+    if (
+      !restData.set1 &&
+      !restData.set2 &&
+      !restData.set3 &&
+      !restData.winner
+    ) {
+      return errorResponseHandler(
+        "At least one set score or winner must be provided",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Check if score already exists for this booking
     const checkScoreExist = await gameScoreModel.findOne({ bookingId });
-    let response: any = {
-      success: true,
-      message: "Score uploaded successfully",
-      data: [],
-    };
+
+    let data;
+    let message = "Score uploaded successfully";
 
     if (checkScoreExist) {
-      const data = await gameScoreModel.findByIdAndUpdate(
+      // Update existing score
+      data = await gameScoreModel.findByIdAndUpdate(
         checkScoreExist._id,
         restData,
         { new: true }
       );
-      response.data = data;
+      message = "Score updated successfully";
     } else {
-      const data = await gameScoreModel.create({ bookingId, ...restData });
-      response.data = data;
+      // Create new score
+      data = await gameScoreModel.create({ bookingId, ...restData });
     }
 
-    return res.status(httpStatusCode.OK).json(response);
+    // Create notification for all players in the booking
+    const playerIds = new Set<string>();
+
+    // Collect player IDs from both teams
+    checkExist.team1?.forEach((player: any) => {
+      if (
+        player.playerId &&
+        player.playerId.toString() !== (req.user as any).id
+      ) {
+        playerIds.add(player.playerId.toString());
+      }
+    });
+
+    checkExist.team2?.forEach((player: any) => {
+      if (
+        player.playerId &&
+        player.playerId.toString() !== (req.user as any).id
+      ) {
+        playerIds.add(player.playerId.toString());
+      }
+    });
+
+    // Send notifications to all players except the one uploading the score
+    const notificationPromises = Array.from(playerIds).map((playerId) => {
+      return createNotification({
+        recipientId: new mongoose.Types.ObjectId(playerId),
+        senderId: (req.user as any).id,
+        type: "SCORE_UPDATE",
+        title: "Match Score Updated",
+        message: `The score for your match on ${new Date(
+          checkExist.bookingDate
+        ).toLocaleDateString()} has been ${
+          checkScoreExist ? "updated" : "recorded"
+        }.`,
+        category: "GAME",
+        referenceId: bookingId,
+        referenceType: "bookings",
+      });
+    });
+
+    await Promise.all(notificationPromises);
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message,
+      data,
+    });
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res
