@@ -27,6 +27,7 @@ import {
   updateInventory,
   updateProduct,
 } from "src/controllers/admin/product-controller";
+import { createUpdatePricing, getAllPricing } from "src/controllers/admin/settings-controller";
 
 const router = Router();
 
@@ -73,5 +74,9 @@ router
   .post(createInventory)
   .put(updateInventory)
   .delete(deleteInventory);
+
+//Dynamic Pricing routes
+
+router.route("/dynamic-pricing").post(createUpdatePricing).get(getAllPricing);
 
 export { router };
