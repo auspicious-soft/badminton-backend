@@ -407,24 +407,24 @@ export const uploadScore = async (req: Request, res: Response) => {
     });
 
     // Send notifications to all players except the one uploading the score
-    const notificationPromises = Array.from(playerIds).map((playerId) => {
-      return createNotification({
-        recipientId: new mongoose.Types.ObjectId(playerId),
-        senderId: (req.user as any).id,
-        type: "SCORE_UPDATE",
-        title: "Match Score Updated",
-        message: `The score for your match on ${new Date(
-          checkExist.bookingDate
-        ).toLocaleDateString()} has been ${
-          checkScoreExist ? "updated" : "recorded"
-        }.`,
-        category: "GAME",
-        referenceId: bookingId,
-        referenceType: "bookings",
-      });
-    });
+    // const notificationPromises = Array.from(playerIds).map((playerId) => {
+    //   return createNotification({
+    //     recipientId: new mongoose.Types.ObjectId(playerId),
+    //     senderId: (req.user as any).id,
+    //     type: "SCORE_UPDATE",
+    //     title: "Match Score Updated",
+    //     message: `The score for your match on ${new Date(
+    //       checkExist.bookingDate
+    //     ).toLocaleDateString()} has been ${
+    //       checkScoreExist ? "updated" : "recorded"
+    //     }.`,
+    //     category: "GAME",
+    //     referenceId: bookingId,
+    //     referenceType: "bookings",
+    //   });
+    // });
 
-    await Promise.all(notificationPromises);
+    // await Promise.all(notificationPromises);
 
     return res.status(httpStatusCode.OK).json({
       success: true,
