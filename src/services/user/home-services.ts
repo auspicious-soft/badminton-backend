@@ -608,51 +608,66 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   // Get current time in IST
   const istTime = getCurrentISTTime();
   
-  // Parse the input date or use current date if not provided
+  // Create date query based on whether date is provided
+  let dateQuery: any;
   let requestDate: Date;
+  let endOfDay: Date;
+  let isRequestedDateToday: boolean;
+  
   if (date) {
+    // If date is provided, get matches for that specific date
     requestDate = new Date(date as string);
+    requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
+    
+    endOfDay = new Date(requestDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    dateQuery = {
+      $gte: requestDate,
+      $lte: endOfDay,
+    };
+    
+    isRequestedDateToday = isDateTodayInIST(requestDate);
   } else {
-    // Use current IST date if no date provided
+    // If no date provided, get all matches from today onwards
     requestDate = new Date(istTime);
+    requestDate.setHours(0, 0, 0, 0); // Set to beginning of today
+    
+    dateQuery = {
+      $gte: requestDate,
+    };
+    
+    isRequestedDateToday = true; // Today's matches will be included
   }
-  
-  // Set to beginning of day
-  requestDate.setHours(0, 0, 0, 0);
-
-  // End of the requested day
-  const endOfDay = new Date(requestDate);
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  // Check if the requested date is today in IST
-  const isRequestedDateToday = isDateTodayInIST(requestDate);
   
   // Get current hour in IST
   const currentHour = istTime.getHours();
   
   console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
   console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
-  console.log(`Using date: ${requestDate.toISOString()} to ${endOfDay.toISOString()}`);
+  console.log(`Date query: ${JSON.stringify(dateQuery)}`);
 
   try {
-    // First, get bookings with askToJoin = true and for the specified date
+    // Get bookings with askToJoin = true and matching the date query
     const bookings = await bookingModel
       .find({
         askToJoin: true,
-        bookingDate: {
-          $gte: requestDate,
-          $lte: endOfDay,
-        },
+        bookingDate: dateQuery,
       })
       .lean();
 
-    console.log(`Found ${bookings.length} open bookings for date ${requestDate.toLocaleDateString()}`);
+    console.log(`Found ${bookings.length} open bookings with the date query`);
 
     if (bookings.length === 0) {
       return {
         success: true,
         message: "No open matches found",
         data: [],
+        meta: {
+          date: date ? new Date(date as string).toLocaleDateString("en-CA") : "all",
+          isSpecificDate: !!date,
+          isToday: isRequestedDateToday,
+        }
       };
     }
 
@@ -740,8 +755,12 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         const courtId = booking.courtId.toString();
         if (!courtsMap[courtId]) return false;
 
-        // For today, filter out bookings with slots that have already passed
-        if (isRequestedDateToday) {
+        // Check if this booking is for today
+        const bookingDate = new Date(booking.bookingDate);
+        const isBookingToday = isDateTodayInIST(bookingDate);
+
+        // For today's bookings, filter out those with slots that have already passed
+        if (isBookingToday) {
           // Handle both array and string cases for bookingSlots
           const bookingSlotsArray = Array.isArray(booking.bookingSlots)
             ? booking.bookingSlots
@@ -790,18 +809,22 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
           distance = R * c;
 
-          // Limit to reasonable distance (100 km)
+          // Limit to reasonable distance (15000 km)
           if (distance > 15000) {
             return null; // Skip venues that are too far away
           }
         }
 
-        // For today, filter out booking slots that have already passed
+        // Check if this booking is for today
+        const bookingDate = new Date(booking.bookingDate);
+        const isBookingToday = isDateTodayInIST(bookingDate);
+
+        // For today's bookings, filter out slots that have already passed
         let filteredBookingSlots: string[] = Array.isArray(booking.bookingSlots)
           ? booking.bookingSlots
           : [booking.bookingSlots];
 
-        if (isRequestedDateToday) {
+        if (isBookingToday) {
           filteredBookingSlots = filteredBookingSlots.filter((slot: string) => {
             const slotHour = parseInt(slot.split(":")[0], 10);
             return slotHour > currentHour;
@@ -826,9 +849,19 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
           };
         });
 
+        // Format the booking date
+        const bookingDateString = bookingDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+        const formattedBookingDate = new Intl.DateTimeFormat("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }).format(bookingDate);
+
         return {
           _id: booking._id,
           bookingDate: booking.bookingDate,
+          formattedDate: formattedBookingDate,
           bookingSlots: filteredBookingSlots,
           askToJoin: booking.askToJoin,
           isCompetitive: booking.isCompetitive,
@@ -849,8 +882,17 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       })
       .filter((booking) => booking !== null) as any[];
 
-    // Sort by distance
+    // Sort by date first (ascending), then by distance
     processedBookings.sort((a, b) => {
+      // First sort by date
+      const dateA = new Date(a.bookingDate);
+      const dateB = new Date(b.bookingDate);
+      
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA.getTime() - dateB.getTime();
+      }
+      
+      // If same date, sort by distance
       // Handle null distances (put them at the end)
       if (a.distance === null && b.distance === null) return 0;
       if (a.distance === null) return 1;
@@ -862,26 +904,21 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         : b.distance - a.distance;
     });
 
-    // Format the date for response
-    const dateString = requestDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
-    const formattedDate = new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    }).format(requestDate);
-
     console.log(`Returning ${processedBookings.length} processed open matches`);
+
+    // Prepare meta information
+    const meta = {
+      totalMatches: processedBookings.length,
+      isSpecificDate: !!date,
+      date: date ? new Date(date as string).toLocaleDateString("en-CA") : "all",
+      isToday: isRequestedDateToday,
+    };
 
     return {
       success: true,
       message: "Open matches retrieved successfully",
       data: processedBookings,
-      meta: {
-        date: dateString,
-        formattedDate: formattedDate,
-        isToday: isRequestedDateToday,
-      }
+      meta
     };
   } catch (error) {
     console.error("Error in getOpenMatchesServices:", error);
