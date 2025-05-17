@@ -791,7 +791,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
           distance = R * c;
 
           // Limit to reasonable distance (100 km)
-          if (distance > 100) {
+          if (distance > 15000) {
             return null; // Skip venues that are too far away
           }
         }
