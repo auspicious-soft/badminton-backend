@@ -534,7 +534,7 @@ export const blockUser = async (req: Request, res: Response) => {
 export const getFriends = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
-    const { status } = req.query;
+    const { status, search } = req.query;
 
     if (!["friends-requests", "blocked"].includes(status as string)) {
       return errorResponseHandler(
@@ -559,7 +559,7 @@ export const getFriends = async (req: Request, res: Response) => {
         .find({
           _id: { $in: blockedUserIds },
         })
-        .select("fullName email profilePic")
+        .select("fullName email profilePic phoneNumber")
         .lean();
 
       // Map user details to relationships
@@ -578,11 +578,11 @@ export const getFriends = async (req: Request, res: Response) => {
         };
       });
 
-      return {
+      return res.status(httpStatusCode.OK).json({
         success: true,
         message: "Blocked users retrieved successfully",
         data: blockedWithDetails,
-      };
+      });
     } else {
       // Get accepted friends
       const friendRelationships = await friendsModel
@@ -606,11 +606,11 @@ export const getFriends = async (req: Request, res: Response) => {
         .find({
           _id: { $in: friendIds },
         })
-        .select("fullName email profilePic")
+        .select("fullName email profilePic phoneNumber")
         .lean();
 
       // Map user details to relationships
-      const friendsWithDetails = friendRelationships.map((rel) => {
+      let friendsWithDetails = friendRelationships.map((rel) => {
         const friendId =
           rel.userId.toString() === userData.id.toString()
             ? rel.friendId
@@ -630,7 +630,26 @@ export const getFriends = async (req: Request, res: Response) => {
         };
       });
 
+      // Apply search filter to friends if search parameter is provided
+      if (search) {
+        const searchTerm = String(search).toLowerCase();
+        friendsWithDetails = friendsWithDetails.filter((friend: any) => {
+          return (
+            (friend.fullName &&
+              typeof friend.fullName === "string" &&
+              friend.fullName.toLowerCase().includes(searchTerm)) ||
+            (friend.email &&
+              typeof friend.email === "string" &&
+              friend.email.toLowerCase().includes(searchTerm)) ||
+            (friend.phoneNumber &&
+              typeof friend.phoneNumber === 'string' &&
+              friend.phoneNumber.includes(searchTerm))
+          );
+        });
+      }
+
       // Get pending friend requests received by the current user
+      // Requests are not affected by search parameter
       const requestRelationships = await friendsModel
         .find({
           friendId: userData.id, // Current user is the recipient
@@ -646,7 +665,7 @@ export const getFriends = async (req: Request, res: Response) => {
         .find({
           _id: { $in: requesterIds },
         })
-        .select("fullName email profilePic")
+        .select("fullName email profilePic phoneNumber")
         .lean();
 
       // Map user details to relationships
@@ -676,6 +695,7 @@ export const getFriends = async (req: Request, res: Response) => {
       return res.status(httpStatusCode.OK).json(response);
     }
   } catch (error: any) {
+    console.error("Get friends error:", error);
     const { code, message } = errorParser(error);
     return res
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)

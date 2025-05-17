@@ -18,6 +18,8 @@ import {
   getCart,
   getMerchandise,
   getMerchandiseById,
+  getMyOrders,
+  getOrderById,
   orderProduct,
 } from "src/controllers/user/merchandise-controller";
 import {
@@ -63,6 +65,8 @@ router.get("/get-friends", getFriends);
 router.get("/get-friends-byId/:id", getFriendsById);
 
 router.route("/merchandise").get(getMerchandise).post(orderProduct);
+router.route("/get-orders").get(getMyOrders)
+router.route("/get-orders/:id").get(getOrderById)
 router.route("/merchandise/:id").get(getMerchandiseById)
 router
   .route("/cart")
