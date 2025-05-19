@@ -406,6 +406,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
   }
 };
 
+
 export const getCourtsServices = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;

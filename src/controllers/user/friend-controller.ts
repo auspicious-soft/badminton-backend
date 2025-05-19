@@ -8,6 +8,9 @@ import {
 import { createNotification } from "src/models/notification/notification-schema";
 import { friendsModel } from "src/models/user/friends-schema";
 import { usersModel } from "src/models/user/user-schema";
+import { bookingModel } from "src/models/venue/booking-schema";
+import { gameScoreModel } from "src/models/venue/game-score";
+
 
 export const searchFriend = async (req: Request, res: Response) => {
   try {
@@ -787,6 +790,97 @@ export const getFriendsById = async (req: Request, res: Response) => {
       }
     }
 
+    // Get previous matches played by the user
+    const previousMatches = await bookingModel
+      .find({
+        $or: [
+          { "team1.playerId": new mongoose.Types.ObjectId(id) },
+          { "team2.playerId": new mongoose.Types.ObjectId(id) },
+        ],
+        bookingDate: { $lt: new Date() },
+      })
+      .populate({
+        path: "venueId",
+        select: "name address city state",
+      })
+      .populate({
+        path: "courtId",
+        select: "name games",
+      })
+      .sort({ bookingDate: -1 })
+      .lean() as any[];
+
+    // Get all player IDs from the matches
+    const playerIds = new Set<string>();
+    previousMatches.forEach(match => {
+      match.team1?.forEach((player: any) => {
+        if (player.playerId) playerIds.add(player.playerId.toString());
+      });
+      match.team2?.forEach((player: any) => {
+        if (player.playerId) playerIds.add(player.playerId.toString());
+      });
+    });
+
+    // Get player details
+    const players = await usersModel
+      .find({ _id: { $in: Array.from(playerIds) } })
+      .select("_id fullName profilePic")
+      .lean();
+
+    // Create a map for quick player lookup
+    const playerMap = players.reduce((map, player: any) => {
+      map[player._id.toString()] = player;
+      return map;
+    }, {} as Record<string, any>);
+
+    // Get scores for all matches
+    const matchIds = previousMatches.map(match => match._id);
+    const scores = await gameScoreModel
+      .find({ bookingId: { $in: matchIds } })
+      .lean();
+
+    // Create a map for quick score lookup
+    const scoreMap = scores.reduce((map, score: any) => {
+      map[score.bookingId.toString()] = score;
+      return map;
+    }, {} as Record<string, any>);
+
+    // Process matches with player details and scores
+    const processedMatches = previousMatches.map(match => {
+      // Process team1 players
+      const team1WithDetails = (match.team1 || []).map((player: any) => {
+        const playerId = player.playerId?.toString();
+        return {
+          ...player,
+          playerData: playerId ? playerMap[playerId] : null,
+        };
+      });
+
+      // Process team2 players
+      const team2WithDetails = (match.team2 || []).map((player: any) => {
+        const playerId = player.playerId?.toString();
+        return {
+          ...player,
+          playerData: playerId ? playerMap[playerId] : null,
+        };
+      });
+
+      // Get score for this match
+      const matchScore = scoreMap[match._id.toString()] || {};
+
+      return {
+        matchId: match._id,
+        date: match.bookingDate,
+        time: match.bookingSlots,
+        venue: match.venueId,
+        court: match.courtId,
+        matchType: match.courtId?.games || "Unknown",
+        team1: team1WithDetails,
+        team2: team2WithDetails,
+        score: matchScore,
+      };
+    });
+
     // Add hardcoded stats
     const userWithStats = {
       ...user,
@@ -805,6 +899,7 @@ export const getFriendsById = async (req: Request, res: Response) => {
       friendshipStatus: friendshipStatus,
       isFriend: isFriend,
       relationshipId: friendship ? friendship._id : null,
+      previousMatches: processedMatches,
     };
 
     const response = {

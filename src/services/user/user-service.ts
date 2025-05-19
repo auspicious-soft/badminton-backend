@@ -27,6 +27,11 @@ import {
 } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
+import { bookingModel } from "src/models/venue/booking-schema";
+import { friendsModel } from "src/models/user/friends-schema";
+
 
 configDotenv();
 export interface UserPayload {
@@ -670,9 +675,37 @@ export const getUserServices = async (req: Request, res: Response) => {
     );
   }
 
+  // Get additional user info
+  const additionalInfo = await additionalUserInfoModel
+    .findOne({ userId: userId })
+    .lean()
+    .select("playCoins loyaltyTier");
+
+  // Get total matches played
+  const totalMatches = await bookingModel.countDocuments({
+    $or: [
+      { "team1.playerId": new mongoose.Types.ObjectId(userId) },
+      { "team2.playerId": new mongoose.Types.ObjectId(userId) },
+    ],
+  });
+
+  // Get total friends
+  const totalFriends = await friendsModel.countDocuments({
+    $or: [
+      { userId: userId, status: "accepted" },
+      { friendId: userId, status: "accepted" },
+    ],
+  });
+
   return {
     success: true,
     message: "User retrieved successfully",
-    data: user,
+    data: {
+      ...user,
+      totalMatches,
+      totalFriends,
+      playCoins: additionalInfo?.playCoins || 0,
+      loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
+    },
   };
 };

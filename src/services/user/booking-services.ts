@@ -9,6 +9,7 @@ import {
   createNotification,
   notificationModel,
 } from "src/models/notification/notification-schema";
+import { priceModel } from "src/models/admin/price-schema";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -616,5 +617,41 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
     success: true,
     message: "Booking updated successfully",
     data: updatedBooking,
+  };
+};
+
+export const getDynamicPriceServices = async (req: Request, res: Response) => {
+  // Check if date is provided, otherwise use current date
+  let { date } = req.query;
+  const currentDate = date ? new Date(date as string) : new Date();
+
+  // Determine if it's a weekend (0 = Sunday, 6 = Saturday)
+  const dayOfWeek = currentDate.getDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const isHoliday = false;
+
+  // Set dayType based on whether it's a weekend/holiday or weekday
+  const dayType = isWeekend || isHoliday ? "weekend" : "weekday";
+
+  // Find pricing based on dayType
+  const pricing = await priceModel
+    .findOne({
+      dayType,
+      isActive: true,
+    })
+    .lean();
+
+  if (!pricing) {
+    return errorResponseHandler(
+      "Pricing not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  return {
+    success: true,
+    message: "Pricing retrieved successfully",
+    data: pricing,
   };
 };
