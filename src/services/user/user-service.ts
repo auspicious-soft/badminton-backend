@@ -740,7 +740,18 @@ export const updateUserServices = async (req: Request, res: Response) => {
     updateFields.fullName = `${newFirstName} ${newLastName}`.trim();
   }
 
-  if (profilePic) updateFields.profilePic = profilePic;
+  // Delete previous profile pic from S3 if a new one is provided
+  if (profilePic && user.profilePic && user.profilePic !== profilePic) {
+    try {
+      await deleteFileFromS3(user.profilePic);
+    } catch (error) {
+      console.error("Error deleting previous profile picture:", error);
+      // Continue with the update even if deletion fails
+    }
+    updateFields.profilePic = profilePic;
+  } else if (profilePic) {
+    updateFields.profilePic = profilePic;
+  }
 
   // Verify old password and update password if provided
   if (password) {
