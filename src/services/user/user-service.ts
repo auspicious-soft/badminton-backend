@@ -714,7 +714,7 @@ export const getUserServices = async (req: Request, res: Response) => {
 export const updateUserServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const userId = userData.id;
-  const { fullName, profilePic, oldPassword, password } = req.body;
+  const { firstName, lastName, profilePic, oldPassword, password } = req.body;
 
   // Check if user exists
   const user = await usersModel.findById(userId).select("+password");
@@ -729,22 +729,15 @@ export const updateUserServices = async (req: Request, res: Response) => {
   // Create update object with only provided fields
   const updateFields: any = {};
 
-  // If fullName is provided, update fullName and split into firstName/lastName
-  if (fullName) {
-    updateFields.fullName = fullName;
-
-    // Split fullName into firstName and lastName
-    const nameParts = fullName.trim().split(" ");
-    if (nameParts.length > 0) {
-      updateFields.firstName = nameParts[0];
-
-      // If there are multiple parts, join the rest as lastName
-      if (nameParts.length > 1) {
-        updateFields.lastName = nameParts.slice(1).join(" ");
-      } else {
-        updateFields.lastName = ""; // Clear lastName if only one name provided
-      }
-    }
+  // If firstName or lastName is provided, update them and create fullName
+  if (firstName || lastName) {
+    if (firstName) updateFields.firstName = firstName;
+    if (lastName) updateFields.lastName = lastName;
+    
+    // Create fullName from firstName and lastName
+    const newFirstName = firstName || user.firstName || '';
+    const newLastName = lastName || user.lastName || '';
+    updateFields.fullName = `${newFirstName} ${newLastName}`.trim();
   }
 
   if (profilePic) updateFields.profilePic = profilePic;
