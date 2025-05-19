@@ -32,7 +32,6 @@ import { additionalUserInfoModel } from "src/models/user/additional-info-schema"
 import { bookingModel } from "src/models/venue/booking-schema";
 import { friendsModel } from "src/models/user/friends-schema";
 
-
 configDotenv();
 export interface UserPayload {
   _id?: string;
@@ -710,88 +709,108 @@ export const getUserServices = async (req: Request, res: Response) => {
   };
 };
 export const updateUserServices = async (req: Request, res: Response) => {
-  try {
-    const userData = req.user as any;
-    const userId = userData.id;
-    const { firstName, lastName, fullName, profilePic, password } = req.body;
+  const userData = req.user as any;
+  const userId = userData.id;
+  const { fullName, profilePic, oldPassword, password } = req.body;
 
-    // Check if user exists
-    const user = await usersModel.findById(userId);
-    if (!user) {
+  // Check if user exists
+  const user = await usersModel.findById(userId).select("+password");
+  if (!user) {
+    return errorResponseHandler(
+      "User not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  // Create update object with only provided fields
+  const updateFields: any = {};
+
+  // If fullName is provided, update fullName and split into firstName/lastName
+  if (fullName) {
+    updateFields.fullName = fullName;
+
+    // Split fullName into firstName and lastName
+    const nameParts = fullName.trim().split(" ");
+    if (nameParts.length > 0) {
+      updateFields.firstName = nameParts[0];
+
+      // If there are multiple parts, join the rest as lastName
+      if (nameParts.length > 1) {
+        updateFields.lastName = nameParts.slice(1).join(" ");
+      } else {
+        updateFields.lastName = ""; // Clear lastName if only one name provided
+      }
+    }
+  }
+
+  if (profilePic) updateFields.profilePic = profilePic;
+
+  // Verify old password and update password if provided
+  if (password) {
+    // If trying to update password, old password is required
+    if (!oldPassword) {
       return errorResponseHandler(
-        "User not found",
-        httpStatusCode.NOT_FOUND,
+        "Old password is required to update password",
+        httpStatusCode.BAD_REQUEST,
         res
       );
     }
 
-    // Create update object with only provided fields
-    const updateFields: any = {};
-
-    if (firstName) updateFields.firstName = firstName;
-    if (lastName) updateFields.lastName = lastName;
-    
-    // If fullName is provided, use it directly
-    // Otherwise, if firstName or lastName is provided, compute fullName
-    if (fullName) {
-      updateFields.fullName = fullName;
-    } else if (firstName || lastName) {
-      updateFields.fullName = `${firstName || user.firstName || ''} ${lastName || user.lastName || ''}`.trim();
-    }
-
-    if (profilePic) updateFields.profilePic = profilePic;
-    
-    // Hash password if provided
-    if (password) {
-      updateFields.password = await bcrypt.hash(password, 10);
-    }
-
-    // Update user
-    const updatedUser = await usersModel.findByIdAndUpdate(
-      userId,
-      updateFields,
-      { new: true }
-    ).select("-__v -password -otp");
-
-    // Get additional user info
-    const additionalInfo = await additionalUserInfoModel
-      .findOne({ userId })
-      .lean()
-      .select("playCoins loyaltyTier");
-
-    // Get total matches played
-    const totalMatches = await bookingModel.countDocuments({
-      $or: [
-        { "team1.playerId": new mongoose.Types.ObjectId(userId) },
-        { "team2.playerId": new mongoose.Types.ObjectId(userId) },
-      ],
-    });
-
-    // Get total friends
-    const totalFriends = await friendsModel.countDocuments({
-      $or: [
-        { userId, status: "accepted" },
-        { friendId: userId, status: "accepted" },
-      ],
-    });
-
-    // Return enhanced user data
-    return {
-      success: true,
-      message: "User updated successfully",
-      data: {
-        ...(updatedUser?.toObject() || {}),
-        totalMatches,
-        totalFriends,
-        playCoins: additionalInfo?.playCoins || 0,
-        loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
-      },
-    };
-  } catch (error: any) {
-    return errorResponseHandler(
-      error.message || "Error updating user",
-      httpStatusCode.INTERNAL_SERVER_ERROR,
-      res
+    // Verify old password
+    const isPasswordValid = await bcrypt.compare(
+      oldPassword || "",
+      user.password || ""
     );
+    if (!isPasswordValid) {
+      return errorResponseHandler(
+        "Current password is incorrect",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Hash and set new password
+    updateFields.password = await bcrypt.hash(password, 10);
   }
+
+  // Update user
+  const updatedUser = await usersModel
+    .findByIdAndUpdate(userId, updateFields, { new: true })
+    .select("-__v -password -otp");
+
+  // Get additional user info
+  const additionalInfo = await additionalUserInfoModel
+    .findOne({ userId })
+    .lean()
+    .select("playCoins loyaltyTier");
+
+  // Get total matches played
+  const totalMatches = await bookingModel.countDocuments({
+    $or: [
+      { "team1.playerId": new mongoose.Types.ObjectId(userId) },
+      { "team2.playerId": new mongoose.Types.ObjectId(userId) },
+    ],
+  });
+
+  // Get total friends
+  const totalFriends = await friendsModel.countDocuments({
+    $or: [
+      { userId, status: "accepted" },
+      { friendId: userId, status: "accepted" },
+    ],
+  });
+
+  // Return enhanced user data
+  return {
+    success: true,
+    message: "User updated successfully",
+    data: {
+      ...(updatedUser?.toObject() || {}),
+      totalMatches,
+      totalFriends,
+      playCoins: additionalInfo?.playCoins || 0,
+      loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
+    },
+  };
 };
