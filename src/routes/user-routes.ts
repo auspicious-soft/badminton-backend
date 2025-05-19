@@ -33,6 +33,7 @@ import {
   getVenues,
   joinOpenCourt,
   modifyBooking,
+  updateUser,
   userHome,
   userNotifications,
 } from "src/controllers/user/user-home-controller";
@@ -41,6 +42,7 @@ import { validateBookingRequest } from "src/middleware/booking-validation";
 const router = Router();
 
 router.get("/get-user", getUser);
+router.put("/update-user", updateUser);
 router.get("/user-home-screen", userHome);
 
 router.get("/get-venues", getVenues);

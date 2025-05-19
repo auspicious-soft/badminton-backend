@@ -709,3 +709,89 @@ export const getUserServices = async (req: Request, res: Response) => {
     },
   };
 };
+export const updateUserServices = async (req: Request, res: Response) => {
+  try {
+    const userData = req.user as any;
+    const userId = userData.id;
+    const { firstName, lastName, fullName, profilePic, password } = req.body;
+
+    // Check if user exists
+    const user = await usersModel.findById(userId);
+    if (!user) {
+      return errorResponseHandler(
+        "User not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    // Create update object with only provided fields
+    const updateFields: any = {};
+
+    if (firstName) updateFields.firstName = firstName;
+    if (lastName) updateFields.lastName = lastName;
+    
+    // If fullName is provided, use it directly
+    // Otherwise, if firstName or lastName is provided, compute fullName
+    if (fullName) {
+      updateFields.fullName = fullName;
+    } else if (firstName || lastName) {
+      updateFields.fullName = `${firstName || user.firstName || ''} ${lastName || user.lastName || ''}`.trim();
+    }
+
+    if (profilePic) updateFields.profilePic = profilePic;
+    
+    // Hash password if provided
+    if (password) {
+      updateFields.password = await bcrypt.hash(password, 10);
+    }
+
+    // Update user
+    const updatedUser = await usersModel.findByIdAndUpdate(
+      userId,
+      updateFields,
+      { new: true }
+    ).select("-__v -password -otp");
+
+    // Get additional user info
+    const additionalInfo = await additionalUserInfoModel
+      .findOne({ userId })
+      .lean()
+      .select("playCoins loyaltyTier");
+
+    // Get total matches played
+    const totalMatches = await bookingModel.countDocuments({
+      $or: [
+        { "team1.playerId": new mongoose.Types.ObjectId(userId) },
+        { "team2.playerId": new mongoose.Types.ObjectId(userId) },
+      ],
+    });
+
+    // Get total friends
+    const totalFriends = await friendsModel.countDocuments({
+      $or: [
+        { userId, status: "accepted" },
+        { friendId: userId, status: "accepted" },
+      ],
+    });
+
+    // Return enhanced user data
+    return {
+      success: true,
+      message: "User updated successfully",
+      data: {
+        ...(updatedUser?.toObject() || {}),
+        totalMatches,
+        totalFriends,
+        playCoins: additionalInfo?.playCoins || 0,
+        loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
+      },
+    };
+  } catch (error: any) {
+    return errorResponseHandler(
+      error.message || "Error updating user",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+};

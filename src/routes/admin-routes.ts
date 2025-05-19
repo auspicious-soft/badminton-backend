@@ -27,7 +27,16 @@ import {
   updateInventory,
   updateProduct,
 } from "src/controllers/admin/product-controller";
-import { createUpdatePricing, getAllPricing } from "src/controllers/admin/settings-controller";
+import {
+  createUpdatePricing,
+  getAllPricing,
+} from "src/controllers/admin/settings-controller";
+import {
+  createMaintenanceBooking,
+  deleteMaintenanceBooking,
+  getMaintenanceBookings,
+  updateMaintenanceBooking,
+} from "src/controllers/admin/maintenance-controller";
 
 const router = Router();
 
@@ -78,5 +87,11 @@ router
 //Dynamic Pricing routes
 
 router.route("/dynamic-pricing").post(createUpdatePricing).get(getAllPricing);
+
+//Maintenance routes
+router.post("/maintenance-booking", createMaintenanceBooking);
+router.get("/maintenance-booking", getMaintenanceBookings);
+router.put("/maintenance-booking/:id", updateMaintenanceBooking);
+router.delete("/maintenance-booking/:id", deleteMaintenanceBooking);
 
 export { router };

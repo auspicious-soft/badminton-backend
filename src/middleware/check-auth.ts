@@ -132,7 +132,20 @@ export const checkAdminAuth = async (
           success: false,
           message: "Unauthorized token invalid or expired",
         });
+    
+    // Attach the full decoded object as currentUser
     (req as any).currentUser = decoded;
+    
+    // Also attach the admin ID in a standard format for easier access
+    // This handles different possible structures of the decoded token
+    (req as any).adminId = decoded.id || decoded.sub || decoded._id;
+    
+    // For backward compatibility, also set user property
+    req.user = {
+      id: (req as any).adminId,
+      ...decoded
+    };
+    
     next();
   } catch (error) {
     return res

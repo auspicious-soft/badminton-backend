@@ -17,6 +17,9 @@ export interface BookingDocument extends Document {
   bookingDate: Date;
   bookingSlots: string;
   cancellationReason?: string;
+  isMaintenance?: boolean; // New field to indicate maintenance booking
+  maintenanceReason?: string; // Reason for maintenance
+  createdBy?: mongoose.Types.ObjectId; // Admin/employee who created the maintenance
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -168,6 +171,18 @@ const bookingSchema = new Schema(
     bookingDate: { type: Date, required: true },
     bookingSlots: { type: String, enum: VENUE_TIME_SLOTS, required: true },
     cancellationReason: { type: String, default: null },
+    isMaintenance: {
+      type: Boolean,
+      default: false,
+    },
+    maintenanceReason: {
+      type: String,
+      default: null,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "employees",
+    },
   },
   { timestamps: true }
 );
