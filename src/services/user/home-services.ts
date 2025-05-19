@@ -7,6 +7,8 @@ import { usersModel } from "src/models/user/user-schema";
 import mongoose from "mongoose";
 import { courtModel } from "src/models/venue/court-schema";
 import { getCurrentISTTime, isDateTodayInIST } from "../../utils";
+import { priceModel } from "src/models/admin/price-schema";
+
 
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
@@ -477,6 +479,19 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
       console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
+      // Determine if it's a weekend (0 = Sunday, 6 = Saturday)
+      const dayOfWeek = requestDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const dayType = isWeekend ? "weekend" : "weekday";
+
+      // Get dynamic pricing for this day type
+      const pricing = await priceModel
+        .findOne({
+          dayType,
+          isActive: true,
+        })
+        .lean();
+
       // Get all bookings for this venue on the specified date
       const bookings = await bookingModel
         .find({
@@ -529,24 +544,45 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         const courtId = court._id.toString();
         const courtBookedSlots = bookedSlots[courtId] || [];
         const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
+        const baseHourlyRate = court.hourlyRate || 1200; // Default hourly rate if not specified
 
-        // Filter available slots
-        const availableSlots = venueTimeslots.filter((slot: string) => {
-          // Skip booked slots
-          if (courtBookedSlots.includes(slot)) {
-            return false;
-          }
-
-          // For today only, filter out past time slots based on IST
-          if (isRequestedDateToday) {
-            const slotHour = parseInt(slot.split(":")[0], 10);
-            if (slotHour <= currentHour) {
+        // Filter available slots and add pricing
+        const availableSlots = venueTimeslots
+          .filter((slot: string) => {
+            // Skip booked slots
+            if (courtBookedSlots.includes(slot)) {
               return false;
             }
-          }
 
-          return true;
-        });
+            // For today only, filter out past time slots based on IST
+            if (isRequestedDateToday) {
+              const slotHour = parseInt(slot.split(":")[0], 10);
+              if (slotHour <= currentHour) {
+                return false;
+              }
+            }
+
+            return true;
+          })
+          .map((slot: string) => {
+            // Find dynamic price for this slot if pricing exists
+            let price = baseHourlyRate;
+            if (pricing && pricing.slotPricing) {
+              const slotPricing = pricing.slotPricing.find(
+                (item: any) => item.slot === slot
+              );
+              if (slotPricing) {
+                price = slotPricing.price;
+              }
+            }
+
+            return {
+              time: slot,
+              price: price,
+              isDiscounted: price < baseHourlyRate,
+              isPremium: price > baseHourlyRate
+            };
+          });
 
         return {
           ...court,
@@ -560,6 +596,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         courts: courtsWithAvailability,
         date: dateString,
         formattedDate: formattedDate,
+        dayType: dayType
       };
 
       return {
