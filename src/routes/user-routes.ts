@@ -38,6 +38,7 @@ import {
   userNotifications,
 } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
+import { uploadUserImageController } from "src/controllers/user/user-controller";
 
 const router = Router();
 
@@ -79,4 +80,6 @@ router
   .put(editCart)
   .delete(deleteCartItem);
 
+// router.post("/upload-image", upload.single('image'), uploadUserImageController);
+router.post("/upload-image", uploadUserImageController);
 export { router };
