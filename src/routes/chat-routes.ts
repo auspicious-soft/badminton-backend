@@ -11,6 +11,7 @@ import {
   removeGroupParticipant
 } from "src/controllers/user/chat-controller";
 
+// router
 const router = express.Router();
 
 // Get all chats for the user
