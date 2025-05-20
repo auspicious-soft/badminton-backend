@@ -1,62 +1,62 @@
-import express from "express"
-import cors from "cors"
-// import cookieParser from "cookie-parser";
-import path from "path"
-import { fileURLToPath } from 'url'
-import connectDB from "./config/db"
-import { admin, auth, user } from "./routes"
-// import admin from "firebase-admin"
-import { checkValidAdminRole, checkValidPublisherRole } from "./utils"
-import bodyParser from 'body-parser'
-import { login, newPassswordAfterOTPVerified } from "./controllers/admin/admin-controller"
-import { forgotPassword } from "./controllers/admin/admin-controller"
-import { checkAdminAuth, checkAuth } from "./middleware/check-auth"
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import connectDB from "./config/db";
+import { admin, auth, chat, user } from "./routes";
+import { checkValidAdminRole } from "./utils";
+import bodyParser from "body-parser";
+import { checkAdminAuth, checkAuth } from "./middleware/check-auth";
+import http from "http";
+import { Server } from "socket.io";
+import { setIo, initializeSocketEvents } from "./socket";
 
 // Create __dirname equivalent for ES modules
-const __filename = fileURLToPath(import.meta.url) // <-- Define __filename
-const __dirname = path.dirname(__filename)        // <-- Define __dirname
-// const serviceAccount = require(path.join(__dirname, 'config/firebase-adminsdk.json'));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 8002
-const app = express()
+const PORT = process.env.PORT || 8000;
+const app = express();
 
-app.use(express.json());
-app.set("trust proxy", true)
-app.use(bodyParser.json({
-  verify: (req: any, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}));
-// app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount),
-// });
+// Create HTTP server
+const server = http.createServer(app);
 
-app.use(
-    cors({
-        origin: "*",
-        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
-        credentials: true,
-    })
-);
+// Configure middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-var dir = path.join(__dirname, 'static')
-app.use(express.static(dir))
+var dir = path.join(__dirname, "static");
+app.use(express.static(dir));
 
-var uploadsDir = path.join(__dirname, 'uploads')
-app.use('/uploads', express.static(uploadsDir))
+var uploadsDir = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(uploadsDir));
 
 connectDB();
 
 app.get("/", (_, res: any) => {
-    res.send("Hello world entry point 🚀✅");
+  res.send("Hello world entry point 🚀✅");
 });
 
+// Log when routes are mounted
 app.use("/api/admin", checkValidAdminRole, checkAdminAuth, admin);
-app.use("/api/user",checkAuth, user);
-app.use("/api", auth)
+app.use("/api/user", checkAuth, user);
+app.use("/api/chat", checkAuth, chat);
+app.use("/api", auth);
 
-// initializeFirebase()
-app.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
+// Use server.listen instead of app.listen
+server.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
+
+// Set up Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Set the io instance
+setIo(io);
+
+// Initialize socket events
+initializeSocketEvents(io);
