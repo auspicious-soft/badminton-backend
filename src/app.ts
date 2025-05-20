@@ -52,7 +52,8 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  path: "/socket.io/" // This must match exactly what the client uses
 });
 
 // Set the io instance
