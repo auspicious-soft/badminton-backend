@@ -328,6 +328,110 @@ export const getMyMatches = async (req: Request, res: Response) => {
   }
 };
 
+export const getMatchesById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userData = req.user as any;
+
+    if (!id) {
+      return errorResponseHandler(
+        "Booking ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const booking = await bookingModel
+      .findOne({
+        _id: id,
+        $or: [
+          { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
+          { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
+        ],
+      })
+      .populate({
+        path: "venueId",
+        select: "name city state address",
+      })
+      .populate({
+        path: "courtId",
+        select: "games",
+      })
+      .lean();
+
+    if (!booking) {
+      return errorResponseHandler(
+        "Booking not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    // Get all player IDs from the booking
+    const playerIds = new Set<string>();
+    booking.team1?.forEach((player: any) => {
+      if (player.playerId) playerIds.add(player.playerId.toString());
+    });
+    booking.team2?.forEach((player: any) => {
+      if (player.playerId) playerIds.add(player.playerId.toString());
+    });
+
+    // Get player data
+    const players = await mongoose
+      .model("users")
+      .find({
+        _id: { $in: Array.from(playerIds) },
+      })
+      .select("_id fullName profilePic")
+      .lean();
+
+    // Create a map of players by ID for quick lookup
+    const playersMap = players.reduce((map, player: any) => {
+      map[player._id.toString()] = player;
+      return map;
+    }, {} as Record<string, any>);
+
+    // Process team1 players
+    const team1WithPlayerData = (booking.team1 || []).map((player: any) => {
+      const playerId = player.playerId?.toString();
+      return {
+        ...player,
+        playerData: playerId ? playersMap[playerId] : null,
+      };
+    });
+
+    // Process team2 players
+    const team2WithPlayerData = (booking.team2 || []).map((player: any) => {
+      const playerId = player.playerId?.toString();
+      return {
+        ...player,
+        playerData: playerId ? playersMap[playerId] : null,
+      };
+    });
+
+    // Get score for this booking
+    const score =
+      (await gameScoreModel.findOne({ bookingId: booking._id }).lean()) || {};
+    const processedBooking = {
+      ...booking,
+      team1: team1WithPlayerData,
+      team2: team2WithPlayerData,
+      score,
+    };
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Booking retrieved successfully",
+      data: processedBooking,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
 export const uploadScore = async (req: Request, res: Response) => {
   try {
     const { bookingId, ...restData } = req.body;

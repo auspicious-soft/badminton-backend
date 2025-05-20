@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getMatchesById,
   getMyMatches,
   uploadScore,
 } from "src/controllers/user/booking-controller";
@@ -58,6 +59,7 @@ router.get("/get-open-matches", getOpenMatches);
 router.get("/open-matches-data-byId/:id", getOpenMatchesById);
 router.post("/join-open-matches", joinOpenCourt);
 router.get("/my-matches", getMyMatches);
+router.get("/my-matches/:id", getMatchesById);
 router.post("/upload-score", uploadScore);
 
 router.get("/user-notifications", userNotifications);
