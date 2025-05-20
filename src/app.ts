@@ -56,13 +56,9 @@ const io = new Server(server, {
     credentials: true
   },
   path: "/socket.io/",
-  connectTimeout: 45000,
-  // Add these options to help with connection issues
   transports: ['websocket', 'polling'],
-  allowUpgrades: true,
   pingTimeout: 60000,
-  pingInterval: 25000,
-  cookie: false
+  pingInterval: 25000
 });
 
 // Set the io instance

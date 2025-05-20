@@ -161,23 +161,17 @@ export const authenticateSocket = (socket: Socket): Promise<any> => {
         return reject(new Error("Authentication error: Token not provided"));
       }
 
-      // Log the token (first few characters for debugging)
-      console.log(`Authenticating socket with token: ${String(token).substring(0, 20)}...`);
-
       try {
         const decoded = jwt.verify(
           String(token),
           process.env.AUTH_SECRET || "your-jwt-secret"
         );
         
-        console.log("Token verified successfully:", (decoded as JwtPayload)?.id || (decoded as JwtPayload)?.sub);
         resolve(decoded);
       } catch (jwtError: unknown) {
-        console.error("JWT verification error:", (jwtError as Error).message);
         reject(new Error(`Invalid token: ${(jwtError as Error).message}`));
       }
     } catch (error) {
-      console.error("Unexpected error in authenticateSocket:", error);
       reject(new Error("Server error during authentication"));
     }
   });

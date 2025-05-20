@@ -13,41 +13,34 @@ export const setIo = (ioServer: Server) => {
   io = ioServer;
 };
 
-// Initialize socket events with better error handling
+// Initialize socket events
 export const initializeSocketEvents = (ioServer: Server) => {
   io = ioServer;
-  
+
   // Add error event handler for the engine
   io.engine.on("connection_error", (err) => {
     console.error("Socket.IO connection error:", err);
   });
-  
-  // Middleware for authentication with better error handling
+
+  // Middleware for authentication
   io.use(async (socket, next) => {
     try {
-      console.log("Socket connection attempt with query params:", socket.handshake.query);
-      console.log("Socket connection attempt with auth:", socket.handshake.auth);
-      
       // Get token from query params or auth object
-      const token = 
-        socket.handshake.auth?.token || 
-        socket.handshake.query?.token;
-      
+      const token =
+        socket.handshake.auth?.token || socket.handshake.query?.token;
+
       if (!token) {
-        console.log("No token found in socket handshake");
         return next(new Error("Authentication error: Token not provided"));
       }
-      
+
       try {
-        // Use a try/catch specifically for the authentication
         const user = await authenticateSocket(socket);
         socket.data.user = user;
-        console.log("Socket authenticated successfully for user:", user.id);
         next();
       } catch (authError: any) {
-        console.error("Socket authentication error:", authError);
-        // Be more specific about the error
-        next(new Error(`Authentication failed: ${(authError as Error).message}`));
+        next(
+          new Error(`Authentication failed: ${(authError as Error).message}`)
+        );
       }
     } catch (error) {
       console.error("Unexpected error in socket middleware:", error);
@@ -73,7 +66,16 @@ export const initializeSocketEvents = (ioServer: Server) => {
         message: "Successfully connected to chat server",
         userId: userId,
       });
-      
+
+      // Broadcast user's online status to others
+      socket.broadcast.emit("user_status_change", {
+        userId,
+        status: "online",
+      });
+
+      // Send list of online users to the newly connected user
+      socket.emit("online_users", getOnlineUsers());
+
       // Set up chat-specific event handlers
       setupChatEvents(socket, userId);
 
@@ -81,6 +83,12 @@ export const initializeSocketEvents = (ioServer: Server) => {
       socket.on("disconnect", () => {
         console.log(`User disconnected: ${userId} (Socket ID: ${socket.id})`);
         connectedUsers.delete(userId);
+
+        // Broadcast user's offline status
+        socket.broadcast.emit("user_status_change", {
+          userId,
+          status: "offline",
+        });
       });
     } catch (error) {
       console.error("Error handling socket connection:", error);
@@ -115,6 +123,3 @@ export const sendToUser = (
 
 // Export io instance
 export { io };
-
-
-
