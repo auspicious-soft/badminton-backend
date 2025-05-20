@@ -51,9 +51,9 @@ server.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Content-Length', 'X-Requested-With', 'Accept'],
   },
-  path: "/socket.io/" // This must match exactly what the client uses
 });
 
 // Set the io instance
