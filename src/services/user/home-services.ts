@@ -546,47 +546,46 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
         const baseHourlyRate = court.hourlyRate || 1200; // Default hourly rate if not specified
 
-        // Filter available slots and add pricing
-        const availableSlots = venueTimeslots
-          .filter((slot: string) => {
-            // Skip booked slots
-            if (courtBookedSlots.includes(slot)) {
-              return false;
+        // Include all slots with availability status
+        const allSlots = venueTimeslots.map((slot: string) => {
+          // Check if slot is booked
+          const isBooked = courtBookedSlots.includes(slot);
+          
+          // Check if slot is in the past (for today only)
+          let isPastSlot = false;
+          if (isRequestedDateToday) {
+            const slotHour = parseInt(slot.split(":")[0], 10);
+            isPastSlot = slotHour <= currentHour;
+          }
+          
+          // Determine if slot is available
+          const isAvailable = !isBooked && !isPastSlot;
+          
+          // Find dynamic price for this slot if pricing exists
+          let price = baseHourlyRate;
+          if (pricing && pricing.slotPricing) {
+            const slotPricing = pricing.slotPricing.find(
+              (item: any) => item.slot === slot
+            );
+            if (slotPricing) {
+              price = slotPricing.price;
             }
+          }
 
-            // For today only, filter out past time slots based on IST
-            if (isRequestedDateToday) {
-              const slotHour = parseInt(slot.split(":")[0], 10);
-              if (slotHour <= currentHour) {
-                return false;
-              }
-            }
-
-            return true;
-          })
-          .map((slot: string) => {
-            // Find dynamic price for this slot if pricing exists
-            let price = baseHourlyRate;
-            if (pricing && pricing.slotPricing) {
-              const slotPricing = pricing.slotPricing.find(
-                (item: any) => item.slot === slot
-              );
-              if (slotPricing) {
-                price = slotPricing.price;
-              }
-            }
-
-            return {
-              time: slot,
-              price: price,
-              isDiscounted: price < baseHourlyRate,
-              isPremium: price > baseHourlyRate
-            };
-          });
+          return {
+            time: slot,
+            price: price,
+            isDiscounted: price < baseHourlyRate,
+            isPremium: price > baseHourlyRate,
+            isAvailable: isAvailable,
+            isBooked: isBooked,
+            isPastSlot: isPastSlot
+          };
+        });
 
         return {
           ...court,
-          availableSlots,
+          availableSlots: allSlots,
         };
       });
 
