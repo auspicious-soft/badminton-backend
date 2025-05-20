@@ -13,18 +13,42 @@ export const setIo = (ioServer: Server) => {
   io = ioServer;
 };
 
-// Initialize socket events
+// Initialize socket events with better error handling
 export const initializeSocketEvents = (ioServer: Server) => {
   io = ioServer;
   
-  // Middleware for authentication
+  // Add error event handler for the engine
+  io.engine.on("connection_error", (err) => {
+    console.error("Socket.IO connection error:", err);
+  });
+  
+  // Middleware for authentication with better error handling
   io.use(async (socket, next) => {
     try {
-      const user = await authenticateSocket(socket);
-      socket.data.user = user;
-      next();
+      console.log("Socket connection attempt with query params:", socket.handshake.query);
+      console.log("Socket connection attempt with auth:", socket.handshake.auth);
+      
+      const token = 
+        socket.handshake.auth.token || 
+        socket.handshake.query.token;
+      
+      if (!token) {
+        console.log("No token found in socket handshake");
+        return next(new Error("Authentication error: Token not provided"));
+      }
+      
+      try {
+        const user = await authenticateSocket(socket);
+        socket.data.user = user;
+        console.log("Socket authenticated successfully for user:", user.id);
+        next();
+      } catch (authError) {
+        console.error("Socket authentication error:", authError);
+        next(new Error(authError instanceof Error ? authError.message : "Authentication failed"));
+      }
     } catch (error) {
-      next(error as Error);
+      console.error("Unexpected error in socket middleware:", error);
+      next(new Error("Server error"));
     }
   });
 
@@ -88,4 +112,5 @@ export const sendToUser = (
 
 // Export io instance
 export { io };
+
 

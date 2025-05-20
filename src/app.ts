@@ -54,6 +54,7 @@ const io = new Server(server, {
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Content-Length', 'X-Requested-With', 'Accept'],
   },
+    path: "/socket.io/"
 });
 
 // Set the io instance
