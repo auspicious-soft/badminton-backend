@@ -151,23 +151,34 @@ export const checkAdminAuth = async (
 
 export const authenticateSocket = (socket: Socket): Promise<any> => {
   return new Promise((resolve, reject) => {
-    const token =
-      socket.handshake.auth.token ||
-      socket.handshake.headers.token ||
-      socket.handshake.query.token;
-
-    if (!token) {
-      return reject(new Error("Authentication error: Token not provided"));
-    }
-
     try {
-      const decoded = jwt.verify(
-        token as string,
-        process.env.AUTH_SECRET || "your-jwt-secret"
-      );
-      resolve(decoded);
+      const token =
+        socket.handshake.auth?.token ||
+        socket.handshake.headers?.token ||
+        socket.handshake.query?.token;
+
+      if (!token) {
+        return reject(new Error("Authentication error: Token not provided"));
+      }
+
+      // Log the token (first few characters for debugging)
+      console.log(`Authenticating socket with token: ${String(token).substring(0, 20)}...`);
+
+      try {
+        const decoded = jwt.verify(
+          String(token),
+          process.env.AUTH_SECRET || "your-jwt-secret"
+        );
+        
+        console.log("Token verified successfully:", (decoded as JwtPayload)?.id || (decoded as JwtPayload)?.sub);
+        resolve(decoded);
+      } catch (jwtError: unknown) {
+        console.error("JWT verification error:", (jwtError as Error).message);
+        reject(new Error(`Invalid token: ${(jwtError as Error).message}`));
+      }
     } catch (error) {
-      reject(new Error("Authentication error: Invalid token"));
+      console.error("Unexpected error in authenticateSocket:", error);
+      reject(new Error("Server error during authentication"));
     }
   });
 };

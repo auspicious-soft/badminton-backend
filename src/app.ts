@@ -47,14 +47,22 @@ app.use("/api", auth);
 // Use server.listen instead of app.listen
 server.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
 
-// Set up Socket.IO
+// Set up Socket.IO with improved error handling
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Content-Length', 'X-Requested-With', 'Accept'],
+    credentials: true
   },
-    path: "/socket.io/"
+  path: "/socket.io/",
+  connectTimeout: 45000,
+  // Add these options to help with connection issues
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  cookie: false
 });
 
 // Set the io instance

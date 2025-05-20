@@ -28,9 +28,10 @@ export const initializeSocketEvents = (ioServer: Server) => {
       console.log("Socket connection attempt with query params:", socket.handshake.query);
       console.log("Socket connection attempt with auth:", socket.handshake.auth);
       
+      // Get token from query params or auth object
       const token = 
-        socket.handshake.auth.token || 
-        socket.handshake.query.token;
+        socket.handshake.auth?.token || 
+        socket.handshake.query?.token;
       
       if (!token) {
         console.log("No token found in socket handshake");
@@ -38,17 +39,19 @@ export const initializeSocketEvents = (ioServer: Server) => {
       }
       
       try {
+        // Use a try/catch specifically for the authentication
         const user = await authenticateSocket(socket);
         socket.data.user = user;
         console.log("Socket authenticated successfully for user:", user.id);
         next();
-      } catch (authError) {
+      } catch (authError: any) {
         console.error("Socket authentication error:", authError);
-        next(new Error(authError instanceof Error ? authError.message : "Authentication failed"));
+        // Be more specific about the error
+        next(new Error(`Authentication failed: ${(authError as Error).message}`));
       }
     } catch (error) {
       console.error("Unexpected error in socket middleware:", error);
-      next(new Error("Server error"));
+      next(new Error("Server error during authentication"));
     }
   });
 
@@ -112,5 +115,6 @@ export const sendToUser = (
 
 // Export io instance
 export { io };
+
 
 
