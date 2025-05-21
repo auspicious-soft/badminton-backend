@@ -13,6 +13,7 @@ export interface BookingRequestDocument extends Document {
   balls: number;
   playerPayment: number;
   paymentStatus: "Pending" | "Paid" | "Cancelled" | "Refunded";
+  transactionId: mongoose.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -73,6 +74,10 @@ const bookingRequestSchema = new Schema(
       type: String,
       enum: ["Pending", "Paid", "Cancelled", "Refunded"],
       default: "Pending",
+    },
+    transactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "transactions",
     },
   },
   { timestamps: true }

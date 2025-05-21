@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface PriceDocument extends Document {
   name: string;
@@ -11,6 +11,12 @@ export interface PriceDocument extends Document {
   isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  getPriceForSlot(slot: string): number | null;
+}
+
+// Add interface for static methods
+export interface PriceModel extends Model<PriceDocument> {
+  findPriceForSlot(dayType: string, slot: string): Promise<number | null>;
 }
 
 const priceSchema = new Schema<PriceDocument>(
@@ -87,12 +93,10 @@ const slotPricing = this.slotPricing.find((item: SlotPricing) => item.slot === s
 
 // Static method to find price for a specific pricing plan and slot
 priceSchema.statics.findPriceForSlot = async function(
-  pricingName: string,
   dayType: string,
   slot: string
 ): Promise<number | null> {
   const pricing = await this.findOne({
-    name: pricingName,
     dayType,
     isActive: true,
   }).lean();
@@ -107,4 +111,4 @@ const slotPricing: SlotPricing | undefined = pricing.slotPricing.find((item: Slo
   return slotPricing ? slotPricing.price : null;
 };
 
-export const priceModel = mongoose.model<PriceDocument>("prices", priceSchema);
+export const priceModel = mongoose.model<PriceDocument, PriceModel>("prices", priceSchema);

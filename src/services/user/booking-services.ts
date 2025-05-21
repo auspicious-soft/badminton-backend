@@ -10,6 +10,7 @@ import {
   notificationModel,
 } from "src/models/notification/notification-schema";
 import { priceModel } from "src/models/admin/price-schema";
+import razorpayInstance from "src/config/razorpay";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -31,15 +32,46 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
   // ********************Validations****************************
 
-  const bookingPrice: number = 600,
-    completeCourtPrice: number = 1200,
-    playerPayment: number = 300;
+  // Get the current date and determine if it's a weekday or weekend
+  const currentDate = new Date();
+  const dayOfWeek = currentDate.getDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const dayType = isWeekend ? "weekend" : "weekday";
+
+  // Calculate total payment by summing prices for all slots
+  let totalSlotPayment = 0;
+
+  // Get price for each booking slot
+  for (const slot of bookingSlots) {
+    const slotPrice = await priceModel.findPriceForSlot(dayType, slot);
+    if (!slotPrice) {
+      return errorResponseHandler(
+        `Price configuration not found for slot ${slot}`,
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+    totalSlotPayment += slotPrice;
+  }
+
+  if (totalSlotPayment === 0) {
+    return errorResponseHandler(
+      "Price configuration not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  const playerPayment: number = totalSlotPayment/ bookingSlots.length; // Average per slot
+  const bookingPrice: number = totalSlotPayment * 2/ bookingSlots.length; // For half court
+  const completeCourtPrice: number = totalSlotPayment * 4/ bookingSlots.length; // For full court
 
   // Process all players to set payment information and collect player IDs for paidFor
   [...team1, ...team2].forEach((item) => {
     if (item.playerId) {
       if (item.playerId === userData.id) {
         item.paidBy = "Self";
+        item.playerPayment = playerPayment;
         // Add player ID to paidFor array
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       } else if (item.playerId !== userData.id) {
@@ -68,7 +100,6 @@ export const bookCourtServices = async (req: Request, res: Response) => {
               : bookingPrice * bookingSlots.length,
           currency: "INR",
           status: "created",
-          method: "razorpay",
           notes: bookingSlots,
           isWebhookVerified: false,
         },
@@ -156,6 +187,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     racketB,
     racketC,
     balls,
+    paymentMethod = "razorpay", // Default payment method
   } = req.body;
 
   // Find the booking with more details
@@ -240,41 +272,137 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Create the booking request
-  const requestData = {
-    bookingId,
-    requestedBy: userData.id,
-    requestedTo: booking.userId,
-    requestedTeam,
-    requestedPosition,
-    status: "pending",
-    racketA: racketA || 0,
-    racketB: racketB || 0,
-    racketC: racketC || 0,
-    balls: balls || 0,
-    playerPayment: 300,
-    paymentStatus: "Pending",
-  };
+  // Determine if it's a weekday or weekend
+  const bookingDayOfWeek = bookingDate.getDay();
+  const isWeekend = bookingDayOfWeek === 0 || bookingDayOfWeek === 6;
+  const dayType = isWeekend ? "weekend" : "weekday";
 
-  const data = await bookingRequestModel.create(requestData);
+  // Get the price for the booking slot
+  const slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
+  if (!slotPrice) {
+    return errorResponseHandler(
+      `Price configuration not found for slot ${bookingSlot}`,
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
 
-  // Create notification for the booking owner
-  await createNotification({
-    recipientId: booking.userId,
-    senderId: userData.id,
-    type: "GAME_INVITATION",
-    title: "Game Invitation",
-    message: `${userData.name} requested to join your game.`,
-    category: "GAME",
-    referenceId: bookingId,
-    referenceType: "bookings",
-  });
+  // Start a MongoDB session for transaction consistency
+  const session = await mongoose.startSession();
 
-  return {
-    success: true,
-    message: "Request to join the game sent successfully",
-    data: data,
-  };
+  try {
+    await session.startTransaction();
+
+    // 1. Create a transaction record for this join request
+    const transaction = await transactionModel.create(
+      [
+        {
+          userId: userData.id,
+          bookingId: [new mongoose.Types.ObjectId(bookingId)],
+          paidFor: [new mongoose.Types.ObjectId(userData.id)],
+          amount: slotPrice,
+          currency: "INR",
+          status: "created",
+          notes: {
+            bookingSlot,
+            requestedTeam,
+            requestedPosition,
+            racketA: racketA || 0,
+            racketB: racketB || 0,
+            racketC: racketC || 0,
+            balls: balls || 0,
+          },
+          isWebhookVerified: false,
+          method: paymentMethod,
+        },
+      ],
+      { session }
+    );
+
+    // 2. Create the booking request with transaction ID
+    const requestData = {
+      bookingId,
+      requestedBy: userData.id,
+      requestedTo: booking.userId,
+      requestedTeam,
+      requestedPosition,
+      status: "pending",
+      racketA: racketA || 0,
+      racketB: racketB || 0,
+      racketC: racketC || 0,
+      balls: balls || 0,
+      playerPayment: slotPrice,
+      paymentStatus: "Pending",
+      transactionId: transaction[0]._id, // Link to the transaction
+    };
+
+    const bookingRequest = (await bookingRequestModel.create([requestData], { session })) as any;
+
+    // 3. Create notification for the booking owner
+    await createNotification({
+      recipientId: booking.userId,
+      senderId: userData.id,
+      type: "GAME_INVITATION",
+      title: "Game Invitation",
+      message: `${userData.name} requested to join your game.`,
+      category: "GAME",
+      referenceId: bookingId,
+      referenceType: "bookings",
+    });
+
+    // 4. Create a Razorpay order if payment method is razorpay
+    let paymentDetails = null;
+    if (paymentMethod === "razorpay") {
+      const options = {
+        amount: slotPrice * 100, // Amount in paise
+        currency: "INR",
+        receipt: (transaction[0]._id as mongoose.Types.ObjectId).toString(),
+        notes: {
+          bookingId: bookingId,
+          userId: userData.id.toString(),
+          requestId: bookingRequest[0]._id.toString(),
+          requestedTeam,
+          requestedPosition,
+        },
+      };
+
+      interface RazorpayOrder {
+        id: string;
+      }
+
+      const razorpayOrder: RazorpayOrder = await razorpayInstance.orders.create(options as any) as any;
+
+      // Update transaction with Razorpay order ID
+      await transactionModel.findByIdAndUpdate(
+        transaction[0]._id,
+        { razorpayOrderId: razorpayOrder.id },
+        { session }
+      );
+
+      paymentDetails = {
+        razorpayOrderId: razorpayOrder.id,
+        amount: slotPrice,
+        currency: "INR",
+      };
+    }
+
+    await session.commitTransaction();
+
+    return {
+      success: true,
+      message: "Request to join the game sent successfully",
+      data: {
+        request: bookingRequest[0],
+        transaction: transaction[0],
+        payment: paymentDetails,
+      },
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 };
 
 export const userNotificationServices = async (req: Request, res: Response) => {
@@ -292,7 +420,7 @@ export const userNotificationServices = async (req: Request, res: Response) => {
 };
 
 export const paymentBookingServices = async (req: Request, res: Response) => {
-  const transactionId = req.body.transactionId;
+  const {transactionId, method} = req.body;
 
   if (!transactionId) {
     return errorResponseHandler(
@@ -321,7 +449,6 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Get all booking IDs from the transaction
   const bookingIds = transaction.bookingId || [];
 
   if (bookingIds.length === 0) {
@@ -332,79 +459,124 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Start a session for transaction consistency
-  const session = await mongoose.startSession();
 
-  try {
-    session.startTransaction();
+  if(method !== "razorpay") {
+    return errorResponseHandler(
+      "Invalid payment method",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }else{
 
-    // Update the transaction with payment details
-    const updatedTransaction = await transactionModel.findByIdAndUpdate(
+    const options = {
+      amount: transaction.amount * 100, // Amount in paise
+      currency: transaction.currency,
+      receipt: transaction._id.toString(),
+      notes: {
+        bookingId: transaction.bookingId?.map(id => id.toString()),
+        userId: transaction.userId.toString(),
+        paidFor: transaction.paidFor?.map(id => id.toString()),
+      },
+    }
+
+    const razorpayOrder = await razorpayInstance.orders.create(options as any);
+
+    await transactionModel.findByIdAndUpdate(
       transactionId,
       {
-        razorpayPaymentId: req.body.razorpayPaymentId || "dummy_payment_id",
-        razorpaySignature: req.body.razorpaySignature || "dummy_signature",
-        razorpayOrderId: req.body.razorpayOrderId || "dummy_order_id",
-        status: "captured",
-        isWebhookVerified: true,
+        razorpayOrderId: razorpayOrder.id,
+        status: "created",
+        method: "razorpay",
       },
-      { new: true, session }
+      { new: true }
     );
-
-    // Get all bookings that need to be updated
-    const bookings = await bookingModel.find({ _id: { $in: bookingIds } });
-
-    // Update each booking
-    const updatedBookings = await Promise.all(
-      bookings.map(async (booking) => {
-        // Prepare updates for team players
-        const updateOperations: any = { bookingPaymentStatus: true };
-
-        // Get the player IDs that were paid for
-        const paidForPlayerIds =
-          updatedTransaction?.paidFor?.map((id) => id.toString()) || [];
-
-        // Update team1 players' payment status
-        booking.team1.forEach((player: any, index: number) => {
-          if (
-            player.playerId &&
-            paidForPlayerIds.includes(player.playerId.toString())
-          ) {
-            updateOperations[`team1.${index}.paymentStatus`] = "Paid";
-          }
-        });
-
-        // Update team2 players' payment status
-        booking.team2.forEach((player: any, index: number) => {
-          if (
-            player.playerId &&
-            paidForPlayerIds.includes(player.playerId.toString())
-          ) {
-            updateOperations[`team2.${index}.paymentStatus`] = "Paid";
-          }
-        });
-
-        // Update the booking
-        return await bookingModel.findByIdAndUpdate(
-          booking._id,
-          { $set: updateOperations },
-          { new: true, session }
-        );
-      })
-    );
-
-    await session.commitTransaction();
 
     return {
       success: true,
-      message: "Payment completed successfully",
-    };
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    await session.endSession();
+      message: "Razorpay order created successfully",
+      data: {
+        razorpayOrderId: razorpayOrder.id,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        receipt: transaction._id.toString(),
+      },
+    }
   }
+
+
+  // // Start a session for transaction consistency
+  // const session = await mongoose.startSession();
+
+  // try {
+  //   session.startTransaction();
+
+  //   // Update the transaction with payment details
+  //   const updatedTransaction = await transactionModel.findByIdAndUpdate(
+  //     transactionId,
+  //     {
+  //       razorpayPaymentId: req.body.razorpayPaymentId || "dummy_payment_id",
+  //       razorpaySignature: req.body.razorpaySignature || "dummy_signature",
+  //       razorpayOrderId: req.body.razorpayOrderId || "dummy_order_id",
+  //       status: "captured",
+  //       isWebhookVerified: true,
+  //     },
+  //     { new: true, session }
+  //   );
+
+  //   // Get all bookings that need to be updated
+  //   const bookings = await bookingModel.find({ _id: { $in: bookingIds } });
+
+  //   // Update each booking
+  //   const updatedBookings = await Promise.all(
+  //     bookings.map(async (booking) => {
+  //       // Prepare updates for team players
+  //       const updateOperations: any = { bookingPaymentStatus: true };
+
+  //       // Get the player IDs that were paid for
+  //       const paidForPlayerIds =
+  //         updatedTransaction?.paidFor?.map((id) => id.toString()) || [];
+
+  //       // Update team1 players' payment status
+  //       booking.team1.forEach((player: any, index: number) => {
+  //         if (
+  //           player.playerId &&
+  //           paidForPlayerIds.includes(player.playerId.toString())
+  //         ) {
+  //           updateOperations[`team1.${index}.paymentStatus`] = "Paid";
+  //         }
+  //       });
+
+  //       // Update team2 players' payment status
+  //       booking.team2.forEach((player: any, index: number) => {
+  //         if (
+  //           player.playerId &&
+  //           paidForPlayerIds.includes(player.playerId.toString())
+  //         ) {
+  //           updateOperations[`team2.${index}.paymentStatus`] = "Paid";
+  //         }
+  //       });
+
+  //       // Update the booking
+  //       return await bookingModel.findByIdAndUpdate(
+  //         booking._id,
+  //         { $set: updateOperations },
+  //         { new: true, session }
+  //       );
+  //     })
+  //   );
+
+  //   await session.commitTransaction();
+
+  //   return {
+  //     success: true,
+  //     message: "Payment completed successfully",
+  //   };
+  // } catch (error) {
+  //   await session.abortTransaction();
+  //   throw error;
+  // } finally {
+  //   await session.endSession();
+  // }
 };
 
 export const modifyBookingServices = async (req: Request, res: Response) => {

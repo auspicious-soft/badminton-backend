@@ -64,6 +64,7 @@ const notificationSchema = new Schema(
         "PAYMENT_FAILED",
         "REFUND_INITIATED",
         "REFUND_COMPLETED",
+        "REFUND_FAILED",
         "PAYMENT_REMINDER",
 
         // System notifications
@@ -242,45 +243,59 @@ export const notificationModel = mongoose.model<NotificationDocument>(
 );
 
 // Helper function to create notifications
-export const createNotification = async ({
-  recipientId,
-  senderId,
-  type,
-  title,
-  message,
-  category,
-  priority = "MEDIUM",
-  referenceId,
-  referenceType,
-  metadata = {},
-  notificationType = "BOTH",
-  expiresAt,
-}: {
-  recipientId: mongoose.Types.ObjectId;
-  senderId?: mongoose.Types.ObjectId;
-  type: string;
-  title: string;
-  message: string;
-  category: string;
-  priority?: "HIGH" | "MEDIUM" | "LOW";
-  referenceId?: string | mongoose.Types.ObjectId | any;
-  referenceType?: string;
-  metadata?: Record<string, any>;
-  notificationType?: "PUSH" | "IN_APP" | "BOTH";
-  expiresAt?: Date;
-}) => {
-  return await notificationModel.create({
+export const createNotification = async (
+  {
     recipientId,
     senderId,
     type,
     title,
     message,
     category,
-    priority,
+    priority = "MEDIUM",
     referenceId,
     referenceType,
-    metadata,
-    notificationType,
+    metadata = {},
+    notificationType = "BOTH",
     expiresAt,
-  });
+  }: {
+    recipientId: mongoose.Types.ObjectId;
+    senderId?: mongoose.Types.ObjectId;
+    type: string;
+    title: string;
+    message: string;
+    category: string;
+    priority?: "HIGH" | "MEDIUM" | "LOW";
+    referenceId?: string | mongoose.Types.ObjectId | any;
+    referenceType?: string;
+    metadata?: Record<string, any>;
+    notificationType?: "PUSH" | "IN_APP" | "BOTH";
+    expiresAt?: Date;
+  },
+  options: { session?: mongoose.ClientSession } = {}
+) => {
+  const { session } = options;
+
+  const [notification] = await notificationModel.create(
+    [
+      {
+        recipientId,
+        senderId,
+        type,
+        title,
+        message,
+        category,
+        priority,
+        referenceId,
+        referenceType,
+        metadata,
+        notificationType,
+        expiresAt,
+      },
+    ],
+    { session }
+  );
+
+  return notification;
 };
+
+

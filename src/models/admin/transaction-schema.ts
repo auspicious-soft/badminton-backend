@@ -46,6 +46,7 @@ const transactionSchema = new Schema<TransactionDocument>(
     ],
     razorpayOrderId: {
       type: String,
+      default: null,
       // required: true,
     },
     razorpayPaymentId: {
