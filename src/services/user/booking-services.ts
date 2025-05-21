@@ -62,9 +62,9 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     );
   }
 
-  const playerPayment: number = totalSlotPayment/ bookingSlots.length; // Average per slot
-  const bookingPrice: number = totalSlotPayment * 2/ bookingSlots.length; // For half court
-  const completeCourtPrice: number = totalSlotPayment * 4/ bookingSlots.length; // For full court
+  const playerPayment: number = (totalSlotPayment/ bookingSlots.length)/4; // Average per slot
+  const bookingPrice: number = (totalSlotPayment * 2/ bookingSlots.length)/4; // For half court
+  const completeCourtPrice: number = totalSlotPayment/ bookingSlots.length; // For full court
 
   // Process all players to set payment information and collect player IDs for paidFor
   [...team1, ...team2].forEach((item) => {

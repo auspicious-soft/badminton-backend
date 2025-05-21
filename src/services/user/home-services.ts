@@ -339,6 +339,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
 
       // Add availability to each court (if any)
+      // Add availability to each court (if any)
       const courtsWithAvailability = venueCourts.map((court: any) => {
         const courtId = court._id.toString();
         const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
@@ -493,40 +494,61 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         .lean();
 
       // Get all bookings for this venue on the specified date
-      const bookings = await bookingModel
+      const allBookings = await bookingModel
         .find({
           venueId: venueId,
           bookingDate: {
             $gte: requestDate,
             $lte: endOfDay,
-          },
+          }
         })
         .lean();
 
+      // Separate confirmed and pending bookings
+      const confirmedBookings = allBookings.filter(booking => booking.bookingPaymentStatus === true);
+      const pendingBookings = allBookings.filter(booking => booking.bookingPaymentStatus !== true);
+
       console.log(
-        `Found ${bookings.length} bookings for venue ${venueId} on ${date}`
+        `Found ${confirmedBookings.length} confirmed and ${pendingBookings.length} pending bookings for venue ${venueId} on ${date}`
       );
 
-      // Create a map of booked slots by court
-      const bookedSlots: Record<string, string[]> = {};
+      // Create maps for both confirmed and pending slots
+      const confirmedSlots: Record<string, string[]> = {};
+      const pendingSlots: Record<string, string[]> = {};
 
-      bookings.forEach((booking: any) => {
-        const courtId =
-          typeof booking.courtId === "object" && booking.courtId !== null
-            ? booking.courtId.toString
-              ? booking.courtId.toString()
-              : String(booking.courtId)
-            : booking.courtId;
+      // Process confirmed bookings
+      confirmedBookings.forEach((booking: any) => {
+        const courtId = typeof booking.courtId === "object" && booking.courtId !== null
+          ? booking.courtId.toString ? booking.courtId.toString() : String(booking.courtId)
+          : booking.courtId;
 
-        if (!bookedSlots[courtId]) {
-          bookedSlots[courtId] = [];
+        if (!confirmedSlots[courtId]) {
+          confirmedSlots[courtId] = [];
         }
 
         // Handle both array and string cases for bookingSlots
         if (Array.isArray(booking.bookingSlots)) {
-          bookedSlots[courtId].push(...booking.bookingSlots);
+          confirmedSlots[courtId].push(...booking.bookingSlots);
         } else {
-          bookedSlots[courtId].push(booking.bookingSlots);
+          confirmedSlots[courtId].push(booking.bookingSlots);
+        }
+      });
+
+      // Process pending bookings
+      pendingBookings.forEach((booking: any) => {
+        const courtId = typeof booking.courtId === "object" && booking.courtId !== null
+          ? booking.courtId.toString ? booking.courtId.toString() : String(booking.courtId)
+          : booking.courtId;
+
+        if (!pendingSlots[courtId]) {
+          pendingSlots[courtId] = [];
+        }
+
+        // Handle both array and string cases for bookingSlots
+        if (Array.isArray(booking.bookingSlots)) {
+          pendingSlots[courtId].push(...booking.bookingSlots);
+        } else {
+          pendingSlots[courtId].push(booking.bookingSlots);
         }
       });
 
@@ -542,14 +564,17 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       // Add availability to each court
       const courtsWithAvailability = courts.map((court: any) => {
         const courtId = court._id.toString();
-        const courtBookedSlots = bookedSlots[courtId] || [];
+        // Use confirmedSlots and pendingSlots instead of undefined bookedSlots
+        const courtConfirmedSlots = confirmedSlots[courtId] || [];
+        const courtPendingSlots = pendingSlots[courtId] || [];
         const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
         const baseHourlyRate = court.hourlyRate || 1200; // Default hourly rate if not specified
 
         // Include all slots with availability status
         const allSlots = venueTimeslots.map((slot: string) => {
-          // Check if slot is booked
-          const isBooked = courtBookedSlots.includes(slot);
+          // Check slot status
+          const isConfirmedBooked = confirmedSlots[courtId]?.includes(slot) || false;
+          const isPendingBooked = pendingSlots[courtId]?.includes(slot) || false;
           
           // Check if slot is in the past (for today only)
           let isPastSlot = false;
@@ -559,7 +584,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
           }
           
           // Determine if slot is available
-          const isAvailable = !isBooked && !isPastSlot;
+          const isAvailable = !isConfirmedBooked && !isPendingBooked && !isPastSlot;
           
           // Find dynamic price for this slot if pricing exists
           let price = baseHourlyRate;
@@ -578,7 +603,8 @@ export const getCourtsServices = async (req: Request, res: Response) => {
             isDiscounted: price < baseHourlyRate,
             isPremium: price > baseHourlyRate,
             isAvailable: isAvailable,
-            isBooked: isBooked,
+            isConfirmedBooked: isConfirmedBooked,
+            isPendingBooked: isPendingBooked,
             isPastSlot: isPastSlot
           };
         });
