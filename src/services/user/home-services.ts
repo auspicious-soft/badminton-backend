@@ -572,9 +572,8 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
         // Include all slots with availability status
         const allSlots = venueTimeslots.map((slot: string) => {
-          // Check slot status
-          const isConfirmedBooked = confirmedSlots[courtId]?.includes(slot) || false;
-          const isPendingBooked = pendingSlots[courtId]?.includes(slot) || false;
+          // Check slot status - only consider confirmed bookings
+          const isConfirmedBooked = courtConfirmedSlots.includes(slot) || false;
           
           // Check if slot is in the past (for today only)
           let isPastSlot = false;
@@ -583,8 +582,8 @@ export const getCourtsServices = async (req: Request, res: Response) => {
             isPastSlot = slotHour <= currentHour;
           }
           
-          // Determine if slot is available
-          const isAvailable = !isConfirmedBooked && !isPendingBooked && !isPastSlot;
+          // Determine if slot is available - ignore pending bookings
+          const isAvailable = !isConfirmedBooked && !isPastSlot;
           
           // Find dynamic price for this slot if pricing exists
           let price = baseHourlyRate;
@@ -604,7 +603,6 @@ export const getCourtsServices = async (req: Request, res: Response) => {
             isPremium: price > baseHourlyRate,
             isAvailable: isAvailable,
             isConfirmedBooked: isConfirmedBooked,
-            isPendingBooked: isPendingBooked,
             isPastSlot: isPastSlot
           };
         });
