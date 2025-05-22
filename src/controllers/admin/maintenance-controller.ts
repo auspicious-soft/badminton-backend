@@ -287,3 +287,46 @@ export const deleteMaintenanceBooking = async (req: Request, res: Response) => {
     });
   }
 };
+
+
+export const listOfVenues = async (req: Request, res: Response) => {
+  try {
+    const venues = await venueModel.find({ isActive: true }).select("name _id timeslots").lean();
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Venues retrieved successfully",
+      data: venues,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: message || "An error occurred",
+    });
+  }
+};
+
+export const listOfCourts = async (req: Request, res: Response) => {
+  try {
+    const { venueId } = req.query;
+    if (!venueId) {
+      return errorResponseHandler(
+        "Venue ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+    const courts = await courtModel.find({ venueId, isActive: true }).select("name _id games").lean();
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Courts retrieved successfully",
+      data: courts,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: message || "An error occurred",
+    });
+  }
+};

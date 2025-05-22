@@ -35,6 +35,8 @@ import {
   createMaintenanceBooking,
   deleteMaintenanceBooking,
   getMaintenanceBookings,
+  listOfCourts,
+  listOfVenues,
   updateMaintenanceBooking,
 } from "src/controllers/admin/maintenance-controller";
 
@@ -93,5 +95,7 @@ router.post("/maintenance-booking", createMaintenanceBooking);
 router.get("/maintenance-booking", getMaintenanceBookings);
 router.put("/maintenance-booking/:id", updateMaintenanceBooking);
 router.delete("/maintenance-booking/:id", deleteMaintenanceBooking);
+router.get("/venue-list", listOfVenues)
+router.get("/court-list", listOfCourts)
 
 export { router };
