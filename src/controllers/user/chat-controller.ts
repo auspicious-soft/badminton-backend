@@ -112,73 +112,73 @@ export const getChatById = async (req: Request, res: Response) => {
 };
 
 // Create a new individual chat or return existing one
-export const createOrGetIndividualChat = async (req: Request, res: Response) => {
-  try {
-    const userData = req.user as any;
-    const userId = userData.id;
-    const { recipientId } = req.body;
+// export const createOrGetIndividualChat = async (req: Request, res: Response) => {
+//   try {
+//     const userData = req.user as any;
+//     const userId = userData.id;
+//     const { recipientId } = req.body;
     
-    // Validate recipient ID
-    if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
-      return res.status(httpStatusCode.BAD_REQUEST).json({
-        success: false,
-        message: "Valid recipient ID is required"
-      });
-    }
+//     // Validate recipient ID
+//     if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
+//       return res.status(httpStatusCode.BAD_REQUEST).json({
+//         success: false,
+//         message: "Valid recipient ID is required"
+//       });
+//     }
     
-    // Prevent creating chat with yourself
-    if (userId === recipientId) {
-      return res.status(httpStatusCode.BAD_REQUEST).json({
-        success: false,
-        message: "Cannot create chat with yourself"
-      });
-    }
+//     // Prevent creating chat with yourself
+//     if (userId === recipientId) {
+//       return res.status(httpStatusCode.BAD_REQUEST).json({
+//         success: false,
+//         message: "Cannot create chat with yourself"
+//       });
+//     }
     
-    // Check if recipient exists
-    const recipient = await usersModel.findById(recipientId);
-    if (!recipient) {
-      return res.status(httpStatusCode.NOT_FOUND).json({
-        success: false,
-        message: "Recipient user not found"
-      });
-    }
+//     // Check if recipient exists
+//     const recipient = await usersModel.findById(recipientId);
+//     if (!recipient) {
+//       return res.status(httpStatusCode.NOT_FOUND).json({
+//         success: false,
+//         message: "Recipient user not found"
+//       });
+//     }
     
-    // Find existing chat or create new one
-    const existingChat = await chatModel.findOne({
-      chatType: "individual",
-      participants: { $all: [userId, recipientId] },
-      isActive: true
-    });
+//     // Find existing chat or create new one
+//     const existingChat = await chatModel.findOne({
+//       chatType: "individual",
+//       participants: { $all: [userId, recipientId] },
+//       isActive: true
+//     });
     
-    if (existingChat) {
-      return res.status(httpStatusCode.OK).json({
-        success: true,
-        message: "Existing chat retrieved",
-        data: existingChat
-      });
-    }
+//     if (existingChat) {
+//       return res.status(httpStatusCode.OK).json({
+//         success: true,
+//         message: "Existing chat retrieved",
+//         data: existingChat
+//       });
+//     }
     
-    // Create new chat
-    const newChat = await chatModel.create({
-      chatType: "individual",
-      participants: [userId, recipientId],
-      messages: []
-    });
+//     // Create new chat
+//     const newChat = await chatModel.create({
+//       chatType: "individual",
+//       participants: [userId, recipientId],
+//       messages: []
+//     });
     
-    // Populate participant details
-    const populatedChat = await chatModel
-      .findById(newChat._id)
-      .populate("participants", "fullName email profilePic");
+//     // Populate participant details
+//     const populatedChat = await chatModel
+//       .findById(newChat._id)
+//       .populate("participants", "fullName email profilePic");
     
-    return res.status(httpStatusCode.CREATED).json({
-      success: true,
-      message: "New chat created successfully",
-      data: populatedChat
-    });
-  } catch (error: any) {
-    return formatErrorResponse(res, error);
-  }
-};
+//     return res.status(httpStatusCode.CREATED).json({
+//       success: true,
+//       message: "New chat created successfully",
+//       data: populatedChat
+//     });
+//   } catch (error: any) {
+//     return formatErrorResponse(res, error);
+//   }
+// };
 
 // Create a group chat
 export const createGroupChat = async (req: Request, res: Response) => {
@@ -260,35 +260,88 @@ export const sendMessage = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
     const userId = userData.id;
-    const { chatId, content, contentType = "text", attachmentUrl, metadata } = req.body;
+    const { chatId, recipientId, content, contentType = "text", attachmentUrl, metadata } = req.body;
     
-    // Validate required fields
-    if (!chatId || !content) {
+    let chat;
+    
+    // If chatId is provided, use existing chat
+    if (chatId) {
+      // Validate chat ID
+      if (!mongoose.Types.ObjectId.isValid(chatId)) {
+        return res.status(httpStatusCode.BAD_REQUEST).json({
+          success: false,
+          message: "Invalid chat ID format"
+        });
+      }
+      
+      // Find the chat and verify user is a participant
+      chat = await chatModel.findOne({
+        _id: chatId,
+        participants: userId,
+        isActive: true
+      });
+      
+      if (!chat) {
+        return res.status(httpStatusCode.NOT_FOUND).json({
+          success: false,
+          message: "Chat not found or you're not a participant"
+        });
+      }
+    } 
+    // If recipientId is provided, find or create individual chat
+    else if (recipientId) {
+      // Validate recipient ID
+      if (!mongoose.Types.ObjectId.isValid(recipientId)) {
+        return res.status(httpStatusCode.BAD_REQUEST).json({
+          success: false,
+          message: "Valid recipient ID is required"
+        });
+      }
+      
+      // Prevent creating chat with yourself
+      if (userId === recipientId) {
+        return res.status(httpStatusCode.BAD_REQUEST).json({
+          success: false,
+          message: "Cannot send message to yourself"
+        });
+      }
+      
+      // Check if recipient exists
+      const recipient = await usersModel.findById(recipientId);
+      if (!recipient) {
+        return res.status(httpStatusCode.NOT_FOUND).json({
+          success: false,
+          message: "Recipient user not found"
+        });
+      }
+      
+      // Find existing chat or create new one
+      chat = await chatModel.findOne({
+        chatType: "individual",
+        participants: { $all: [userId, recipientId] },
+        isActive: true
+      });
+      
+      if (!chat) {
+        // Create new chat
+        chat = await chatModel.create({
+          chatType: "individual",
+          participants: [userId, recipientId],
+          messages: []
+        });
+      }
+    } else {
       return res.status(httpStatusCode.BAD_REQUEST).json({
         success: false,
-        message: "Chat ID and message content are required"
+        message: "Either chatId or recipientId is required"
       });
     }
     
-    // Validate chat ID
-    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+    // Validate content
+    if (!content) {
       return res.status(httpStatusCode.BAD_REQUEST).json({
         success: false,
-        message: "Invalid chat ID format"
-      });
-    }
-    
-    // Find the chat and verify user is a participant
-    const chat = await chatModel.findOne({
-      _id: chatId,
-      participants: userId,
-      isActive: true
-    });
-    
-    if (!chat) {
-      return res.status(httpStatusCode.NOT_FOUND).json({
-        success: false,
-        message: "Chat not found or you're not a participant"
+        message: "Message content is required"
       });
     }
     
@@ -323,7 +376,7 @@ export const sendMessage = async (req: Request, res: Response) => {
       const participantIdStr = participantId.toString();
       if (participantIdStr !== userId) {
         sendToUser(participantIdStr, "new_message", {
-          chatId,
+          chatId: chat._id,
           message: {
             ...addedMessage.toObject(),
             sender: { _id: userId, fullName: userData.fullName, email: userData.email }
@@ -334,10 +387,10 @@ export const sendMessage = async (req: Request, res: Response) => {
     
     // Emit to the chat room
     if (io) {  // Check if io is defined
-      io.to(`chat:${chatId}`).emit("chat_message", {
-        chatId,
+      io.to(`chat:${chat._id}`).emit("chat_message", {
+        chatId: chat._id,
         message: {
-          ...addedMessage.toObject ? addedMessage.toObject() : addedMessage,  // Check if toObject exists
+          ...addedMessage.toObject ? addedMessage.toObject() : addedMessage,
           sender: { _id: userId, fullName: userData.fullName, email: userData.email }
         }
       });
@@ -346,7 +399,13 @@ export const sendMessage = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.CREATED).json({
       success: true,
       message: "Message sent successfully",
-      data: addedMessage
+      data: {
+        message: addedMessage,
+        chat: {
+          _id: chat._id,
+          chatType: chat.chatType
+        }
+      }
     });
   } catch (error: any) {
     return formatErrorResponse(res, error);
@@ -705,5 +764,6 @@ export const removeGroupParticipant = async (req: Request, res: Response) => {
     return formatErrorResponse(res, error);
   }
 };
+
 
 

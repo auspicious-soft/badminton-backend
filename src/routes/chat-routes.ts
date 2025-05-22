@@ -2,7 +2,7 @@ import express from "express";
 import {
   getUserChats,
   getChatById,
-  createOrGetIndividualChat,
+  // createOrGetIndividualChat,
   createGroupChat,
   sendMessage,
   getChatMessages,
@@ -24,7 +24,7 @@ router.get("/:chatId", getChatById);
 router.get("/:chatId/messages", getChatMessages);
 
 // Create a new individual chat or return existing one
-router.post("/individual", createOrGetIndividualChat);
+// router.post("/individual", createOrGetIndividualChat);
 
 // Create a group chat
 router.post("/group", createGroupChat);
