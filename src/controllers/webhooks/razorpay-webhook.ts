@@ -7,6 +7,7 @@ import { httpStatusCode } from "../../lib/constant";
 import { createNotification } from "../../models/notification/notification-schema";
 import { configDotenv } from "dotenv";
 import { bookingRequestModel } from "src/models/venue/booking-request-schema";
+import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 configDotenv();
 
 export const razorpayWebhookHandler = async (req: Request, res: Response) => {
@@ -66,10 +67,29 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             razorpaySignature: signature, // Store the signature from the webhook
             status,
             isWebhookVerified: true,
-            method: "razorpay",
+            paymentDate: new Date()
           },
           { new: true, session }
         );
+
+        // Check if this was a combined payment (playcoins + razorpay)
+        if (transaction?.playcoinsUsed && transaction.playcoinsUsed > 0) {
+          // Deduct playcoins now that Razorpay payment is confirmed
+          await additionalUserInfoModel.findOneAndUpdate(
+            { userId: transaction.userId },
+            { $inc: { playCoins: -transaction.playcoinsUsed } },
+            { session }
+          );
+        }
+
+        // Alternative check - if playcoinsUsed is in notes (for backward compatibility)
+        else if (transaction?.notes?.playcoinsUsed && transaction.notes.playcoinsUsed > 0) {
+          await additionalUserInfoModel.findOneAndUpdate(
+            { userId: transaction.userId },
+            { $inc: { playCoins: -transaction.notes.playcoinsUsed } },
+            { session }
+          );
+        }
 
         if (!transaction) {
           throw new Error(`Transaction not found for order ID: ${orderId}`);
@@ -429,5 +449,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
     });
   }
 };
+
+
 
 

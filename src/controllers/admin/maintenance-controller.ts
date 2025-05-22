@@ -288,7 +288,6 @@ export const deleteMaintenanceBooking = async (req: Request, res: Response) => {
   }
 };
 
-
 export const listOfVenues = async (req: Request, res: Response) => {
   try {
     const venues = await venueModel.find({ isActive: true }).select("name _id timeslots").lean();

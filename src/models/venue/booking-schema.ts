@@ -16,8 +16,9 @@ export interface BookingDocument extends Document {
   bookingPaymentStatus: boolean;
   bookingDate: Date;
   bookingSlots: string;
+  expectedPayment: number; // New field for total expected payment
   cancellationReason?: string;
-  isMaintenance?: boolean; // New field to indicate maintenance booking
+  isMaintenance?: boolean; // Field to indicate maintenance booking
   maintenanceReason?: string; // Reason for maintenance
   createdBy?: mongoose.Types.ObjectId; // Admin/employee who created the maintenance
   createdAt?: Date;
@@ -170,6 +171,10 @@ const bookingSchema = new Schema(
     },
     bookingDate: { type: Date, required: true },
     bookingSlots: { type: String, enum: VENUE_TIME_SLOTS, required: true },
+    expectedPayment: {
+      type: Number,
+      default: 0,
+    },
     cancellationReason: { type: String, default: null },
     isMaintenance: {
       type: Boolean,

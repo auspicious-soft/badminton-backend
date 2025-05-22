@@ -13,6 +13,7 @@ export interface TransactionDocument extends Document {
   method?: string;
   notes?: any;
   isWebhookVerified: boolean;
+  playcoinsUsed: number;
 
   // Refund related
   refundedAmount?: number;
@@ -81,6 +82,10 @@ const transactionSchema = new Schema<TransactionDocument>(
     isWebhookVerified: {
       type: Boolean,
       default: false,
+    },
+    playcoinsUsed: {
+      type: Number,
+      default: 0,
     },
     refundedAmount: {
       type: Number,

@@ -112,6 +112,7 @@ export const validateBookingRequest = async (
     const existingBooking = await bookingModel.findOne({
       venueId,
       courtId,
+      bookingPaymentStatus: true,
       bookingDate: bookingDateObj,
       bookingSlots: { $in: bookingSlots },
       // bookingPaymentStatus: true,
