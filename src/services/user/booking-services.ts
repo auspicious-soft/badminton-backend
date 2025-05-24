@@ -362,7 +362,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     if ((paymentMethod === "playcoins" || paymentMethod === "both") && playcoinsToUse > 0) {
       await additionalUserInfoModel.findOneAndUpdate(
         { userId: userData.id },
-        { $inc: { playcoins: -playcoinsToUse } },
+        { $inc: { playCoins: -playcoinsToUse } },
         { session }
       );
     }
