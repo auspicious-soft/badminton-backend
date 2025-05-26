@@ -165,6 +165,24 @@ const createNewUser = async (userData: any, authType: string) => {
   });
 
   await newUser.save();
+  
+  // Create additional user info document
+  await additionalUserInfoModel.create({
+    userId: newUser._id,
+    playCoins: 0,
+    loyaltyPoints: 0,
+    loyaltyTier: "Bronze",
+    notificationPreferences: {
+      gameInvites: true,
+      friendRequests: true,
+      bookingReminders: true,
+      promotions: true,
+      systemUpdates: true,
+      nearbyEvents: true,
+    },
+    clubMember: false,
+    playerRating: 0,
+  });
 
   return newUser;
 };
@@ -235,6 +253,25 @@ export const signUpService = async (
   user.token = generateUserToken(user as any, verification);
 
   await user.save();
+  
+  // Create additional user info document
+  await additionalUserInfoModel.create({
+    userId: user._id,
+    playCoins: 0,
+    loyaltyPoints: 0,
+    loyaltyTier: "Bronze",
+    notificationPreferences: {
+      gameInvites: true,
+      friendRequests: true,
+      bookingReminders: true,
+      promotions: true,
+      systemUpdates: true,
+      nearbyEvents: true,
+    },
+    clubMember: false,
+    playerRating: 0,
+  });
+  
   return {
     success: true,
     message:
@@ -420,8 +457,6 @@ export const createUserService = async (payload: any, res: Response) => {
   }
 
   // Hash the password before saving the user
-  // const hashedPassword = bcrypt.hashSync(payload.password, 10);
-  // payload.password = hashedPassword;
   const newUser = new usersModel(payload);
   await addedUserCreds(newUser);
   newUser.password = await hashPasswordIfEmailAuth(payload, "Email");
@@ -429,6 +464,24 @@ export const createUserService = async (payload: any, res: Response) => {
   (newUser as any).identifier = identifier();
 
   const response = await newUser.save();
+  
+  // Create additional user info document
+  await additionalUserInfoModel.create({
+    userId: response._id,
+    playCoins: 0,
+    loyaltyPoints: 0,
+    loyaltyTier: "Bronze",
+    notificationPreferences: {
+      gameInvites: true,
+      friendRequests: true,
+      bookingReminders: true,
+      promotions: true,
+      systemUpdates: true,
+      nearbyEvents: true,
+    },
+    clubMember: false,
+    playerRating: 0,
+  });
 
   return {
     success: true,
