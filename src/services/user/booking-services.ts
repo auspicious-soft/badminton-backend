@@ -276,11 +276,19 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
   });
 
   if (checkExist) {
-    return errorResponseHandler(
-      "You have already requested this position",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
+    // If the existing request is pending, delete it and allow creating a new one
+    if (checkExist.status === "pending") {
+      console.log(`Deleting existing pending request: ${checkExist._id}`);
+      await bookingRequestModel.findByIdAndDelete(checkExist._id);
+      // Continue with the rest of the function to create a new request
+    } else {
+      // For other statuses (accepted, rejected, completed), return an error
+      return errorResponseHandler(
+        `You already have a ${checkExist.status} request for this booking`,
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
   }
 
   // Determine if it's a weekday or weekend
