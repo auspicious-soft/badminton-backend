@@ -53,6 +53,21 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       const status =
         eventType === "payment.captured" ? "captured" : "authorized";
 
+      // Check if this transaction has already been processed
+      const existingTransaction = await transactionModel.findOne({
+        razorpayOrderId: orderId,
+        razorpayPaymentId: paymentId,
+        isWebhookVerified: true,
+      });
+
+      if (existingTransaction) {
+        console.log(`Transaction ${paymentId} already processed, skipping`);
+        return res.status(httpStatusCode.OK).json({
+          success: true,
+          message: "Payment already processed",
+        });
+      }
+
       // Start a session for transaction consistency
       const session = await mongoose.startSession();
 
@@ -67,39 +82,55 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             razorpaySignature: signature, // Store the signature from the webhook
             status,
             isWebhookVerified: true,
-            paymentDate: new Date()
+            paymentDate: new Date(),
           },
           { new: true, session }
         );
 
+        if (!transaction) {
+          console.error(`Transaction not found for order ID: ${orderId}`);
+          await session.abortTransaction();
+          return res.status(httpStatusCode.OK).json({
+            success: false,
+            message: "Transaction not found, but acknowledging webhook",
+          });
+        }
+
         // Check if this was a combined payment (playcoins + razorpay)
-        if (transaction?.playcoinsUsed && transaction.playcoinsUsed > 0 && !transaction.playcoinsDeducted) {
-          // Deduct playcoins only if not already deducted
+        if (transaction.method === "both" && transaction.playcoinsUsed > 0 && !transaction.playcoinsDeducted) {
+          // Move playcoins from reserved to deducted
           await additionalUserInfoModel.findOneAndUpdate(
             { userId: transaction.userId },
-            { $inc: { playCoins: -transaction.playcoinsUsed } },
+            { 
+              $inc: { 
+                playCoins: -transaction.playcoinsUsed,
+                reservedPlayCoins: -transaction.playcoinsUsed 
+              }
+            },
             { session }
           );
           
           // Mark playcoins as deducted
           await transactionModel.findByIdAndUpdate(
             transaction._id,
-            { playcoinsDeducted: true },
+            { 
+              playcoinsDeducted: true,
+              playcoinsReserved: false
+            },
             { session }
           );
         }
 
         // Alternative check - if playcoinsUsed is in notes (for backward compatibility)
-        else if (transaction?.notes?.playcoinsUsed && transaction.notes.playcoinsUsed > 0) {
+        else if (
+          transaction?.notes?.playcoinsUsed &&
+          transaction.notes.playcoinsUsed > 0
+        ) {
           await additionalUserInfoModel.findOneAndUpdate(
             { userId: transaction.userId },
             { $inc: { playCoins: -transaction.notes.playcoinsUsed } },
             { session }
           );
-        }
-
-        if (!transaction) {
-          throw new Error(`Transaction not found for order ID: ${orderId}`);
         }
 
         // Update all associated bookings
@@ -168,6 +199,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
           // This is a join request payment
           if (!transaction.bookingId || transaction.bookingId.length === 0) {
             console.error("Booking ID is missing in transaction");
+            await session.abortTransaction();
             return res
               .status(httpStatusCode.BAD_REQUEST)
               .json({ success: false, message: "Booking ID is missing" });
@@ -187,7 +219,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
           if (bookingRequest) {
             // Update the booking request status
-            bookingRequest.status = "accepted";
+            bookingRequest.status = "completed";
             bookingRequest.paymentStatus = "Paid";
             await bookingRequest.save({ session });
 
@@ -210,14 +242,18 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               };
 
               // Check if playcoins were used in this transaction
-              if (transaction.playcoinsUsed && transaction.playcoinsUsed > 0 && !transaction.playcoinsDeducted) {
+              if (
+                transaction.playcoinsUsed &&
+                transaction.playcoinsUsed > 0 &&
+                !transaction.playcoinsDeducted
+              ) {
                 // Deduct playcoins only if not already deducted
                 await additionalUserInfoModel.findOneAndUpdate(
                   { userId: transaction.userId },
                   { $inc: { playCoins: -transaction.playcoinsUsed } },
                   { session }
                 );
-                
+
                 // Mark playcoins as deducted
                 await transactionModel.findByIdAndUpdate(
                   transaction._id,
@@ -225,9 +261,12 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   { session }
                 );
               }
-              
+
               // Alternative check - if playcoinsUsed is in notes (for backward compatibility)
-              else if (transaction.notes.playcoinsUsed && transaction.notes.playcoinsUsed > 0) {
+              else if (
+                transaction.notes.playcoinsUsed &&
+                transaction.notes.playcoinsUsed > 0
+              ) {
                 await additionalUserInfoModel.findOneAndUpdate(
                   { userId: transaction.userId },
                   { $inc: { playCoins: -transaction.notes.playcoinsUsed } },
@@ -235,9 +274,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 );
               }
 
-              // Add player to the requested team
+              // Add player to the requested team - use findIndex and update approach to avoid conflicts
               if (requestedTeam === "team1") {
-                // Find and replace if position exists, otherwise add
                 const positionIndex = booking.team1.findIndex(
                   (player: any) => player.playerType === requestedPosition
                 );
@@ -248,7 +286,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   booking.team1.push(playerObject);
                 }
               } else if (requestedTeam === "team2") {
-                // Find and replace if position exists, otherwise add
                 const positionIndex = booking.team2.findIndex(
                   (player: any) => player.playerType === requestedPosition
                 );
@@ -303,6 +340,21 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       } catch (error) {
         await session.abortTransaction();
         console.error("Error processing payment webhook:", error);
+
+        // If it's a write conflict, return a success response to prevent retries
+        if (
+          (error as Error).message &&
+          (error as Error).message.includes("Write conflict")
+        ) {
+          console.log(
+            "Write conflict detected, returning success to prevent retries"
+          );
+          return res.status(httpStatusCode.OK).json({
+            success: true,
+            message: "Payment acknowledged (write conflict detected)",
+          });
+        }
+
         throw error;
       } finally {
         session.endSession();
@@ -482,7 +534,3 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
     });
   }
 };
-
-
-
-
