@@ -582,7 +582,7 @@ export const verifyOTPService = async (
     if (user) {
       await user.save();
     }
-    return { user: sanitizeUser(user), message: "Email verified successfully" };
+    return { data: sanitizeUser(user), message: "Email verified successfully" };
   }
 
   if (phoneOtp) {
@@ -604,7 +604,7 @@ export const verifyOTPService = async (
     user.token = generateUserToken(user as any, true);
     await user.save();
     return {
-      user: sanitizeUser(user),
+      data: sanitizeUser(user),
       message: "Phone number verified successfully",
     };
   }
