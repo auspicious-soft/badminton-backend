@@ -209,6 +209,32 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 balls: transaction.notes.balls || 0,
               };
 
+              // Check if playcoins were used in this transaction
+              if (transaction.playcoinsUsed && transaction.playcoinsUsed > 0 && !transaction.playcoinsDeducted) {
+                // Deduct playcoins only if not already deducted
+                await additionalUserInfoModel.findOneAndUpdate(
+                  { userId: transaction.userId },
+                  { $inc: { playCoins: -transaction.playcoinsUsed } },
+                  { session }
+                );
+                
+                // Mark playcoins as deducted
+                await transactionModel.findByIdAndUpdate(
+                  transaction._id,
+                  { playcoinsDeducted: true },
+                  { session }
+                );
+              }
+              
+              // Alternative check - if playcoinsUsed is in notes (for backward compatibility)
+              else if (transaction.notes.playcoinsUsed && transaction.notes.playcoinsUsed > 0) {
+                await additionalUserInfoModel.findOneAndUpdate(
+                  { userId: transaction.userId },
+                  { $inc: { playCoins: -transaction.notes.playcoinsUsed } },
+                  { session }
+                );
+              }
+
               // Add player to the requested team
               if (requestedTeam === "team1") {
                 // Find and replace if position exists, otherwise add

@@ -243,7 +243,7 @@ export const changePasswordUser = async (req: Request, res: Response) => {
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
     const { otp, phoneNumber } = req.body;
-    const response = await verifyOTPService(otp, phoneNumber, res);
+    const response = await verifyOTPService(req.body, req, res);
     return res.status(httpStatusCode.OK).json({
       ...response,
       verifiedAt: getCurrentISTTime().toISOString() // Use IST time for verification timestamp
