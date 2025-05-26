@@ -324,7 +324,8 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
   const dayType = isWeekend ? "weekend" : "weekday";
 
   // Get the price for the booking slot
-  const slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
+  let slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
+  slotPrice = Number(slotPrice || 0)/4
   if (!slotPrice) {
     return errorResponseHandler(
       `Price configuration not found for slot ${bookingSlot}`,
@@ -436,7 +437,59 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
       referenceType: "bookings",
     });
 
-    // 4. Handle payment based on method
+    // 4. If payment is completed with playcoins, update the booking immediately
+    if (isWebhookVerified) {
+      // Create player object with payment details
+      const playerObject = {
+        playerId: userData.id,
+        playerType: requestedPosition,
+        playerPayment: slotPrice,
+        paymentStatus: "Paid",
+        transactionId: transaction[0]._id,
+        paidBy: "Self",
+        racketA: racketA || 0,
+        racketB: racketB || 0,
+        racketC: racketC || 0,
+        balls: balls || 0,
+      };
+
+      // Update the booking to add the player to the requested team and position
+      const bookingToUpdate = await bookingModel.findById(bookingId);
+      
+      if (bookingToUpdate) {
+        // Add player to the requested team
+        if (requestedTeam === "team1") {
+          bookingToUpdate.team1 = bookingToUpdate.team1.filter(
+            (player: any) => player.playerType !== requestedPosition
+          );
+          bookingToUpdate.team1.push(playerObject);
+        } else {
+          bookingToUpdate.team2 = bookingToUpdate.team2.filter(
+            (player: any) => player.playerType !== requestedPosition
+          );
+          bookingToUpdate.team2.push(playerObject);
+        }
+        
+        await bookingToUpdate.save({ session });
+        
+        // Create notification for the user that their request was accepted
+        // await createNotification(
+        //   {
+        //     recipientId: userData.id,
+        //     senderId: booking.userId,
+        //     type: "REQUEST_ACCEPTED",
+        //     title: "Request Accepted",
+        //     message: `Your request to join the game has been accepted.`,
+        //     category: "GAME",
+        //     referenceId: bookingId,
+        //     referenceType: "bookings",
+        //   },
+        //   { session }
+        // );
+      }
+    }
+
+    // 5. Handle payment based on method
     let paymentDetails = null;
 
     if (paymentMethod === "razorpay" || (paymentMethod === "both" && razorpayAmount > 0)) {
