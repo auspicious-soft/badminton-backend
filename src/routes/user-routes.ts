@@ -26,6 +26,7 @@ import {
 import {
   bookCourt,
   bookingPayment,
+  cancelBooking,
   getCourts,
   getDynamicPrice,
   getOpenMatches,
@@ -54,6 +55,7 @@ router.post("/book-court", validateBookingRequest, bookCourt);
 router.put("/modify-booking/:id", modifyBooking);
 router.post("/booking-payment", bookingPayment);
 router.get("/get-dynamic-price", getDynamicPrice);
+router.post("/cancel-booking", cancelBooking);
 
 router.get("/get-open-matches", getOpenMatches);
 router.get("/open-matches-data-byId/:id", getOpenMatchesById);

@@ -709,15 +709,28 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   console.log(`Date query: ${JSON.stringify(dateQuery)}`);
 
   try {
+    // Create a MongoDB ObjectId from the user's ID
+    const userObjectId = new mongoose.Types.ObjectId(userData.id);
+    
     // Get bookings with askToJoin = true and matching the date query
+    // Exclude bookings where the user is already a participant
     const bookings = await bookingModel
       .find({
         askToJoin: true,
         bookingDate: dateQuery,
+        // Exclude bookings where user is already in team1 or team2
+        $and: [
+          {
+            "team1.playerId": { $ne: userObjectId }
+          },
+          {
+            "team2.playerId": { $ne: userObjectId }
+          }
+        ]
       })
       .lean();
 
-    console.log(`Found ${bookings.length} open bookings with the date query`);
+    console.log(`Found ${bookings.length} open bookings with the date query (excluding user's own bookings)`);
 
     if (bookings.length === 0) {
       return {

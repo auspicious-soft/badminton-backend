@@ -14,6 +14,7 @@ export interface TransactionDocument extends Document {
   notes?: any;
   isWebhookVerified: boolean;
   playcoinsUsed: number;
+  playcoinsDeducted: boolean;
 
   // Refund related
   refundedAmount?: number;

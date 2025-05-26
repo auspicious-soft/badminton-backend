@@ -165,22 +165,22 @@ export const validateBookingRequest = async (
       });
       
       // Check if slots are consecutive
-      for (let i = 0; i < sortedSlots.length - 1; i++) {
-        const [currentHour, currentMinute] = sortedSlots[i].split(':').map(num => parseInt(num, 10));
-        const [nextHour, nextMinute] = sortedSlots[i+1].split(':').map(num => parseInt(num, 10));
+      // for (let i = 0; i < sortedSlots.length - 1; i++) {
+      //   const [currentHour, currentMinute] = sortedSlots[i].split(':').map(num => parseInt(num, 10));
+      //   const [nextHour, nextMinute] = sortedSlots[i+1].split(':').map(num => parseInt(num, 10));
         
-        // Check if slots are 1 hour apart (assuming all slots are hourly)
-        const currentTotalMinutes = currentHour * 60 + currentMinute;
-        const nextTotalMinutes = nextHour * 60 + nextMinute;
+      //   // Check if slots are 1 hour apart (assuming all slots are hourly)
+      //   const currentTotalMinutes = currentHour * 60 + currentMinute;
+      //   const nextTotalMinutes = nextHour * 60 + nextMinute;
         
-        if (nextTotalMinutes - currentTotalMinutes !== 60) {
-          return errorResponseHandler(
-            "Booking slots must be consecutive",
-            httpStatusCode.BAD_REQUEST,
-            res
-          );
-        }
-      }
+      //   if (nextTotalMinutes - currentTotalMinutes !== 60) {
+      //     return errorResponseHandler(
+      //       "Booking slots must be consecutive",
+      //       httpStatusCode.BAD_REQUEST,
+      //       res
+      //     );
+      //   }
+      // }
     }
 
     // Team validation

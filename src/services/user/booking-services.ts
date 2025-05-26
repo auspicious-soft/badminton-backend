@@ -1085,3 +1085,53 @@ export const getDynamicPriceServices = async (req: Request, res: Response) => {
     data: pricing,
   };
 };
+
+
+export const cancelBookingServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { bookingId, method } = req.body;
+
+  if (!bookingId) {
+    return errorResponseHandler(
+      "Booking ID is required",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  const booking = await bookingModel.findById(bookingId).lean();
+
+  if (!booking) {
+    return errorResponseHandler(
+      "Booking not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  if (booking.userId.toString() !== userData.id.toString()) {
+    return errorResponseHandler(
+      "You are not authorized to cancel this booking",
+      httpStatusCode.UNAUTHORIZED,
+      res
+    );
+  }
+
+  if (booking.bookingDate < new Date()) {
+    return errorResponseHandler(
+      "You cannot cancel a booking that has already started or passed",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  await bookingModel.findByIdAndUpdate(bookingId, {
+    cancellationReason: "User cancelled",
+  });
+
+  return {
+    success: true,
+    message: "Booking cancelled successfully",
+  };
+};
+
