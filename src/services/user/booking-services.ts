@@ -201,6 +201,33 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     );
   }
 
+  // Validate team and position
+  if (!requestedTeam || !["team1", "team2"].includes(requestedTeam)) {
+    return errorResponseHandler(
+      "Invalid team selection. Must be 'team1' or 'team2'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  if (!requestedPosition || !["player1", "player2", "player3", "player4"].includes(requestedPosition)) {
+    return errorResponseHandler(
+      "Invalid position selection. Must be 'player1', 'player2', 'player3', or 'player4'",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Validate team and position compatibility
+  if ((requestedTeam === "team1" && !["player1", "player2"].includes(requestedPosition)) ||
+      (requestedTeam === "team2" && !["player3", "player4"].includes(requestedPosition))) {
+    return errorResponseHandler(
+      "Position is not compatible with selected team",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
   // Find the booking with more details
   const booking = await bookingModel
     .findOne({
@@ -212,7 +239,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
 
   if (!booking) {
     return errorResponseHandler(
-      "Booking not found",
+      "Booking not found or not open for joining",
       httpStatusCode.NOT_FOUND,
       res
     );
@@ -334,7 +361,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     // Calculate payment details based on method
     const playcoinsToUse = paymentMethod === "razorpay" ? 0 : Math.min(playcoinsBalance, slotPrice);
     const razorpayAmount = slotPrice - playcoinsToUse;
-    const transactionStatus = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice ? "completed" : "created";
+    const transactionStatus = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice ? "captured" : "created";
     const isWebhookVerified = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice;
 
     // 1. Create a transaction record for this join request
@@ -360,7 +387,8 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           method: paymentMethod,
           playcoinsUsed: playcoinsToUse,
           razorpayAmount: razorpayAmount,
-          paymentDate: isWebhookVerified ? new Date() : null
+          paymentDate: isWebhookVerified ? new Date() : null,
+          playcoinsDeducted: playcoinsToUse > 0 ? true : false
         },
       ],
       { session }
@@ -382,7 +410,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
       requestedTo: booking.userId,
       requestedTeam,
       requestedPosition,
-      status: "pending",
+      status: transactionStatus === "captured" ? "completed" : "pending",
       racketA: racketA || 0,
       racketB: racketB || 0,
       racketC: racketC || 0,
@@ -470,6 +498,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     };
   } catch (error) {
     await session.abortTransaction();
+    console.error("Error in joinOpenBookingServices:", error);
     throw error;
   } finally {
     await session.endSession();

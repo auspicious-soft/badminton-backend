@@ -47,7 +47,7 @@ const bookingRequestSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "accepted", "rejected", "completed"],
+      enum: ["pending", "rejected", "completed"],
       default: "pending",
     },
     racketA: {
@@ -69,6 +69,11 @@ const bookingRequestSchema = new Schema(
     playerPayment: {
       type: Number,
       default: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["Pending", "Paid", "Cancelled", "Refunded"],
+      default: "Pending",
     },
     bookingStatus: {
       type: String,
