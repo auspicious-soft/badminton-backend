@@ -9,7 +9,6 @@ import { courtModel } from "src/models/venue/court-schema";
 import { getCurrentISTTime, isDateTodayInIST } from "../../utils";
 import { priceModel } from "src/models/admin/price-schema";
 
-
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
   const userData = req.user as any;
@@ -71,83 +70,121 @@ export const userHomeServices = async (req: Request, res: Response) => {
   }
 
   // Get current time in IST
-  const currentTime = getCurrentISTTime();
-  const currentHour = currentTime.getHours();
-  const currentMinute = currentTime.getMinutes();
-  
+  const currentISTTime = getCurrentISTTime();
+  const currentHour = currentISTTime.getHours();
+  const currentDate = new Date(currentISTTime);
+  currentDate.setHours(0, 0, 0, 0); // Set to beginning of day
+
   const upcomingMatchData = await bookingModel.aggregate([
     {
       $match: {
         $or: [
-          // Future dates or Today with slots after current time
+          // For future dates, include all slots
           {
+            bookingDate: { $gt: currentDate },
             $or: [
               {
-                bookingDate: {
-                  $gt: new Date(currentTime.setHours(23, 59, 59, 999)),
-                },
+                $and: [
+                  { bookingType: "Self" },
+                  {
+                    $or: [
+                      {
+                        team1: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                            paymentStatus: "Paid",
+                          },
+                        },
+                      },
+                      {
+                        team2: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                            paymentStatus: "Paid",
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
               },
               {
                 $and: [
+                  { bookingType: { $in: ["Booking", "Complete"] } },
+                  { bookingPaymentStatus: true },
                   {
-                    bookingDate: {
-                      $gte: new Date(currentTime.setHours(0, 0, 0, 0)),
-                      $lte: new Date(currentTime.setHours(23, 59, 59, 999)),
-                    },
-                  },
-                  {
-                    bookingSlots: {
-                      $gte: `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`,
-                    },
+                    $or: [
+                      {
+                        team1: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                          },
+                        },
+                      },
+                      {
+                        team2: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                          },
+                        },
+                      },
+                    ],
                   },
                 ],
               },
             ],
           },
+          // For today, only include slots that haven't passed yet
           {
-            $and: [
-              { bookingType: "Self" },
+            bookingDate: currentDate,
+            bookingSlots: { $gt: `${currentHour}:00` },
+            $or: [
               {
-                $or: [
+                $and: [
+                  { bookingType: "Self" },
                   {
-                    team1: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
-                        paymentStatus: "Paid",
+                    $or: [
+                      {
+                        team1: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                            paymentStatus: "Paid",
+                          },
+                        },
                       },
-                    },
-                  },
-                  {
-                    team2: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
-                        paymentStatus: "Paid",
+                      {
+                        team2: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                            paymentStatus: "Paid",
+                          },
+                        },
                       },
-                    },
+                    ],
                   },
                 ],
               },
-            ],
-          },
-          {
-            $and: [
-              { bookingType: { $in: ["Booking", "Complete"] } },
-              { bookingPaymentStatus: true },
               {
-                $or: [
+                $and: [
+                  { bookingType: { $in: ["Booking", "Complete"] } },
+                  { bookingPaymentStatus: true },
                   {
-                    team1: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
+                    $or: [
+                      {
+                        team1: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                          },
+                        },
                       },
-                    },
-                  },
-                  {
-                    team2: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
+                      {
+                        team2: {
+                          $elemMatch: {
+                            playerId: new mongoose.Types.ObjectId(userData.id),
+                          },
+                        },
                       },
-                    },
+                    ],
                   },
                 ],
               },
@@ -206,14 +243,16 @@ export const getVenuesServices = async (req: Request, res: Response) => {
 
     // Get current time in IST
     const istTime = getCurrentISTTime();
-    
+
     // Check if the requested date is today in IST
     const isRequestedDateToday = isDateTodayInIST(requestDate);
-    
+
     // Get current hour in IST
     const currentHour = istTime.getHours();
-    
-    console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
+
+    console.log(
+      `Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`
+    );
     console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
     // Step 1: Get venues based on location
@@ -498,14 +537,16 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
       // Get current time in IST
       const istTime = getCurrentISTTime();
-      
+
       // Check if the requested date is today in IST
       const isRequestedDateToday = isDateTodayInIST(requestDate);
-      
+
       // Get current hour in IST
       const currentHour = istTime.getHours();
-      
-      console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
+
+      console.log(
+        `Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`
+      );
       console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
 
       // Determine if it's a weekend (0 = Sunday, 6 = Saturday)
@@ -528,13 +569,17 @@ export const getCourtsServices = async (req: Request, res: Response) => {
           bookingDate: {
             $gte: requestDate,
             $lte: endOfDay,
-          }
+          },
         })
         .lean();
 
       // Separate confirmed and pending bookings
-      const confirmedBookings = allBookings.filter(booking => booking.bookingPaymentStatus === true);
-      const pendingBookings = allBookings.filter(booking => booking.bookingPaymentStatus !== true);
+      const confirmedBookings = allBookings.filter(
+        (booking) => booking.bookingPaymentStatus === true
+      );
+      const pendingBookings = allBookings.filter(
+        (booking) => booking.bookingPaymentStatus !== true
+      );
 
       console.log(
         `Found ${confirmedBookings.length} confirmed and ${pendingBookings.length} pending bookings for venue ${venueId} on ${date}`
@@ -546,9 +591,12 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
       // Process confirmed bookings
       confirmedBookings.forEach((booking: any) => {
-        const courtId = typeof booking.courtId === "object" && booking.courtId !== null
-          ? booking.courtId.toString ? booking.courtId.toString() : String(booking.courtId)
-          : booking.courtId;
+        const courtId =
+          typeof booking.courtId === "object" && booking.courtId !== null
+            ? booking.courtId.toString
+              ? booking.courtId.toString()
+              : String(booking.courtId)
+            : booking.courtId;
 
         if (!confirmedSlots[courtId]) {
           confirmedSlots[courtId] = [];
@@ -564,9 +612,12 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
       // Process pending bookings
       pendingBookings.forEach((booking: any) => {
-        const courtId = typeof booking.courtId === "object" && booking.courtId !== null
-          ? booking.courtId.toString ? booking.courtId.toString() : String(booking.courtId)
-          : booking.courtId;
+        const courtId =
+          typeof booking.courtId === "object" && booking.courtId !== null
+            ? booking.courtId.toString
+              ? booking.courtId.toString()
+              : String(booking.courtId)
+            : booking.courtId;
 
         if (!pendingSlots[courtId]) {
           pendingSlots[courtId] = [];
@@ -602,17 +653,17 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         const allSlots = venueTimeslots.map((slot: string) => {
           // Check slot status - only consider confirmed bookings
           const isConfirmedBooked = courtConfirmedSlots.includes(slot) || false;
-          
+
           // Check if slot is in the past (for today only)
           let isPastSlot = false;
           if (isRequestedDateToday) {
             const slotHour = parseInt(slot.split(":")[0], 10);
             isPastSlot = slotHour <= currentHour;
           }
-          
+
           // Determine if slot is available - ignore pending bookings
           const isAvailable = !isConfirmedBooked && !isPastSlot;
-          
+
           // Find dynamic price for this slot if pricing exists
           let price = baseHourlyRate;
           if (pricing && pricing.slotPricing) {
@@ -631,7 +682,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
             isPremium: price > baseHourlyRate,
             isAvailable: isAvailable,
             isConfirmedBooked: isConfirmedBooked,
-            isPastSlot: isPastSlot
+            isPastSlot: isPastSlot,
           };
         });
 
@@ -647,7 +698,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         courts: courtsWithAvailability,
         date: dateString,
         formattedDate: formattedDate,
-        dayType: dayType
+        dayType: dayType,
       };
 
       return {
@@ -696,50 +747,52 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
 
   // Get current time in IST
   const istTime = getCurrentISTTime();
-  
+
   // Create date query based on whether date is provided
   let dateQuery: any;
   let requestDate: Date;
   let endOfDay: Date;
   let isRequestedDateToday: boolean;
-  
+
   if (date) {
     // If date is provided, get matches for that specific date
     requestDate = new Date(date as string);
     requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
-    
+
     endOfDay = new Date(requestDate);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
     dateQuery = {
       $gte: requestDate,
       $lte: endOfDay,
     };
-    
+
     isRequestedDateToday = isDateTodayInIST(requestDate);
   } else {
     // If no date provided, get all matches from today onwards
     requestDate = new Date(istTime);
     requestDate.setHours(0, 0, 0, 0); // Set to beginning of today
-    
+
     dateQuery = {
       $gte: requestDate,
     };
-    
+
     isRequestedDateToday = true; // Today's matches will be included
   }
-  
+
   // Get current hour in IST
   const currentHour = istTime.getHours();
-  
-  console.log(`Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`);
+
+  console.log(
+    `Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`
+  );
   console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
   console.log(`Date query: ${JSON.stringify(dateQuery)}`);
 
   try {
     // Create a MongoDB ObjectId from the user's ID
     const userObjectId = new mongoose.Types.ObjectId(userData.id);
-    
+
     // Get bookings with askToJoin = true and matching the date query
     // Exclude bookings where the user is already a participant
     const bookings = await bookingModel
@@ -749,16 +802,18 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         // Exclude bookings where user is already in team1 or team2
         $and: [
           {
-            "team1.playerId": { $ne: userObjectId }
+            "team1.playerId": { $ne: userObjectId },
           },
           {
-            "team2.playerId": { $ne: userObjectId }
-          }
-        ]
+            "team2.playerId": { $ne: userObjectId },
+          },
+        ],
       })
       .lean();
 
-    console.log(`Found ${bookings.length} open bookings with the date query (excluding user's own bookings)`);
+    console.log(
+      `Found ${bookings.length} open bookings with the date query (excluding user's own bookings)`
+    );
 
     if (bookings.length === 0) {
       return {
@@ -766,10 +821,12 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         message: "No open matches found",
         data: [],
         meta: {
-          date: date ? new Date(date as string).toLocaleDateString("en-CA") : "all",
+          date: date
+            ? new Date(date as string).toLocaleDateString("en-CA")
+            : "all",
           isSpecificDate: !!date,
           isToday: isRequestedDateToday,
-        }
+        },
       };
     }
 
@@ -990,11 +1047,11 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       // First sort by date
       const dateA = new Date(a.bookingDate);
       const dateB = new Date(b.bookingDate);
-      
+
       if (dateA.getTime() !== dateB.getTime()) {
         return dateA.getTime() - dateB.getTime();
       }
-      
+
       // If same date, sort by distance
       // Handle null distances (put them at the end)
       if (a.distance === null && b.distance === null) return 0;
@@ -1021,7 +1078,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       success: true,
       message: "Open matches retrieved successfully",
       data: processedBookings,
-      meta
+      meta,
     };
   } catch (error) {
     console.error("Error in getOpenMatchesServices:", error);
