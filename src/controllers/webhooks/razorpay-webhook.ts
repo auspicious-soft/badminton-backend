@@ -8,6 +8,7 @@ import { createNotification } from "../../models/notification/notification-schem
 import { configDotenv } from "dotenv";
 import { bookingRequestModel } from "src/models/venue/booking-request-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
+import { chatModel } from "src/models/chat/chat-schema";
 configDotenv();
 
 export const razorpayWebhookHandler = async (req: Request, res: Response) => {
@@ -136,7 +137,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
           );
 
           const paidForPlayerIds =
-            transaction?.paidFor?.map((id : any) => id.toString()) || [];
+            transaction?.paidFor?.map((id: any) => id.toString()) || [];
 
           for (const booking of bookings) {
             // Update team1 players
@@ -162,6 +163,26 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             });
 
             await booking.save({ session });
+
+            const checkGroupExist = await chatModel.findOne({
+              bookingId: booking._id,
+            });
+
+            if (!checkGroupExist) {
+              await chatModel.create({
+                bookingId: booking._id,
+                chatType: "group",
+                groupName: `Booking Chat - ${booking._id}`,
+                participants: [
+                  // booking.userId,
+                  ...booking.team1.map((player: any) => player.playerId),
+                  ...booking.team2.map((player: any) => player.playerId),
+                ],
+                groupAdmin: [booking.userId],
+                messages: [],
+                isActive: true,
+              });
+            }
 
             // Create notification for booking owner
             await createNotification({
@@ -252,6 +273,23 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               }
 
               await booking.save({ session });
+
+              const checkGroupExist = await chatModel.findOne({
+                bookingId: booking._id,
+                participants: { $all: [booking.userId, transaction.userId] },
+              });
+
+              if (!checkGroupExist) {
+                await chatModel.updateOne(
+                  { bookingId: booking._id },
+                  {
+                    $addToSet: {
+                      participants: transaction.userId,
+                    },
+                  },
+                  { session }
+                );
+              }
 
               // Create notifications for both the requester and the booking owner
               await createNotification(

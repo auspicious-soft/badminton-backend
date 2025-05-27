@@ -12,6 +12,7 @@ import {
 import { priceModel } from "src/models/admin/price-schema";
 import razorpayInstance from "src/config/razorpay";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
+import { chatModel } from "src/models/chat/chat-schema";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -141,7 +142,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       return {
         ...bookingPayload,
         bookingSlots: slot,
-        expectedPayment: completeCourtPrice
+        expectedPayment: completeCourtPrice,
       };
     });
 
@@ -210,7 +211,10 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  if (!requestedPosition || !["player1", "player2", "player3", "player4"].includes(requestedPosition)) {
+  if (
+    !requestedPosition ||
+    !["player1", "player2", "player3", "player4"].includes(requestedPosition)
+  ) {
     return errorResponseHandler(
       "Invalid position selection. Must be 'player1', 'player2', 'player3', or 'player4'",
       httpStatusCode.BAD_REQUEST,
@@ -219,8 +223,12 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
   }
 
   // Validate team and position compatibility
-  if ((requestedTeam === "team1" && !["player1", "player2"].includes(requestedPosition)) ||
-      (requestedTeam === "team2" && !["player3", "player4"].includes(requestedPosition))) {
+  if (
+    (requestedTeam === "team1" &&
+      !["player1", "player2"].includes(requestedPosition)) ||
+    (requestedTeam === "team2" &&
+      !["player3", "player4"].includes(requestedPosition))
+  ) {
     return errorResponseHandler(
       "Position is not compatible with selected team",
       httpStatusCode.BAD_REQUEST,
@@ -325,7 +333,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
 
   // Get the price for the booking slot
   let slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
-  slotPrice = Number(slotPrice || 0)/4
+  slotPrice = Number(slotPrice || 0) / 4;
   if (!slotPrice) {
     return errorResponseHandler(
       `Price configuration not found for slot ${bookingSlot}`,
@@ -338,11 +346,11 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
   let playcoinsBalance = 0;
   if (paymentMethod === "playcoins" || paymentMethod === "both") {
     const userInfo = await additionalUserInfoModel
-    .findOne({ userId: userData.id })
-    .lean();
-    
+      .findOne({ userId: userData.id })
+      .lean();
+
     playcoinsBalance = userInfo?.playCoins || 0;
-    
+
     // Check if user has enough playcoins when using only playcoins
     if (paymentMethod === "playcoins" && playcoinsBalance < slotPrice) {
       return errorResponseHandler(
@@ -360,11 +368,13 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     await session.startTransaction();
 
     // Calculate payment details based on method
-    const playcoinsToUse = paymentMethod === "razorpay" ? 0 : Math.min(playcoinsBalance, slotPrice);
+    const playcoinsToUse =
+      paymentMethod === "razorpay" ? 0 : Math.min(playcoinsBalance, slotPrice);
     const razorpayAmount = slotPrice - playcoinsToUse;
 
     // Determine if payment can be completed immediately with playcoins
-    const canCompleteWithPlaycoins = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice;
+    const canCompleteWithPlaycoins =
+      paymentMethod === "playcoins" && playcoinsToUse >= slotPrice;
     const transactionStatus = canCompleteWithPlaycoins ? "captured" : "created";
     const isWebhookVerified = canCompleteWithPlaycoins;
 
@@ -392,7 +402,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           playcoinsUsed: playcoinsToUse,
           razorpayAmount: razorpayAmount,
           paymentDate: isWebhookVerified ? new Date() : null,
-          playcoinsDeducted: paymentMethod === "playcoins" ? true : false
+          playcoinsDeducted: paymentMethod === "playcoins" ? true : false,
         },
       ],
       { session }
@@ -414,7 +424,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
         { $inc: { reservedPlayCoins: playcoinsToUse } },
         { session }
       );
-      
+
       // Update transaction to indicate playcoins are reserved
       await transactionModel.findByIdAndUpdate(
         transaction[0]._id,
@@ -474,7 +484,24 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
 
       // Update the booking to add the player to the requested team and position
       const bookingToUpdate = await bookingModel.findById(bookingId);
-      
+
+      const checkGroupExist = await chatModel.findOne({
+        bookingId: bookingId,
+        participants: { $all: [userData.id] },
+      });
+
+      if (!checkGroupExist) {
+        await chatModel.updateOne(
+          { bookingId: bookingId },
+          {
+            $addToSet: {
+              participants: userData.id,
+            },
+          },
+          { session }
+        );
+      }
+
       if (bookingToUpdate) {
         // Add player to the requested team
         if (requestedTeam === "team1") {
@@ -488,9 +515,9 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           );
           bookingToUpdate.team2.push(playerObject);
         }
-        
+
         await bookingToUpdate.save({ session });
-        
+
         // Create notification for the user that their request was accepted
         // await createNotification(
         //   {
@@ -511,7 +538,10 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     // 5. Handle payment based on method
     let paymentDetails = null;
 
-    if ((paymentMethod === "razorpay" || paymentMethod === "both") && razorpayAmount > 0) {
+    if (
+      (paymentMethod === "razorpay" || paymentMethod === "both") &&
+      razorpayAmount > 0
+    ) {
       // Create a Razorpay order for the full amount or remaining amount
       const options = {
         amount: razorpayAmount * 100, // Amount in paise
@@ -523,7 +553,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           requestId: bookingRequest[0]._id.toString(),
           requestedTeam,
           requestedPosition,
-          playcoinsUsed: playcoinsToUse
+          playcoinsUsed: playcoinsToUse,
         },
       };
 
@@ -553,7 +583,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
         method: "playcoins",
         amount: slotPrice,
         playcoinsUsed: playcoinsToUse,
-        status: "completed"
+        status: "completed",
       };
     }
 
@@ -595,7 +625,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
   const { transactionId, method } = req.body;
   const userData = req.user as any;
 
-  if(["razorpay", "playcoins", "both"].includes(method) === false) {
+  if (["razorpay", "playcoins", "both"].includes(method) === false) {
     return errorResponseHandler(
       "Invalid payment method",
       httpStatusCode.BAD_REQUEST,
@@ -644,15 +674,15 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
   const userInfo = await additionalUserInfoModel
     .findOne({ userId: userData.id })
     .lean();
-  
+
   const playcoinsBalance = userInfo?.playCoins || 0;
-  
+
   // Start a MongoDB session for transaction consistency
   const session = await mongoose.startSession();
-  
+
   try {
     await session.startTransaction();
-    
+
     if (method === "playcoins") {
       // Check if user has enough playcoins
       if (playcoinsBalance < transaction.amount) {
@@ -663,14 +693,14 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           res
         );
       }
-      
+
       // Deduct playcoins from user's balance
       await additionalUserInfoModel.findOneAndUpdate(
         { userId: userData.id },
         { $inc: { playCoins: -transaction.amount } },
         { session }
       );
-      
+
       // Update transaction status
       await transactionModel.findByIdAndUpdate(
         transactionId,
@@ -678,27 +708,28 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           status: "completed",
           isWebhookVerified: true,
           method: "playcoins",
-          paymentDate: new Date()
+          paymentDate: new Date(),
         },
         { session }
       );
-      
+
       // Update all associated bookings
       await bookingModel.updateMany(
         { _id: { $in: bookingIds } },
         { bookingPaymentStatus: true },
         { session }
       );
-      
+
       // Update player payment status in each booking
       const bookings = await bookingModel.find(
         { _id: { $in: bookingIds } },
         null,
         { session }
       );
-      
-      const paidForPlayerIds = transaction.paidFor?.map((id) => id.toString()) || [];
-      
+
+      const paidForPlayerIds =
+        transaction.paidFor?.map((id) => id.toString()) || [];
+
       for (const booking of bookings) {
         // Update team1 players
         booking.team1 = booking.team1.map((player: any) => {
@@ -710,7 +741,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           }
           return player;
         });
-        
+
         // Update team2 players
         booking.team2 = booking.team2.map((player: any) => {
           if (
@@ -721,9 +752,28 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           }
           return player;
         });
-        
+
         await booking.save({ session });
-        
+
+        const checkGroupExist = await chatModel.findOne({
+          bookingId: booking._id,
+        });
+
+        if (!checkGroupExist) {
+          await chatModel.create({
+            bookingId: booking._id,
+            chatType: "group",
+            groupName: `Booking Chat - ${booking._id}`,
+            participants: [
+              ...booking.team1.map((player: any) => player.playerId),
+              ...booking.team2.map((player: any) => player.playerId),
+            ],
+            groupAdmin: [booking.userId],
+            messages: [],
+            isActive: true,
+          });
+        }
+
         // Create notification for booking owner
         await createNotification(
           {
@@ -739,22 +789,21 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           { session }
         );
       }
-      
+
       await session.commitTransaction();
-      
+
       return {
         success: true,
         message: "Payment completed successfully using playcoins",
         data: {
-          transaction: await transactionModel.findById(transactionId)
-        }
+          transaction: await transactionModel.findById(transactionId),
+        },
       };
-      
     } else if (method === "both") {
       // Calculate how much to pay with playcoins and how much with razorpay
       const playcoinsToUse = Math.min(playcoinsBalance, transaction.amount);
       const razorpayAmount = transaction.amount - playcoinsToUse;
-      
+
       // if (playcoinsToUse > 0) {
       //   // Deduct playcoins from user's balance
       //   await additionalUserInfoModel.findOneAndUpdate(
@@ -763,17 +812,17 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       //     { session }
       //   );
       // }
-      
+
       // Update transaction with split payment info
       await transactionModel.findByIdAndUpdate(
         transactionId,
         {
           playcoinsUsed: playcoinsToUse,
-          method: "both"
+          method: "both",
         },
         { session }
       );
-      
+
       // If razorpay amount is 0 (full payment with playcoins), complete the transaction
       if (razorpayAmount === 0) {
         await transactionModel.findByIdAndUpdate(
@@ -781,27 +830,28 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           {
             status: "captured",
             isWebhookVerified: true,
-            paymentDate: new Date()
+            paymentDate: new Date(),
           },
           { session }
         );
-        
+
         // Update all associated bookings
         await bookingModel.updateMany(
           { _id: { $in: bookingIds } },
           { bookingPaymentStatus: true },
           { session }
         );
-        
+
         // Update player payment status in each booking
         const bookings = await bookingModel.find(
           { _id: { $in: bookingIds } },
           null,
           { session }
         );
-        
-        const paidForPlayerIds = transaction.paidFor?.map((id) => id.toString()) || [];
-        
+
+        const paidForPlayerIds =
+          transaction.paidFor?.map((id) => id.toString()) || [];
+
         for (const booking of bookings) {
           // Update team1 players
           booking.team1 = booking.team1.map((player: any) => {
@@ -813,7 +863,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
             }
             return player;
           });
-          
+
           // Update team2 players
           booking.team2 = booking.team2.map((player: any) => {
             if (
@@ -824,9 +874,9 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
             }
             return player;
           });
-          
+
           await booking.save({ session });
-          
+
           // Create notification for booking owner
           await createNotification(
             {
@@ -842,18 +892,18 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
             { session }
           );
         }
-        
+
         await session.commitTransaction();
-        
+
         return {
           success: true,
           message: "Payment completed successfully using playcoins",
           data: {
-            transaction: await transactionModel.findById(transactionId)
-          }
+            transaction: await transactionModel.findById(transactionId),
+          },
         };
       }
-      
+
       // Create Razorpay order for remaining amount
       const options = {
         amount: razorpayAmount * 100, // Amount in paise
@@ -863,12 +913,14 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           bookingId: transaction.bookingId?.map((id) => id.toString()),
           userId: transaction.userId.toString(),
           paidFor: transaction.paidFor?.map((id) => id.toString()),
-          playcoinsUsed: playcoinsToUse
+          playcoinsUsed: playcoinsToUse,
         },
       };
-      
-      const razorpayOrder = await razorpayInstance.orders.create(options as any);
-      
+
+      const razorpayOrder = await razorpayInstance.orders.create(
+        options as any
+      );
+
       await transactionModel.findByIdAndUpdate(
         transactionId,
         {
@@ -876,21 +928,21 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
         },
         { session }
       );
-      
+
       await session.commitTransaction();
-      
+
       return {
         success: true,
-        message: "Partial payment with playcoins successful. Razorpay order created for remaining amount.",
+        message:
+          "Partial payment with playcoins successful. Razorpay order created for remaining amount.",
         data: {
           razorpayOrderId: razorpayOrder.id,
           amount: razorpayAmount,
           playcoinsUsed: playcoinsToUse,
           currency: transaction.currency,
           receipt: transaction._id.toString(),
-        }
+        },
       };
-      
     } else if (method === "razorpay") {
       // Original razorpay flow
       const options = {
@@ -903,9 +955,11 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           paidFor: transaction.paidFor?.map((id) => id.toString()),
         },
       };
-      
-      const razorpayOrder = await razorpayInstance.orders.create(options as any);
-      
+
+      const razorpayOrder = await razorpayInstance.orders.create(
+        options as any
+      );
+
       await transactionModel.findByIdAndUpdate(
         transactionId,
         {
@@ -915,9 +969,9 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
         },
         { session }
       );
-      
+
       await session.commitTransaction();
-      
+
       return {
         success: true,
         message: "Razorpay order created successfully",
@@ -926,17 +980,16 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           amount: transaction.amount,
           currency: transaction.currency,
           receipt: transaction._id.toString(),
-        }
+        },
       };
     }
-    
+
     await session.abortTransaction();
     return errorResponseHandler(
       "Invalid payment method",
       httpStatusCode.BAD_REQUEST,
       res
     );
-    
   } catch (error) {
     await session.abortTransaction();
     console.error("Error in payment booking service:", error);
@@ -1195,7 +1248,6 @@ export const getDynamicPriceServices = async (req: Request, res: Response) => {
   };
 };
 
-
 export const cancelBookingServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const { bookingId, method } = req.body;
@@ -1243,4 +1295,3 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     message: "Booking cancelled successfully",
   };
 };
-

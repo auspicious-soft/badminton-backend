@@ -11,16 +11,28 @@ export const getUserChats = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
     const userId = userData.id;
+    const {type = "single"} = req.query;
+
+    if(["single", "group"].includes(type as string) === false) {
+      return res.status(httpStatusCode.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid type. Must be either 'single' or 'group'"
+      });
+    }
     
     // Get pagination parameters
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
     
-    // Find all chats where the user is a participant
+    // Set chatType filter based on the type parameter
+    const chatTypeFilter = type === "single" ? "individual" : "group";
+    
+    // Find all chats where the user is a participant and of the requested type
     const chats = await chatModel
       .find({
         participants: userId,
+        chatType: chatTypeFilter,
         isActive: true
       })
       .populate("participants", "fullName email profilePic")
@@ -32,12 +44,13 @@ export const getUserChats = async (req: Request, res: Response) => {
     // Count total chats for pagination
     const totalChats = await chatModel.countDocuments({
       participants: userId,
+      chatType: chatTypeFilter,
       isActive: true
     });
     
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: "Chats retrieved successfully",
+      message: `${chatTypeFilter} chats retrieved successfully`,
       data: {
         chats,
         pagination: {
@@ -764,6 +777,7 @@ export const removeGroupParticipant = async (req: Request, res: Response) => {
     return formatErrorResponse(res, error);
   }
 };
+
 
 
 

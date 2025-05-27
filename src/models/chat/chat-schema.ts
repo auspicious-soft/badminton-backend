@@ -24,6 +24,7 @@ export interface ChatDocument extends Document {
     contentType: string;
   };
   groupName?: string;
+  bookingId?: mongoose.Types.ObjectId;
   groupImage?: string;
   groupAdmin?: mongoose.Types.ObjectId[];
   isActive: boolean;
@@ -103,6 +104,10 @@ const chatSchema = new Schema(
     groupName: {
       type: String,
       // Required only for group chats, handled in validation
+    },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "bookings",
     },
     groupImage: {
       type: String,

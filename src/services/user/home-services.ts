@@ -70,136 +70,90 @@ export const userHomeServices = async (req: Request, res: Response) => {
   }
 
   // Get current time in IST
-  const currentISTTime = getCurrentISTTime();
-  const currentHour = currentISTTime.getHours();
-  const currentDate = new Date(currentISTTime);
-  currentDate.setHours(0, 0, 0, 0); // Set to beginning of day
+const currentISTTime = getCurrentISTTime();
+const currentDate = new Date(currentISTTime);
+currentDate.setHours(0, 0, 0, 0); // Set to beginning of day in IST
+console.log(`Current IST time: ${currentISTTime.toISOString()}, Hour: ${currentISTTime.getHours()}, Minute: ${currentISTTime.getMinutes()}`);
 
-  const upcomingMatchData = await bookingModel.aggregate([
-    {
-      $match: {
-        $or: [
-          // For future dates, include all slots
-          {
-            bookingDate: { $gt: currentDate },
-            $or: [
-              {
-                $and: [
-                  { bookingType: "Self" },
-                  {
-                    $or: [
-                      {
-                        team1: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                            paymentStatus: "Paid",
-                          },
-                        },
-                      },
-                      {
-                        team2: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                            paymentStatus: "Paid",
-                          },
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-              {
-                $and: [
-                  { bookingType: { $in: ["Booking", "Complete"] } },
-                  { bookingPaymentStatus: true },
-                  {
-                    $or: [
-                      {
-                        team1: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                          },
-                        },
-                      },
-                      {
-                        team2: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                          },
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-          // For today, only include slots that haven't passed yet
-          {
-            bookingDate: currentDate,
-            bookingSlots: { $gt: `${currentHour}:00` },
-            $or: [
-              {
-                $and: [
-                  { bookingType: "Self" },
-                  {
-                    $or: [
-                      {
-                        team1: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                            paymentStatus: "Paid",
-                          },
-                        },
-                      },
-                      {
-                        team2: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                            paymentStatus: "Paid",
-                          },
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-              {
-                $and: [
-                  { bookingType: { $in: ["Booking", "Complete"] } },
-                  { bookingPaymentStatus: true },
-                  {
-                    $or: [
-                      {
-                        team1: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                          },
-                        },
-                      },
-                      {
-                        team2: {
-                          $elemMatch: {
-                            playerId: new mongoose.Types.ObjectId(userData.id),
-                          },
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      $sort: {
-        bookingDate: 1,
-        bookingSlots: 1,
-      },
-    },
-  ]);
+const upcomingMatchData = await bookingModel.aggregate([
+  {
+    $addFields: {
+      // Construct full booking datetime by combining bookingDate and bookingSlots
+      bookingDateTime: {
+        $dateFromParts: {
+          year: { $year: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
+          month: { $month: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
+          day: { $dayOfMonth: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
+          hour: { $toInt: { $substr: ["$bookingSlots", 0, 2] } },
+          minute: { $toInt: { $substr: ["$bookingSlots", 3, 2] } },
+          timezone: "Asia/Kolkata"
+        }
+      }
+    }
+  },
+  {
+    $match: {
+      // Only include bookings where bookingDateTime is in the future
+      bookingDateTime: { $gt: currentISTTime },
+      $or: [
+        {
+          $and: [
+            { bookingType: "Self" },
+            {
+              $or: [
+                {
+                  team1: {
+                    $elemMatch: {
+                      playerId: new mongoose.Types.ObjectId(userData.id),
+                      paymentStatus: "Paid"
+                    }
+                  }
+                },
+                {
+                  team2: {
+                    $elemMatch: {
+                      playerId: new mongoose.Types.ObjectId(userData.id),
+                      paymentStatus: "Paid"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          $and: [
+            { bookingType: { $in: ["Booking", "Complete"] } },
+            { bookingPaymentStatus: true },
+            {
+              $or: [
+                {
+                  team1: {
+                    $elemMatch: {
+                      playerId: new mongoose.Types.ObjectId(userData.id)
+                    }
+                  }
+                },
+                {
+                  team2: {
+                    $elemMatch: {
+                      playerId: new mongoose.Types.ObjectId(userData.id)
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    $sort: {
+      bookingDateTime: 1
+    }
+  }
+]);
 
   const data = {
     banners: [],
