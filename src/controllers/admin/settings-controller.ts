@@ -6,6 +6,7 @@ import {
 } from "src/lib/errors/error-response-handler";
 import mongoose from "mongoose";
 import { priceModel } from "src/models/admin/price-schema";
+import { adminSettingModel } from "src/models/admin/admin-settings";
 
 // Create or update pricing
 export const createUpdatePricing = async (req: Request, res: Response) => {
@@ -217,3 +218,69 @@ export const deletePricing = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 }
+
+export const createUpdateAdminSettings = async (req: Request, res: Response) => {
+  try {
+    const { id, ...updateFields } = req.body;
+    
+    let result;
+    
+    if (id) {
+      // Update existing settings
+      result = await adminSettingModel.findByIdAndUpdate(
+        id,
+        updateFields,
+        { new: true, runValidators: true }
+      );
+      
+      if (!result) {
+        return errorResponseHandler(
+          "Admin settings not found",
+          httpStatusCode.NOT_FOUND,
+          res
+        );
+      }
+    } else {
+      // Create new settings
+      result = await adminSettingModel.create(updateFields);
+    }
+    
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: id ? "Admin settings updated successfully" : "Admin settings created successfully",
+      data: result,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const getAdminSettings = async (req: Request, res: Response) => {
+  try {
+    const settings = await adminSettingModel.findOne();
+    
+    if (!settings) {
+      return errorResponseHandler(
+        "Admin settings not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+    
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Admin settings retrieved successfully",
+      data: settings,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+

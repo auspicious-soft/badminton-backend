@@ -29,7 +29,9 @@ import {
   updateProduct,
 } from "src/controllers/admin/product-controller";
 import {
+  createUpdateAdminSettings,
   createUpdatePricing,
+  getAdminSettings,
   getAllPricing,
 } from "src/controllers/admin/settings-controller";
 import {
@@ -54,7 +56,6 @@ router.get("/get-admin-details", getAdminDetails);
 router.put("/update-admin-details", updateAdminDetails);
 
 //Courts routes
-
 router.post("/court", createUpdateCourt);
 router.patch("/court/:id", createUpdateCourt);
 
@@ -89,7 +90,6 @@ router
   .delete(deleteInventory);
 
 //Dynamic Pricing routes
-
 router.route("/dynamic-pricing").post(createUpdatePricing).get(getAllPricing);
 
 //Maintenance routes
@@ -99,6 +99,11 @@ router.put("/maintenance-booking/:id", updateMaintenanceBooking);
 router.delete("/maintenance-booking/:id", deleteMaintenanceBooking);
 router.get("/venue-list", listOfVenues)
 router.get("/court-list", listOfCourts)
+
+//Admin Settings routes
+router.route("/admin-settings").post(createUpdateAdminSettings).get(getAdminSettings)
+
+
 
 
 
