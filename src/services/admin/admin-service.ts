@@ -930,7 +930,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
   const {
     page,
     limit,
-    search,
+    city,
     type = "upcoming",
     game = "all",
     date,
@@ -991,11 +991,15 @@ export const getMatchesService = async (payload: any, res: Response) => {
     }
 
     // Add search query if provided
-    if (search) {
-      matchQuery.$or = [
-        { "venueId.name": { $regex: search, $options: "i" } },
-        { "courtId.name": { $regex: search, $options: "i" } },
-      ];
+    if (city) {
+      // We need to first find venues with matching city
+      const venues = await venueModel.find({
+        city: { $regex: city, $options: "i" }
+      }).select('_id').lean();
+      
+      // Then use those venue IDs in our booking query
+      const venueIds = venues.map(venue => venue._id);
+      matchQuery.venueId = { $in: venueIds };
     }
 
     // First, get all bookings without game filtering
@@ -1091,6 +1095,23 @@ export const getMatchesService = async (payload: any, res: Response) => {
   } catch (error) {
     return errorResponseHandler(
       "Error retrieving matches: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+};
+
+export const getCitiesService = async (payload: any, res: Response) => {
+  try {
+    const cities = await venueModel.distinct("city");
+    return {
+      success: true,
+      message: "Cities retrieved successfully",
+      data: cities,
+    };
+  } catch (error) {
+    return errorResponseHandler(
+      "Error retrieving cities: " + (error as Error).message,
       httpStatusCode.INTERNAL_SERVER_ERROR,
       res
     );

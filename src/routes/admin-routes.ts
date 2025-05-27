@@ -3,6 +3,7 @@ import {
   createEmployee,
   createVenue,
   getAdminDetails,
+  getCities,
   getEmployees,
   getEmployeesById,
   getMatches,
@@ -69,6 +70,7 @@ router.get("/get-users/:id", getUsersById);
 
 //Matches routes
 router.get("/get-matches", getMatches);
+router.get("/get-cities", getCities);
 
 //Products routes
 router.route("/products").post(createProduct).get(getProducts);
