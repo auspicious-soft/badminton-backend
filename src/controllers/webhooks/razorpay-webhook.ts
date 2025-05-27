@@ -98,7 +98,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
         // Check if this was a combined payment (playcoins + razorpay)
         if (transaction.method === "both" && transaction.playcoinsUsed > 0 && !transaction.playcoinsDeducted) {
-          // Move playcoins from reserved to deducted
+          // Deduct the reserved playcoins
           await additionalUserInfoModel.findOneAndUpdate(
             { userId: transaction.userId },
             { 

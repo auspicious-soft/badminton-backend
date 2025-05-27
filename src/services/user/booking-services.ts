@@ -364,7 +364,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     const razorpayAmount = slotPrice - playcoinsToUse;
 
     // Determine if payment can be completed immediately with playcoins
-    const canCompleteWithPlaycoins = playcoinsToUse >= slotPrice;
+    const canCompleteWithPlaycoins = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice;
     const transactionStatus = canCompleteWithPlaycoins ? "captured" : "created";
     const isWebhookVerified = canCompleteWithPlaycoins;
 
@@ -388,21 +388,37 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
             balls: balls || 0,
           },
           isWebhookVerified: isWebhookVerified,
-          method: canCompleteWithPlaycoins ? "playcoins" : paymentMethod, // If fully paid with playcoins, set method to playcoins
+          method: paymentMethod,
           playcoinsUsed: playcoinsToUse,
           razorpayAmount: razorpayAmount,
           paymentDate: isWebhookVerified ? new Date() : null,
-          playcoinsDeducted: playcoinsToUse > 0 ? true : false
+          playcoinsDeducted: paymentMethod === "playcoins" ? true : false
         },
       ],
       { session }
     );
 
-    // Deduct playcoins if using playcoins or both
-    if ((paymentMethod === "playcoins" || paymentMethod === "both") && playcoinsToUse > 0) {
+    // Deduct playcoins ONLY if using playcoins method (not both)
+    if (paymentMethod === "playcoins" && playcoinsToUse > 0) {
       await additionalUserInfoModel.findOneAndUpdate(
         { userId: userData.id },
         { $inc: { playCoins: -playcoinsToUse } },
+        { session }
+      );
+    }
+
+    // For "both" method, reserve the playcoins but don't deduct yet
+    if (paymentMethod === "both" && playcoinsToUse > 0) {
+      await additionalUserInfoModel.findOneAndUpdate(
+        { userId: userData.id },
+        { $inc: { reservedPlayCoins: playcoinsToUse } },
+        { session }
+      );
+      
+      // Update transaction to indicate playcoins are reserved
+      await transactionModel.findByIdAndUpdate(
+        transaction[0]._id,
+        { playcoinsReserved: true },
         { session }
       );
     }
