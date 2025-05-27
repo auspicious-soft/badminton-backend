@@ -672,7 +672,7 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
     .findById(id)
     .populate({
       path: "employees.employeeId",
-      select: "fullName email phoneNumber",
+      select: "fullName email phoneNumber profilePic",
       model: "employees",
     })
     .lean();
@@ -695,6 +695,7 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
             fullName: emp.employeeId.fullName,
             email: emp.employeeId.email,
             phoneNumber: emp.employeeId.phoneNumber,
+            profilePic: emp.employeeId.profilePic,
           }
         : null,
     }));

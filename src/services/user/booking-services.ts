@@ -233,7 +233,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     .findOne({
       _id: bookingId,
       askToJoin: true,
-      bookingDate: { $gte: new Date() },
+      // bookingDate: { $gte: new Date() },
     })
     .lean();
 
@@ -362,8 +362,11 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     // Calculate payment details based on method
     const playcoinsToUse = paymentMethod === "razorpay" ? 0 : Math.min(playcoinsBalance, slotPrice);
     const razorpayAmount = slotPrice - playcoinsToUse;
-    const transactionStatus = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice ? "captured" : "created";
-    const isWebhookVerified = paymentMethod === "playcoins" && playcoinsToUse >= slotPrice;
+
+    // Determine if payment can be completed immediately with playcoins
+    const canCompleteWithPlaycoins = playcoinsToUse >= slotPrice;
+    const transactionStatus = canCompleteWithPlaycoins ? "captured" : "created";
+    const isWebhookVerified = canCompleteWithPlaycoins;
 
     // 1. Create a transaction record for this join request
     const transaction = await transactionModel.create(
@@ -385,7 +388,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
             balls: balls || 0,
           },
           isWebhookVerified: isWebhookVerified,
-          method: paymentMethod,
+          method: canCompleteWithPlaycoins ? "playcoins" : paymentMethod, // If fully paid with playcoins, set method to playcoins
           playcoinsUsed: playcoinsToUse,
           razorpayAmount: razorpayAmount,
           paymentDate: isWebhookVerified ? new Date() : null,
@@ -411,7 +414,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
       requestedTo: booking.userId,
       requestedTeam,
       requestedPosition,
-      status: transactionStatus === "captured" ? "completed" : "pending",
+      status: canCompleteWithPlaycoins ? "completed" : "pending", // If fully paid with playcoins, mark as completed
       racketA: racketA || 0,
       racketB: racketB || 0,
       racketC: racketC || 0,
@@ -492,7 +495,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     // 5. Handle payment based on method
     let paymentDetails = null;
 
-    if (paymentMethod === "razorpay" || (paymentMethod === "both" && razorpayAmount > 0)) {
+    if ((paymentMethod === "razorpay" || paymentMethod === "both") && razorpayAmount > 0) {
       // Create a Razorpay order for the full amount or remaining amount
       const options = {
         amount: razorpayAmount * 100, // Amount in paise
@@ -528,8 +531,8 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
         playcoinsUsed: playcoinsToUse,
         currency: "INR",
       };
-    } else if (paymentMethod === "playcoins") {
-      // Payment is already completed with playcoins
+    } else {
+      // Payment is completed with playcoins (either method="playcoins" or method="both" with enough coins)
       paymentDetails = {
         method: "playcoins",
         amount: slotPrice,
