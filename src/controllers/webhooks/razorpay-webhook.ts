@@ -97,38 +97,25 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         }
 
         // Check if this was a combined payment (playcoins + razorpay)
-        if (transaction.method === "both" && transaction.playcoinsUsed > 0 && !transaction.playcoinsDeducted) {
-          // Deduct the reserved playcoins
-          await additionalUserInfoModel.findOneAndUpdate(
+        if (
+          transaction.method === "both" &&
+          transaction.playcoinsUsed > 0 &&
+          !transaction.playcoinsDeducted
+        ) {
+          // Deduct playcoins and release reserved amount in one operation
+          await additionalUserInfoModel.updateOne(
             { userId: transaction.userId },
-            { 
-              $inc: { 
-                playCoins: -transaction.playcoinsUsed,
-                reservedPlayCoins: -transaction.playcoinsUsed 
-              }
-            },
+            { $inc: { playCoins: -transaction.playcoinsUsed } },
             { session }
           );
-          
+
           // Mark playcoins as deducted
           await transactionModel.findByIdAndUpdate(
             transaction._id,
-            { 
+            {
               playcoinsDeducted: true,
-              playcoinsReserved: false
+              playcoinsReserved: false,
             },
-            { session }
-          );
-        }
-
-        // Alternative check - if playcoinsUsed is in notes (for backward compatibility)
-        else if (
-          transaction?.notes?.playcoinsUsed &&
-          transaction.notes.playcoinsUsed > 0
-        ) {
-          await additionalUserInfoModel.findOneAndUpdate(
-            { userId: transaction.userId },
-            { $inc: { playCoins: -transaction.notes.playcoinsUsed } },
             { session }
           );
         }
@@ -149,7 +136,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
           );
 
           const paidForPlayerIds =
-            transaction.paidFor?.map((id) => id.toString()) || [];
+            transaction?.paidFor?.map((id : any) => id.toString()) || [];
 
           for (const booking of bookings) {
             // Update team1 players
@@ -240,39 +227,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 racketC: transaction.notes.racketC || 0,
                 balls: transaction.notes.balls || 0,
               };
-
-              // Check if playcoins were used in this transaction
-              if (
-                transaction.playcoinsUsed &&
-                transaction.playcoinsUsed > 0 &&
-                !transaction.playcoinsDeducted
-              ) {
-                // Deduct playcoins only if not already deducted
-                await additionalUserInfoModel.findOneAndUpdate(
-                  { userId: transaction.userId },
-                  { $inc: { playCoins: -transaction.playcoinsUsed } },
-                  { session }
-                );
-
-                // Mark playcoins as deducted
-                await transactionModel.findByIdAndUpdate(
-                  transaction._id,
-                  { playcoinsDeducted: true },
-                  { session }
-                );
-              }
-
-              // Alternative check - if playcoinsUsed is in notes (for backward compatibility)
-              else if (
-                transaction.notes.playcoinsUsed &&
-                transaction.notes.playcoinsUsed > 0
-              ) {
-                await additionalUserInfoModel.findOneAndUpdate(
-                  { userId: transaction.userId },
-                  { $inc: { playCoins: -transaction.notes.playcoinsUsed } },
-                  { session }
-                );
-              }
 
               // Add player to the requested team - use findIndex and update approach to avoid conflicts
               if (requestedTeam === "team1") {
