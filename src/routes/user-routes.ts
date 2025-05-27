@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getMatchesById,
   getMyMatches,
+  getMyTransactions,
   uploadScore,
 } from "src/controllers/user/booking-controller";
 import {
@@ -83,6 +84,8 @@ router
   .post(addToCart)
   .put(editCart)
   .delete(deleteCartItem);
+
+router.get("/user-transactions", getMyTransactions);
 
 // router.post("/upload-image", upload.single('image'), uploadUserImageController);
 router.post("/upload-image", uploadUserImageController);

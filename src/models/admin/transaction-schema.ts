@@ -15,6 +15,7 @@ export interface TransactionDocument extends Document {
   isWebhookVerified: boolean;
   playcoinsUsed: number;
   playcoinsReserved: boolean;
+  playcoinsReceived: number;
   playcoinsDeducted: boolean;
 
   // Refund related
@@ -92,6 +93,10 @@ const transactionSchema = new Schema<TransactionDocument>(
     playcoinsReserved: {
       type: Boolean,
       default: false,
+    },
+    playcoinsReceived: {
+      type: Number,
+      default: 0,
     },
     playcoinsDeducted: {
       type: Boolean,

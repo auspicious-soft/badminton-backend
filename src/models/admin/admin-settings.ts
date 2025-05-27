@@ -40,6 +40,10 @@ const admintSettingSchema = new mongoose.Schema(
         default: null,
       },
     ],
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

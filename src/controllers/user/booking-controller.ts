@@ -10,6 +10,9 @@ import { gameScoreModel } from "src/models/venue/game-score";
 import { object } from "webidl-conversions";
 import { getCurrentISTTime } from "../../utils";
 import { createNotification } from "src/models/notification/notification-schema";
+import { transactionModel } from "src/models/admin/transaction-schema";
+import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
+
 
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
@@ -542,3 +545,97 @@ export const uploadScore = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
+
+export const getMyTransactions = async (req: Request, res: Response) => {
+  try {
+    const userData = req.user as any;
+    const { page = 1, limit = 10 } = req.query;
+
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    // Get user's playcoins balance
+    const userInfo = await additionalUserInfoModel
+      .findOne({ userId: userData.id })
+      .lean();
+    
+    const playCoinsBalance = userInfo?.playCoins || 0;
+
+    // Get total matches played by the user
+    const totalMatches = await bookingModel.countDocuments({
+      $or: [
+        { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
+        { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
+      ],
+      bookingPaymentStatus: true,
+    });
+
+    // Get transaction history with method and transaction type
+    const transactions = await transactionModel
+      .find({
+        userId: userData.id,
+      })
+      .select('amount method status playcoinsUsed createdAt notes razorpayAmount')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit as string))
+      .lean();
+
+    // Process transactions to add transaction type (received/deducted) and payment breakdown
+    const transactionHistory = transactions.map(transaction => {
+      // Calculate total amount (amount paid + playcoins used)
+      const moneyAmount = transaction.amount - transaction.playcoinsUsed;
+      const playcoinsUsed = transaction.playcoinsUsed || 0;
+      const totalAmount = moneyAmount + playcoinsUsed;
+      
+      // Determine payment method
+      let paymentMethod = transaction.method || 'razorpay';
+      if (playcoinsUsed > 0 && moneyAmount > 0) {
+        paymentMethod = 'both'; // Both playcoins and money were used
+      } else if (playcoinsUsed > 0 && moneyAmount === 0) {
+        paymentMethod = 'playcoins'; // Only playcoins were used
+      }
+      
+      return {
+        ...transaction,
+        transactionType: transaction.status === 'refunded' ? 'received' : 'deducted',
+        paymentMethod: paymentMethod,
+        paymentBreakdown: {
+          totalAmount: totalAmount,
+          moneyPaid: moneyAmount,
+          playcoinsUsed: playcoinsUsed
+        }
+      };
+    });
+
+    const totalTransactions = await transactionModel.countDocuments({
+      userId: userData.id,
+    });
+
+    const response = {
+      success: true,
+      message: "Transactions retrieved successfully",
+      data: {
+        totalPlayCoinsBalance: playCoinsBalance,
+        totalMatches: totalMatches,
+        transactionHistory: transactionHistory
+      },
+      meta: {
+        total: totalTransactions,
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        totalPages: Math.ceil(totalTransactions / parseInt(limit as string)),
+        hasNextPage: skip + parseInt(limit as string) < totalTransactions,
+        hasPreviousPage: skip > 0,
+      },
+    };
+
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+

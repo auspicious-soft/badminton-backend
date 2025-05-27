@@ -221,14 +221,15 @@ export const deletePricing = async (req: Request, res: Response) => {
 
 export const createUpdateAdminSettings = async (req: Request, res: Response) => {
   try {
-    const { id, ...updateFields } = req.body;
+    const {...updateFields } = req.body;
     
+    const checkExist = await adminSettingModel.findOne({ isActive: true });
     let result;
     
-    if (id) {
+    if (checkExist) {
       // Update existing settings
       result = await adminSettingModel.findByIdAndUpdate(
-        id,
+        checkExist._id,
         updateFields,
         { new: true, runValidators: true }
       );
@@ -247,7 +248,7 @@ export const createUpdateAdminSettings = async (req: Request, res: Response) => 
     
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: id ? "Admin settings updated successfully" : "Admin settings created successfully",
+      message: checkExist ? "Admin settings updated successfully" : "Admin settings created successfully",
       data: result,
     });
   } catch (error: any) {
