@@ -70,11 +70,40 @@ export const userHomeServices = async (req: Request, res: Response) => {
       .lean();
   }
 
+  // Get current time in IST
+  const currentTime = getCurrentISTTime();
+  const currentHour = currentTime.getHours();
+  const currentMinute = currentTime.getMinutes();
+  
   const upcomingMatchData = await bookingModel.aggregate([
     {
       $match: {
-        bookingDate: { $gte: new Date() },
         $or: [
+          // Future dates or Today with slots after current time
+          {
+            $or: [
+              {
+                bookingDate: {
+                  $gt: new Date(currentTime.setHours(23, 59, 59, 999)),
+                },
+              },
+              {
+                $and: [
+                  {
+                    bookingDate: {
+                      $gte: new Date(currentTime.setHours(0, 0, 0, 0)),
+                      $lte: new Date(currentTime.setHours(23, 59, 59, 999)),
+                    },
+                  },
+                  {
+                    bookingSlots: {
+                      $gte: `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
           {
             $and: [
               { bookingType: "Self" },
@@ -408,7 +437,6 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     );
   }
 };
-
 
 export const getCourtsServices = async (req: Request, res: Response) => {
   try {
