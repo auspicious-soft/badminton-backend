@@ -533,6 +533,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     isActive?: boolean;
     gamesAvailable?: string[];
     facilities?: { name: string; isActive: boolean }[];
+    contactInfo?: string;
     employees?: { employeeId: string; isActive: boolean }[];
     location?: any;
     timeslots?: any;
@@ -548,6 +549,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     image,
     gamesAvailable,
     facilities,
+    contactInfo,
     employees,
     isActive,
     location,
@@ -577,6 +579,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
   if (address) venue.address = address;
   if (city) venue.city = city;
   if (state) venue.state = state;
+  if (contactInfo) venue.contactInfo = contactInfo;
   if (image) venue.image = image;
   if (location) venue.location = location;
   if (typeof isActive === "boolean") venue.isActive = isActive;
