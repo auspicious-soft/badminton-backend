@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createEmployee,
   createVenue,
+  dashboard,
   getAdminDetails,
   getCities,
   getEmployees,
@@ -44,6 +45,8 @@ import {
 } from "src/controllers/admin/maintenance-controller";
 
 const router = Router();
+
+router.get("/dashboard", dashboard)
 
 //Emmpoyee routes
 

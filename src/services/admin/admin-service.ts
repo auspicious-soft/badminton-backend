@@ -24,6 +24,8 @@ import { object } from "webidl-conversions";
 import { courtModel } from "src/models/venue/court-schema";
 import { productModel } from "src/models/admin/products-schema";
 import { getCurrentISTTime } from "../../utils";
+import { request } from "http";
+import { transactionModel } from "src/models/admin/transaction-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -254,7 +256,10 @@ export const getEmployeesService = async (payload: any, res: Response) => {
   const offset = (page - 1) * limit;
   const order = payload.order || "desc";
   const status = payload.status || ""; // Remove default "Working" status
-  const sortBy = payload.sortBy === "fullName" || payload.sortBy === "createdAt" ? payload.sortBy : "createdAt";
+  const sortBy =
+    payload.sortBy === "fullName" || payload.sortBy === "createdAt"
+      ? payload.sortBy
+      : "createdAt";
 
   // Validate status if provided
   if (status && !["Working", "Ex-Employee"].includes(status)) {
@@ -718,8 +723,14 @@ export const getVenueByIdService = async (payload: any, res: Response) => {
 export const getUsersService = async (payload: any, res: Response) => {
   // Sorting logic at the top
   let payload2 = payload.query;
-  const sortBy = payload2.sortBy === "fullName" || payload2.sortBy === "createdAt" ? payload2.sortBy : "fullName";
-  const order = payload2.order === "asc" || payload2.order === "desc" ? payload2.order : "asc";
+  const sortBy =
+    payload2.sortBy === "fullName" || payload2.sortBy === "createdAt"
+      ? payload2.sortBy
+      : "fullName";
+  const order =
+    payload2.order === "asc" || payload2.order === "desc"
+      ? payload2.order
+      : "asc";
 
   // Log sorting parameters for debugging
   console.log("Sorting Parameters:", { sortBy, order });
@@ -950,30 +961,30 @@ export const getMatchesService = async (payload: any, res: Response) => {
   try {
     // Get current time in IST
     const currentDate = getCurrentISTTime();
-    
+
     console.log(`Current IST time: ${currentDate.toISOString()}`);
-    
+
     let matchQuery: any = {};
     matchQuery.bookingPaymentStatus = true;
-    
+
     // Handle date filter if provided in YYYY-MM-DD format
     if (date) {
       // Parse the date string and create start/end of the specified day
       const parsedDate = new Date(date);
-      
+
       if (!isNaN(parsedDate.getTime())) {
         // Set to beginning of day (00:00:00)
         const startOfDay = new Date(parsedDate);
         startOfDay.setHours(0, 0, 0, 0);
-        
+
         // Set to end of day (23:59:59.999)
         const endOfDay = new Date(parsedDate);
         endOfDay.setHours(23, 59, 59, 999);
-        
+
         // Filter bookings for the specified date
-        matchQuery.bookingDate = { 
+        matchQuery.bookingDate = {
           $gte: startOfDay,
-          $lte: endOfDay 
+          $lte: endOfDay,
         };
       }
     } else {
@@ -984,7 +995,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
         matchQuery.bookingDate = { $lt: currentDate };
       }
     }
-    
+
     // Always apply cancellation filter for cancelled type
     if (type === "cancelled") {
       matchQuery.cancellationReason = { $ne: null };
@@ -993,12 +1004,15 @@ export const getMatchesService = async (payload: any, res: Response) => {
     // Add search query if provided
     if (city) {
       // We need to first find venues with matching city
-      const venues = await venueModel.find({
-        city: { $regex: city, $options: "i" }
-      }).select('_id').lean();
-      
+      const venues = await venueModel
+        .find({
+          city: { $regex: city, $options: "i" },
+        })
+        .select("_id")
+        .lean();
+
       // Then use those venue IDs in our booking query
-      const venueIds = venues.map(venue => venue._id);
+      const venueIds = venues.map((venue) => venue._id);
       matchQuery.venueId = { $in: venueIds };
     }
 
@@ -1013,15 +1027,17 @@ export const getMatchesService = async (payload: any, res: Response) => {
     // Filter by game type if specified
     let filteredBookings = bookings;
     if (game !== "all") {
-      filteredBookings = bookings.filter(booking => 
-        booking.courtId && 
-        (booking.courtId as any).games === game // Use the game parameter for filtering
+      filteredBookings = bookings.filter(
+        (booking) => booking.courtId && (booking.courtId as any).games === game // Use the game parameter for filtering
       );
     }
 
     // Apply pagination after filtering
     const totalMatches = filteredBookings.length;
-    const paginatedBookings = filteredBookings.slice(offset, offset + limitNumber);
+    const paginatedBookings = filteredBookings.slice(
+      offset,
+      offset + limitNumber
+    );
 
     // Process each booking to add player details and remove duplication
     const processedBookings = await Promise.all(
@@ -1057,10 +1073,10 @@ export const getMatchesService = async (payload: any, res: Response) => {
         // Extract venue and court data
         const venue = booking.venueId;
         const court = booking.courtId;
-        
+
         // Create a clean booking object without the duplicated data
         const cleanBooking = { ...booking };
-        
+
         // Remove the populated objects to avoid duplication
         delete cleanBooking.venueId;
         delete cleanBooking.courtId;
@@ -1118,3 +1134,328 @@ export const getCitiesService = async (payload: any, res: Response) => {
   }
 };
 
+export const dashboardServices = async (payload: any, res: Response) => {
+  try {
+    // Get today's scheduled bookings
+    const { year } = payload.query;
+    const currentYear = Number(year) || new Date().getFullYear();
+    
+    // Get current month for monthly stats
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // JavaScript months are 0-indexed
+    
+    // Calculate start and end of current month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    // Calculate start and end of current year
+    const startOfYear = new Date(currentYear, 0, 1);
+    const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+    
+    // Get today's scheduled bookings
+    const todayScheduledBookings = await bookingModel.find({
+      bookingDate: { $gte: getCurrentISTTime() },
+      bookingPaymentStatus: true,
+      cancellationReason: null
+    }).populate("userId", "fullName").populate("courtId", "games").select("bookingSlots").lean();
+
+    let formatBookingData: any = []
+    todayScheduledBookings?.forEach((booking: any) => {
+      formatBookingData.push({
+        time: booking.bookingSlots,
+        matches: 1,
+        game: booking.courtId?.games || "Unknown",
+        player: booking.userId?.fullName || "Unknown",
+        duration: "60 Mins"
+      })
+    });
+
+    // Get yearly game composition statistics
+    const yearlyGameStats = await bookingModel.aggregate([
+      {
+        $match: {
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+          bookingDate: {
+            $gte: startOfYear,
+            $lte: endOfYear
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo"
+        }
+      },
+      {
+        $unwind: {
+          path: "$courtInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $group: {
+          _id: "$courtInfo.games",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Calculate game composition percentages
+    let totalYearlyGames = 0;
+    let padelYearlyGames = 0;
+    let pickleballYearlyGames = 0;
+    
+    yearlyGameStats.forEach(stat => {
+      if (stat._id) {
+        totalYearlyGames += stat.count;
+        
+        if (stat._id === "Padel") {
+          padelYearlyGames = stat.count;
+        } else if (stat._id === "Pickleball") {
+          pickleballYearlyGames = stat.count;
+        }
+      }
+    });
+    
+    const gameComposition = {
+      Padel: totalYearlyGames > 0 ? Math.round((padelYearlyGames / totalYearlyGames) * 100) : 0,
+      Pickleball: totalYearlyGames > 0 ? Math.round((pickleballYearlyGames / totalYearlyGames) * 100) : 0
+    };
+
+    // Get monthly statistics for matches
+    const monthlyStats = await bookingModel.aggregate([
+      {
+        $match: {
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+          bookingDate: {
+            $gte: startOfMonth,
+            $lte: endOfMonth
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo"
+        }
+      },
+      {
+        $unwind: {
+          path: "$courtInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $group: {
+          _id: "$courtInfo.games",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Calculate total matches this month
+    let totalMatchesThisMonth = 0;
+    let padelMatchesThisMonth = 0;
+    let pickleballMatchesThisMonth = 0;
+
+    monthlyStats.forEach(stat => {
+      totalMatchesThisMonth += stat.count;
+      
+      if (stat._id === "Padel") {
+        padelMatchesThisMonth = stat.count;
+      } else if (stat._id === "Pickleball") {
+        pickleballMatchesThisMonth = stat.count;
+      }
+    });
+
+    // Calculate income this month from transactions
+    const incomeResult = await transactionModel.aggregate([
+      {
+        $match: {
+          status: "captured", // Only successful transactions
+          createdAt: {
+            $gte: startOfMonth,
+            $lte: endOfMonth
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalIncome: { $sum: "$amount" }
+        }
+      }
+    ]);
+    
+    const incomeThisMonth = incomeResult.length > 0 ? incomeResult[0].totalIncome : 0;
+
+    // Get recent bookings
+    const recentBookings = await bookingModel.aggregate([
+      {
+        $match: {
+          bookingPaymentStatus: true,
+          cancellationReason: null
+        }
+      },
+      {
+        $sort: { createdAt: -1 }
+      },
+      {
+        $limit: 5
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "userInfo"
+        }
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo"
+        }
+      },
+      {
+        $lookup: {
+          from: "venues",
+          localField: "venueId",
+          foreignField: "_id",
+          as: "venueInfo"
+        }
+      },
+      {
+        $unwind: {
+          path: "$userInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $unwind: {
+          path: "$courtInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $unwind: {
+          path: "$venueInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          fullName: "$userInfo.fullName",
+          game: "$courtInfo.games",
+          city: "$venueInfo.city",
+          date: "$bookingDate"
+        }
+      }
+    ]);
+
+    // Get monthly game data for graph
+    const monthlyGameGraph = await bookingModel.aggregate([
+      {
+        $match: {
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+          $expr: {
+            $eq: [{ $year: "$bookingDate" }, currentYear]
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo"
+        }
+      },
+      {
+        $unwind: {
+          path: "$courtInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $group: {
+          _id: {
+            month: { $month: "$bookingDate" },
+            game: "$courtInfo.games"
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          month: "$_id.month",
+          game: "$_id.game",
+          count: 1
+        }
+      }
+    ]);
+
+    // Process the monthly game data
+    const processedMonthlyData = [];
+    for (let i = 1; i <= 12; i++) {
+      const monthStr = i < 10 ? `0${i}/${currentYear}` : `${i}/${currentYear}`;
+      
+      // Find padel and pickleball counts for this month
+      const padelData = monthlyGameGraph.find(item => item.month === i && item.game === "Padel");
+      const pickleballData = monthlyGameGraph.find(item => item.month === i && item.game === "Pickleball");
+      
+      processedMonthlyData.push({
+        month: monthStr,
+        padel: padelData ? padelData.count : 0,
+        pickleball: pickleballData ? pickleballData.count : 0
+      });
+    }
+
+    const ongoingMatches : any= {}
+
+    formatBookingData?.map((data: any)=>{
+      if(ongoingMatches.hasOwnProperty(data.game)) {
+        ongoingMatches[data.game]  += 1;
+      } else {
+        ongoingMatches[data.game] = 1;
+      }
+    })
+
+    return {
+      success: true,
+      message: "Dashboard data retrieved successfully",
+      data: {
+        todaySchedule: formatBookingData,
+        monthlyGameGraph: processedMonthlyData,
+        recentBookings,
+        stats: {
+          totalMatchesThisMonth,
+          padelMatchesThisMonth,
+          pickleballMatchesThisMonth,
+          incomeThisMonth,
+          gameComposition,
+          ongoingMatches
+        }
+      },
+    };
+  } catch (error) {
+    console.error("Dashboard error:", error);
+    return errorResponseHandler(
+      "Error retrieving dashboard data: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+};
