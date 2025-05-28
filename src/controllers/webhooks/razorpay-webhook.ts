@@ -77,7 +77,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               status: "confirmed",
               razorpayPaymentId: paymentId,
               razorpayOrderId: orderId,
-              paymentDate: new Date()
+              paymentDate: new Date(),
+              quantityUpdated: true // Add a flag to track if quantities were updated
             },
             { new: true, session }
           );
@@ -91,23 +92,33 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             });
           }
           
-          // Update product quantities
-          await Promise.all(
-            order.items.map(async (item: any) => {
-              await productModel.findByIdAndUpdate(
-                item.productId,
-                {
-                  $inc: {
-                    "venueAndQuantity.$[venue].quantity": -item.quantity,
+          // Only update quantities if they haven't been updated yet
+          if (!order.quantityUpdated) {
+            // Update product quantities
+            await Promise.all(
+              order.items.map(async (item: any) => {
+                await productModel.findByIdAndUpdate(
+                  item.productId,
+                  {
+                    $inc: {
+                      "venueAndQuantity.$[venue].quantity": -item.quantity,
+                    },
                   },
-                },
-                {
-                  arrayFilters: [{ "venue.venueId": order.venueId }],
-                  session
-                }
-              );
-            })
-          );
+                  {
+                    arrayFilters: [{ "venue.venueId": order.venueId }],
+                    session
+                  }
+                );
+              })
+            );
+            
+            // Mark quantities as updated
+            await orderModel.findByIdAndUpdate(
+              merchandiseOrderId,
+              { quantityUpdated: true },
+              { session }
+            );
+          }
           
           await session.commitTransaction();
           

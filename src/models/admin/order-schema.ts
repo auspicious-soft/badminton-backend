@@ -25,6 +25,7 @@ export interface OrderDocument extends Document {
   paymentDate?: Date;
   createdAt?: Date;
   updatedAt?: Date;
+  quantityUpdated?: boolean;
 }
 
 const orderSchema = new Schema<OrderDocument>(
@@ -113,6 +114,10 @@ const orderSchema = new Schema<OrderDocument>(
     paymentDate: {
       type: Date,
       default: null,
+    },
+    quantityUpdated: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
