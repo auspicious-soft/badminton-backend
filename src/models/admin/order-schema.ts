@@ -12,7 +12,13 @@ export interface OrderDocument extends Document {
   venueId: mongoose.Types.ObjectId;
   status: "pending" | "ready" | "completed" | "cancelled";
   paymentStatus: "pending" | "completed" | "refunded";
-  pickupCode?: string;
+  orderStatus?: "pending" | "ready" | "completed" | "cancelled";
+  address?: {
+    street: string;
+    city: string;
+    state: string;
+    pinCode: string;
+  };
   cancellationReason?: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -66,9 +72,28 @@ const orderSchema = new Schema<OrderDocument>(
       enum: ["pending", "completed", "refunded"],
       default: "pending",
     },
-    pickupCode: {
+    orderStatus: {
       type: String,
-      default: () => Math.random().toString(36).substring(2, 8).toUpperCase(),
+      enum: ["pending", "ready", "completed", "cancelled"],
+      default: "pending",
+    },
+    address: {
+      street: {
+        type: String,
+        required: true,
+      },
+      city: {
+        type: String,
+        required: true,
+      },
+      state: {
+        type: String,
+        required: true,
+      },
+      pinCode: {
+        type: String,
+        required: true,
+      },
     },
     cancellationReason: {
       type: String,

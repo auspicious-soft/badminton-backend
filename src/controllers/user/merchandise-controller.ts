@@ -287,7 +287,7 @@ export const orderProduct = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
     const userData = req.user as any;
-    const { items, venueId } = req.body;
+    const { items, venueId, address} = req.body;
 
     if (!items || items.length === 0) {
       return errorResponseHandler(
@@ -300,6 +300,14 @@ export const orderProduct = async (req: Request, res: Response) => {
     if (!venueId) {
       return errorResponseHandler(
         "Venue ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    if(address && typeof address !== 'object') {
+      return errorResponseHandler(
+        "Address must be an object",
         httpStatusCode.BAD_REQUEST,
         res
       );
@@ -385,6 +393,7 @@ export const orderProduct = async (req: Request, res: Response) => {
     // Create the order
     const order = await orderModel.create({
       userId: userData.id,
+      address: address || {},
       items: processedItems,
       totalAmount,
       venueId,
@@ -415,7 +424,6 @@ export const orderProduct = async (req: Request, res: Response) => {
       message: "Order placed successfully",
       data: {
         orderId: order._id,
-        pickupCode: order.pickupCode,
         totalAmount: order.totalAmount,
         status: order.status,
         paymentStatus: order.paymentStatus,
@@ -479,7 +487,7 @@ export const getMyOrders = async (req: Request, res: Response) => {
 
       return {
         orderId: order._id,
-        pickupCode: order.pickupCode,
+        address: order.address || {},
         orderDate: order.createdAt,
         status: order.status,
         paymentStatus: order.paymentStatus,
@@ -574,7 +582,7 @@ export const getOrderById = async (req: Request, res: Response) => {
     const formattedOrder = {
       // Order details
       orderId: order._id,
-      pickupCode: order.pickupCode,
+      address: order.address || {},
       orderDate: order.createdAt,
       updatedAt: order.updatedAt,
       status: order.status,

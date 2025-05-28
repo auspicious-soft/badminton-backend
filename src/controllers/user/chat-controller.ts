@@ -45,6 +45,11 @@ export const getUserChats = async (req: Request, res: Response) => {
     const formattedChats = chats.map(chat => {
       const chatObj = chat.toObject();
       
+      // Calculate unseen message count for this user
+      const unseenCount = chatObj.messages.filter(
+        (msg: any) => !msg.readBy.some((id: any) => id.toString() === userId)
+      ).length;
+      
       if (chatTypeFilter === "individual") {
         // For individual chats, add the other participant's info to the main object
         const otherParticipant = chatObj.participants.find(
@@ -55,9 +60,11 @@ export const getUserChats = async (req: Request, res: Response) => {
           (chatObj as any).recipientName = (otherParticipant as any).fullName;
           (chatObj as any).recipientEmail = (otherParticipant as any).email;
           (chatObj as any).recipientProfilePic = (otherParticipant as any).profilePic;
+          (chatObj as any).unseenCount = unseenCount;
         }
       } else if (chatTypeFilter === "group") {
         (chatObj as any).groupImage = chatObj.groupImage || null;
+        (chatObj as any).unseenCount = unseenCount;
       }
       
       return chatObj;
@@ -799,5 +806,6 @@ export const removeGroupParticipant = async (req: Request, res: Response) => {
     return formatErrorResponse(res, error);
   }
 };
+
 
 
