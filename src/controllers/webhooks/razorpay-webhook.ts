@@ -69,7 +69,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         try {
           session.startTransaction();
           
-          // Update the order status
+          // Update the order status but DON'T set quantityUpdated yet
           const order = await orderModel.findByIdAndUpdate(
             merchandiseOrderId,
             {
@@ -77,8 +77,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               status: "confirmed",
               razorpayPaymentId: paymentId,
               razorpayOrderId: orderId,
-              paymentDate: new Date(),
-              quantityUpdated: true 
+              paymentDate: new Date()
+              // Remove quantityUpdated: true from here
             },
             { new: true, session }
           );
@@ -112,7 +112,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               })
             );
             
-            // Mark quantities as updated
+            // Mark quantities as updated AFTER updating the quantities
             await orderModel.findByIdAndUpdate(
               merchandiseOrderId,
               { quantityUpdated: true },
