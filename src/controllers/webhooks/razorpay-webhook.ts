@@ -78,7 +78,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               razorpayPaymentId: paymentId,
               razorpayOrderId: orderId,
               paymentDate: new Date(),
-              quantityUpdated: true // Add a flag to track if quantities were updated
+              quantityUpdated: true 
             },
             { new: true, session }
           );
