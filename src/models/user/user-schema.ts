@@ -21,7 +21,7 @@ export interface UserDocument {
   profilePic?: string;
   language?: string;
   token?: string;
-  fcmToken?: string;
+  fcmToken?: string[];
   productsLanguage?: string[];
   dob?: Date;
   country?: string;
@@ -99,10 +99,11 @@ const usersSchema = new mongoose.Schema(
     token: {
       type: String,
     },
-    fcmToken: {
-      type: String,
-      default: null,
-    },
+    fcmToken: [
+      {
+        type: String,
+      },
+    ],
     productsLanguage: {
       type: [String],
       enum: ["kaz", "eng", "rus"],
@@ -135,10 +136,10 @@ const usersSchema = new mongoose.Schema(
 );
 
 // Add pre-save hook to ensure fullName is set
-usersSchema.pre('save', function(next) {
+usersSchema.pre("save", function (next) {
   // If fullName is not set but firstName or lastName is provided, create fullName
   if (!this.fullName && (this.firstName || this.lastName)) {
-    this.fullName = `${this.firstName || ''} ${this.lastName || ''}`.trim();
+    this.fullName = `${this.firstName || ""} ${this.lastName || ""}`.trim();
   }
   next();
 });

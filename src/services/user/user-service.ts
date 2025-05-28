@@ -106,6 +106,9 @@ export const loginUserService = async (
     if (passwordValidationResponse) return passwordValidationResponse;
   }
   user.token = generateUserToken(user as any, true);
+  if(!user?.fcmToken?.includes(userData?.fcmToken)){
+    user.fcmToken.push(userData.fcmToken)
+  }
   await user.save();
   return {
     success: true,
@@ -119,7 +122,7 @@ export const socialLoginService = async (
   authType: any,
   res: Response
 ) => {
-  const { idToken, location } = userData;
+  const { idToken, location, fcmToken} = userData;
 
   const decodedToken = jwt.decode(idToken) as any;
 
@@ -137,6 +140,7 @@ export const socialLoginService = async (
       profilePic: picture,
       location,
       emailVerified: true,
+      fcmToken: fcmToken
     },
     authType,
     res
@@ -239,6 +243,11 @@ export const signUpService = async (
     return existingUserResponse;
   const newUserData = { ...userData, authType };
   newUserData.password = await hashPasswordIfEmailAuth(userData, authType);
+  if (userData?.fcmToken) {
+    newUserData.fcmToken = userData.fcmToken;
+  } else {
+    newUserData.fcmToken = [];
+  }
   const user = await usersModel.create(newUserData);
   const otp = await sendOTPIfNeeded(userData, authType);
 
