@@ -438,6 +438,7 @@ export const orderProduct = async (req: Request, res: Response) => {
       data: {
         razorpayOrderId: razorpayOrder.id,
         amount: totalAmount,
+        receipt: razorpayOrder.receipt,
       },
     };
 
