@@ -29,7 +29,7 @@ export const getUserChats = async (req: Request, res: Response) => {
     const chatTypeFilter = type === "single" ? "individual" : "group";
     
     // Find all chats where the user is a participant and of the requested type
-    const chats = await chatModel
+    let chats = await chatModel
       .find({
         participants: userId,
         chatType: chatTypeFilter,
@@ -40,6 +40,28 @@ export const getUserChats = async (req: Request, res: Response) => {
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit);
+    
+    // Format the response based on chat type
+    const formattedChats = chats.map(chat => {
+      const chatObj = chat.toObject();
+      
+      if (chatTypeFilter === "individual") {
+        // For individual chats, add the other participant's info to the main object
+        const otherParticipant = chatObj.participants.find(
+          (p: any) => p._id.toString() !== userId
+        );
+        
+        if (otherParticipant) {
+          (chatObj as any).recipientName = (otherParticipant as any).fullName;
+          (chatObj as any).recipientEmail = (otherParticipant as any).email;
+          (chatObj as any).recipientProfilePic = (otherParticipant as any).profilePic;
+        }
+      } else if (chatTypeFilter === "group") {
+        (chatObj as any).groupImage = chatObj.groupImage || null;
+      }
+      
+      return chatObj;
+    });
     
     // Count total chats for pagination
     const totalChats = await chatModel.countDocuments({
@@ -52,7 +74,7 @@ export const getUserChats = async (req: Request, res: Response) => {
       success: true,
       message: `${chatTypeFilter} chats retrieved successfully`,
       data: {
-        chats,
+        chats: formattedChats,
         pagination: {
           total: totalChats,
           page,
@@ -777,7 +799,5 @@ export const removeGroupParticipant = async (req: Request, res: Response) => {
     return formatErrorResponse(res, error);
   }
 };
-
-
 
 
