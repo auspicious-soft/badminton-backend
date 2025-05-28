@@ -415,23 +415,6 @@ export const orderProduct = async (req: Request, res: Response) => {
 
     const razorpayOrder = await razorpayInstance.orders.create(options as any);
 
-    // Update product quantities after successful order creation
-    // await Promise.all(
-    //   processedItems.map(async (item: any) => {
-    //     await productModel.findByIdAndUpdate(
-    //       item.productId,
-    //       {
-    //         $inc: {
-    //           "venueAndQuantity.$[venue].quantity": -item.quantity,
-    //         },
-    //       },
-    //       {
-    //         arrayFilters: [{ "venue.venueId": venueId }],
-    //       }
-    //     );
-    //   })
-    // );
-
     const response = {
       success: true,
       message: "Order placed successfully",

@@ -102,6 +102,18 @@ const orderSchema = new Schema<OrderDocument>(
       type: String,
       default: null,
     },
+    razorpayPaymentId: {
+      type: String,
+      default: null,
+    },
+    razorpayOrderId: {
+      type: String,
+      default: null,
+    },
+    paymentDate: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );
