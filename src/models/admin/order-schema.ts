@@ -20,6 +20,9 @@ export interface OrderDocument extends Document {
     pinCode: string;
   };
   cancellationReason?: string;
+  razorpayPaymentId?: string;
+  razorpayOrderId?: string;
+  paymentDate?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }

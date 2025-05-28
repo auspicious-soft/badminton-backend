@@ -9,6 +9,9 @@ import { configDotenv } from "dotenv";
 import { bookingRequestModel } from "src/models/venue/booking-request-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { chatModel } from "src/models/chat/chat-schema";
+import { orderModel } from "src/models/admin/order-schema";
+import { productModel } from "src/models/admin/products-schema";
+
 configDotenv();
 
 export const razorpayWebhookHandler = async (req: Request, res: Response) => {
@@ -53,6 +56,72 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       const amount = event.payload.payment.entity.amount / 100; // Convert from paise to rupees
       const status =
         eventType === "payment.captured" ? "captured" : "authorized";
+      
+      // Check if this is a merchandise order
+      const notes = event.payload.payment.entity.notes || {};
+      if (notes.orderId) {
+        // This is a merchandise order payment
+        const merchandiseOrderId = notes.orderId;
+        
+        // Start a session for transaction consistency
+        const session = await mongoose.startSession();
+        
+        try {
+          session.startTransaction();
+          
+          // Update the order status
+          const order = await orderModel.findByIdAndUpdate(
+            merchandiseOrderId,
+            {
+              paymentStatus: "paid",
+              status: "confirmed",
+              razorpayPaymentId: paymentId,
+              razorpayOrderId: orderId,
+              paymentDate: new Date()
+            },
+            { new: true, session }
+          );
+          
+          if (!order) {
+            console.error(`Order not found for ID: ${merchandiseOrderId}`);
+            await session.abortTransaction();
+            return res.status(httpStatusCode.OK).json({
+              success: false,
+              message: "Order not found, but acknowledging webhook",
+            });
+          }
+          
+          // Update product quantities
+          await Promise.all(
+            order.items.map(async (item: any) => {
+              await productModel.findByIdAndUpdate(
+                item.productId,
+                {
+                  $inc: {
+                    "venueAndQuantity.$[venue].quantity": -item.quantity,
+                  },
+                },
+                {
+                  arrayFilters: [{ "venue.venueId": order.venueId }],
+                  session
+                }
+              );
+            })
+          );
+          
+          await session.commitTransaction();
+          
+          console.log(`Merchandise order ${merchandiseOrderId} payment processed successfully`);
+          
+          // Continue with the rest of the webhook processing
+        } catch (error) {
+          await session.abortTransaction();
+          console.error("Error processing merchandise order payment:", error);
+          throw error;
+        } finally {
+          session.endSession();
+        }
+      }
 
       // Check if this transaction has already been processed
       const existingTransaction = await transactionModel.findOne({

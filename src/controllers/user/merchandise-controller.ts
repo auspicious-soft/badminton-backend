@@ -9,6 +9,7 @@ import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
 import { promise } from "zod";
 import mongoose from "mongoose";
+import razorpayInstance from "src/config/razorpay";
 
 export const getMerchandise = async (req: Request, res: Response) => {
   try {
@@ -287,7 +288,7 @@ export const orderProduct = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
     const userData = req.user as any;
-    const { items, venueId, address} = req.body;
+    const { items, venueId, address } = req.body;
 
     if (!items || items.length === 0) {
       return errorResponseHandler(
@@ -305,7 +306,7 @@ export const orderProduct = async (req: Request, res: Response) => {
       );
     }
 
-    if(address && typeof address !== 'object') {
+    if (address && typeof address !== "object") {
       return errorResponseHandler(
         "Address must be an object",
         httpStatusCode.BAD_REQUEST,
@@ -402,31 +403,41 @@ export const orderProduct = async (req: Request, res: Response) => {
       pickupCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
     });
 
+    const options = {
+      amount: totalAmount * 100, // Amount in paise
+      currency: "INR",
+      receipt: `receipt_${order._id}`,
+      notes: {
+        orderId: (order as any)._id.toString(),
+        userId: userData.id,
+      },
+    };
+
+    const razorpayOrder = await razorpayInstance.orders.create(options as any);
+
     // Update product quantities after successful order creation
-    await Promise.all(
-      processedItems.map(async (item: any) => {
-        await productModel.findByIdAndUpdate(
-          item.productId,
-          {
-            $inc: {
-              "venueAndQuantity.$[venue].quantity": -item.quantity,
-            },
-          },
-          {
-            arrayFilters: [{ "venue.venueId": venueId }],
-          }
-        );
-      })
-    );
+    // await Promise.all(
+    //   processedItems.map(async (item: any) => {
+    //     await productModel.findByIdAndUpdate(
+    //       item.productId,
+    //       {
+    //         $inc: {
+    //           "venueAndQuantity.$[venue].quantity": -item.quantity,
+    //         },
+    //       },
+    //       {
+    //         arrayFilters: [{ "venue.venueId": venueId }],
+    //       }
+    //     );
+    //   })
+    // );
 
     const response = {
       success: true,
       message: "Order placed successfully",
       data: {
-        orderId: order._id,
-        totalAmount: order.totalAmount,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
+        razorpayOrderId: razorpayOrder.id,
+        amount: totalAmount,
       },
     };
 
