@@ -25,9 +25,23 @@ export const initializeSocketEvents = (ioServer: Server) => {
   // Middleware for authentication
   io.use(async (socket, next) => {
     try {
-      // Get token from query params or auth object
-      const token =
-        socket.handshake.auth?.token || socket.handshake.query?.token;
+      // Get token from query params or auth object with more flexible parsing
+      let token = socket.handshake.auth?.token || socket.handshake.query?.token;
+      
+      // If token is an array, take the first element
+      if (Array.isArray(token)) {
+        token = token[0];
+      }
+      
+      // Log connection attempt details
+      console.log("Socket connection attempt:", {
+        id: socket.id,
+        hasToken: !!token,
+        tokenLength: token ? String(token).length : 0,
+        query: socket.handshake.query,
+        headers: socket.handshake.headers,
+        url: socket.handshake.url
+      });
 
       if (!token) {
         return next(new Error("Authentication error: Token not provided"));
@@ -36,8 +50,10 @@ export const initializeSocketEvents = (ioServer: Server) => {
       try {
         const user = await authenticateSocket(socket);
         socket.data.user = user;
+        console.log(`Socket authenticated for user: ${user.id}`);
         next();
       } catch (authError: any) {
+        console.error("Socket authentication error:", authError);
         next(
           new Error(`Authentication failed: ${(authError as Error).message}`)
         );
@@ -123,3 +139,4 @@ export const sendToUser = (
 
 // Export io instance
 export { io };
+

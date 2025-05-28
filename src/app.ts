@@ -49,7 +49,7 @@ app.use("/api/webhooks", webhookRoutes);
 // Use server.listen instead of app.listen
 server.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));
 
-// Set up Socket.IO with improved error handling
+// Set up Socket.IO with improved error handling and flexible connection options
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -60,7 +60,10 @@ const io = new Server(server, {
   path: "/socket.io/",
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  connectTimeout: 45000, // Increase connection timeout
+  allowEIO3: true, // Allow Engine.IO 3 compatibility
+  allowUpgrades: true // Allow transport upgrades
 });
 
 // Set the io instance
@@ -68,3 +71,16 @@ setIo(io);
 
 // Initialize socket events
 initializeSocketEvents(io);
+
+// Add more detailed connection logging
+io.engine.on("connection_error", (err) => {
+  console.error("Socket.IO connection error:", err);
+});
+
+io.engine.on("connection", (socket) => {
+  console.log("New socket connection attempt:", {
+    id: socket.id,
+    transport: socket.transport,
+    remoteAddress: socket.remoteAddress
+  });
+});
