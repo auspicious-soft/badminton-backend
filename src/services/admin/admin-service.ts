@@ -1423,7 +1423,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
       });
     }
 
-    const ongoingMatches : any= {}
+    const ongoingMatches : any= {Padel: 0, Pickleball: 0};
 
     formatBookingData?.map((data: any)=>{
       if(ongoingMatches.hasOwnProperty(data.game)) {
