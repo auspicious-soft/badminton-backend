@@ -10,7 +10,7 @@ import mongoose from "mongoose";
 import { inventoryModel } from "src/models/admin/inventory-schema";
 import { orderModel } from "src/models/admin/order-schema";
 import { usersModel } from "src/models/user/user-schema";
-
+import PDFDocument from "pdfkit";
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
@@ -674,13 +674,13 @@ export const updateInventory = async (req: Request, res: Response) => {
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      status, 
+    const {
+      page = 1,
+      limit = 10,
+      status,
       search,
       sortBy = "createdAt",
-      order = "desc" 
+      order = "desc",
     } = req.query;
 
     // Convert query params to numbers
@@ -690,25 +690,27 @@ export const getOrders = async (req: Request, res: Response) => {
 
     // Build query
     let query: any = {};
-    
+
     // Add status filter if provided
     if (status) {
       query.orderStatus = status;
     }
-    
+
     // Add search filter if provided
     if (search) {
       // First, find users matching the search criteria
-      const users = await usersModel.find({
-        $or: [
-          { fullName: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-          { phoneNumber: { $regex: search, $options: "i" } }
-        ]
-      }).select('_id');
-      
-      const userIds = users.map(user => user._id);
-      
+      const users = await usersModel
+        .find({
+          $or: [
+            { fullName: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { phoneNumber: { $regex: search, $options: "i" } },
+          ],
+        })
+        .select("_id");
+
+      const userIds = users.map((user) => user._id);
+
       // Add user IDs to query
       if (userIds.length > 0) {
         query.userId = { $in: userIds };
@@ -750,17 +752,17 @@ export const getOrders = async (req: Request, res: Response) => {
       .lean();
 
     // Transform orders to include all required fields
-    const transformedOrders = orders.map(order => {
+    const transformedOrders = orders.map((order) => {
       const userData = order.userId as any;
       const venueData = order.venueId as any;
-      
+
       return {
         orderId: order._id,
         orderDate: order.createdAt,
         orderStatus: order.orderStatus,
         paymentStatus: order.paymentStatus,
         totalAmount: order.totalAmount,
-        
+
         // User details
         user: {
           id: userData?._id,
@@ -768,16 +770,16 @@ export const getOrders = async (req: Request, res: Response) => {
           email: userData?.email || "Unknown",
           phoneNumber: userData?.phoneNumber || "Unknown",
           profilePic: userData?.profilePic || "",
-          address: order.address || {}
+          address: order.address || {},
         },
-        
+
         // Venue details
         venue: {
           id: venueData?._id || "",
           name: venueData?.name || "Unknown",
-          address: venueData?.address || ""
+          address: venueData?.address || "",
         },
-        
+
         // Items details
         items: order.items.map((item: any) => {
           const product = item.productId as any;
@@ -787,9 +789,9 @@ export const getOrders = async (req: Request, res: Response) => {
             image: product?.primaryImage || "",
             price: item.price,
             quantity: item.quantity,
-            total: item.total
+            total: item.total,
           };
-        })
+        }),
       };
     });
 
@@ -805,9 +807,282 @@ export const getOrders = async (req: Request, res: Response) => {
         limit: limitNumber,
         totalPages: Math.ceil(totalOrders / limitNumber),
         sortBy,
-        order
+        order,
       },
     });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const updateOrderStatus = async (req: Request, res: Response) => {
+  try {
+    const { orderId, status } = req.body;
+
+    if (!orderId) {
+      return errorResponseHandler(
+        "Order ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    if (!status) {
+      return errorResponseHandler(
+        "Order status is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const validStatuses = [
+      "pending",
+      "ready",
+      "completed",
+      "delivered",
+      "cancelled",
+    ];
+    if (!validStatuses.includes(status)) {
+      return errorResponseHandler(
+        `Invalid status. Valid statuses are: ${validStatuses.join(", ")}`,
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const order = await orderModel.findById(orderId);
+    if (!order) {
+      return errorResponseHandler(
+        "Order not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    order.orderStatus = status;
+    await order.save();
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Order status updated successfully",
+      data: order,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+//Download order receipt in pdf my both user and admin using orderId
+
+export const downloadOrderReceipt = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!orderId) {
+      return errorResponseHandler(
+        "Order ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const order = await orderModel
+      .findById(orderId)
+      .populate("userId", "fullName email phoneNumber profilePic")
+      .populate("venueId", "name address")
+      .populate("items.productId", "productName primaryImage");
+
+    if (!order) {
+      return errorResponseHandler(
+        "Order not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 50,
+      info: {
+        Title: `Order Receipt #${order._id}`,
+        Author: "Your Company Name",
+      },
+    });
+
+    // Set response headers for PDF download
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=order-receipt-${order._id}.pdf`
+    );
+
+    // Pipe the PDF document to the response
+    doc.pipe(res);
+
+    // Add company logo
+    // doc.image('path/to/logo.png', 50, 45, { width: 150 });
+
+    // Add receipt title
+    doc
+      .fontSize(20)
+      .font("Helvetica-Bold")
+      .text("ORDER RECEIPT", { align: "center" });
+    doc.moveDown();
+
+    // Add order information
+    doc.fontSize(12).font("Helvetica-Bold").text("Order Information");
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Order ID: ${order._id}`)
+      .text(
+        `Date: ${
+          order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A"
+        }`
+      )
+      .text(`Status: ${order.orderStatus}`)
+      .text(`Payment Status: ${order.paymentStatus}`);
+    doc.moveDown();
+
+    // Add customer information
+    const userData = order.userId as any;
+    doc.fontSize(12).font("Helvetica-Bold").text("Customer Information");
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Name: ${userData?.fullName || "Unknown"}`)
+      .text(`Email: ${userData?.email || "Unknown"}`)
+      .text(`Phone: ${userData?.phoneNumber || "Unknown"}`);
+
+    // Add address if available
+    if (order.address) {
+      doc.text(
+        `Address: ${order.address.street || ""}, ${order.address.city || ""}, ${
+          order.address.state || ""
+        } ${order.address.pinCode || ""}`
+      );
+    }
+    doc.moveDown();
+
+    // Add venue information
+    const venueData = order.venueId as any;
+    doc.fontSize(12).font("Helvetica-Bold").text("Venue Information");
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Name: ${venueData?.name || "Unknown"}`)
+      .text(`Address: ${venueData?.address || "Unknown"}`);
+    doc.moveDown();
+
+    // Add items table
+    doc.fontSize(12).font("Helvetica-Bold").text("Order Items");
+    doc.moveDown(0.5);
+
+    // Table headers
+    const tableTop = doc.y;
+    const itemX = 50;
+    const descriptionX = 150;
+    const quantityX = 280;
+    const priceX = 350;
+    const totalX = 450;
+
+    doc
+      .fontSize(10)
+      .font("Helvetica-Bold")
+      .text("Item", itemX, tableTop)
+      .text("Description", descriptionX, tableTop)
+      .text("Qty", quantityX, tableTop)
+      .text("Price", priceX, tableTop)
+      .text("Total", totalX, tableTop);
+
+    // Draw header line
+    doc
+      .moveTo(50, doc.y + 5)
+      .lineTo(550, doc.y + 5)
+      .stroke();
+    doc.moveDown(0.5);
+
+    // Table rows
+    let tableRowY = doc.y;
+    let totalAmount = 0;
+
+    order.items.forEach((item: any, i: number) => {
+      const product = item.productId as any;
+      const productName = product?.productName || "Unknown Product";
+      const y = tableRowY + i * 20;
+
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .text((i + 1).toString(), itemX, y)
+        .text(productName, descriptionX, y, { width: 120 })
+        .text(item.quantity.toString(), quantityX, y)
+        .text(`₹${item.price.toFixed(2)}`, priceX, y)
+        .text(`₹${item.total.toFixed(2)}`, totalX, y);
+
+      totalAmount += item.total;
+    });
+
+    // Draw total line
+    doc
+      .moveTo(50, doc.y + 15)
+      .lineTo(550, doc.y + 15)
+      .stroke();
+
+    // Add total amount
+    doc.moveDown();
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text(`Total Amount: ₹${order.totalAmount.toFixed(2)}`, {
+        align: "right",
+      });
+
+    // Add payment information
+    doc.moveDown(2);
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(
+        `Payment Method: ${order.razorpayPaymentId ? "Razorpay" : "Unknown"}`,
+        { align: "right" }
+      )
+      .text(`Payment ID: ${order.razorpayPaymentId || "N/A"}`, {
+        align: "right",
+      });
+
+    // Add footer
+    const footerTop = doc.page.height - 100;
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text("Thank you for your purchase!", 50, footerTop, { align: "center" })
+      .moveDown()
+      .text(
+        "For any questions or concerns, please contact our customer support.",
+        { align: "center" }
+      );
+
+    // Add page numbers
+    const pageCount = doc.bufferedPageRange().count;
+    for (let i = 0; i < pageCount; i++) {
+      doc.switchToPage(i);
+      doc
+        .fontSize(8)
+        .font("Helvetica")
+        .text(`Page ${i + 1} of ${pageCount}`, 50, doc.page.height - 50, {
+          align: "center",
+        });
+    }
+
+    // Finalize the PDF
+    doc.end();
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res

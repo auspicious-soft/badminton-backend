@@ -147,7 +147,8 @@ export const getChatById = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Chat retrieved successfully",
-      data: chat
+      data: chat,
+      myId: userId
     });
   } catch (error: any) {
     return formatErrorResponse(res, error);

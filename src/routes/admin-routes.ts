@@ -28,6 +28,7 @@ import {
   getProductById,
   getProducts,
   updateInventory,
+  updateOrderStatus,
   updateProduct,
 } from "src/controllers/admin/product-controller";
 import {
@@ -108,7 +109,7 @@ router.get("/court-list", listOfCourts)
 router.route("/admin-settings").post(createUpdateAdminSettings).get(getAdminSettings)
 
 //Orders
-router.route("/orders").get(getOrders)
+router.route("/orders").get(getOrders).put(updateOrderStatus)
 
 
 

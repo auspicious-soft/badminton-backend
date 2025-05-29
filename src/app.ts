@@ -11,6 +11,7 @@ import http from "http";
 import { Server } from "socket.io";
 import { setIo, initializeSocketEvents } from "./socket";
 import webhookRoutes from "./routes/webhook-routes";
+import { downloadOrderReceipt } from "./controllers/admin/product-controller";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +46,7 @@ app.use("/api/user", checkAuth, user);
 app.use("/api/chat", checkAuth, chat);
 app.use("/api", auth);
 app.use("/api/webhooks", webhookRoutes);
+app.get("/api/order-receipt/:orderId",downloadOrderReceipt)
 
 // Use server.listen instead of app.listen
 server.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));

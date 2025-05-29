@@ -10,9 +10,8 @@ export interface OrderDocument extends Document {
   }>;
   totalAmount: number;
   venueId: mongoose.Types.ObjectId;
-  status: "pending" | "ready" | "completed" | "cancelled";
-  paymentStatus: "pending" | "completed" | "refunded";
-  orderStatus?: "pending" | "ready" | "completed" | "delivered" | "cancelled";
+  paymentStatus: "pending" | "paid" | "refunded";
+  orderStatus?: "pending" | "confirmed" | "ready" | "delivered" | "cancelled";
   address?: {
     street: string;
     city: string;
@@ -66,19 +65,14 @@ const orderSchema = new Schema<OrderDocument>(
       ref: "venues",
       required: true,
     },
-    status: {
-      type: String,
-      enum: ["pending", "ready", "completed", "cancelled"],
-      default: "pending",
-    },
     paymentStatus: {
       type: String,
-      enum: ["pending", "completed", "refunded"],
+      enum: ["pending", "paid", "refunded"],
       default: "pending",
     },
     orderStatus: {
       type: String,
-      enum: ["pending", "ready", "completed", "delivered","cancelled"],
+      enum: ["pending", "confirmed", "ready", "delivered", "cancelled"],
       default: "pending",
     },
     address: {
