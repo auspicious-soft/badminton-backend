@@ -841,7 +841,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const validStatuses = [
       "pending",
       "ready",
-      "completed",
+      "confirmed",
       "delivered",
       "cancelled",
     ];
