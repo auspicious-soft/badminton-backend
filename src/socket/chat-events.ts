@@ -58,12 +58,11 @@ export const setupChatEvents = (socket: Socket, userId: string) => {
   // Basic message sending (we'll expand this later)
   socket.on("send_message", async (data: {
     chatId: string;
-    senderId: string;
     content: string;
     contentType?: string;
   }) => {
     try {
-      const { chatId, content, contentType = "text", senderId } = data;
+      const { chatId, content, contentType = "text" } = data;
       
       // Validate input
       if (!chatId || !content) {
@@ -78,8 +77,6 @@ export const setupChatEvents = (socket: Socket, userId: string) => {
       socket.emit("message_received", {
         chatId,
         content,
-        senderId,
-        contentType,
         timestamp: new Date().toISOString()
       });
 
@@ -95,4 +92,3 @@ export const setupChatEvents = (socket: Socket, userId: string) => {
     }
   });
 };
-
