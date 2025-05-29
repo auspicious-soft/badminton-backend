@@ -24,6 +24,7 @@ import {
   createProduct,
   deleteInventory,
   getInventory,
+  getOrders,
   getProductById,
   getProducts,
   updateInventory,
@@ -105,6 +106,9 @@ router.get("/court-list", listOfCourts)
 
 //Admin Settings routes
 router.route("/admin-settings").post(createUpdateAdminSettings).get(getAdminSettings)
+
+//Orders
+router.route("/orders").get(getOrders)
 
 
 

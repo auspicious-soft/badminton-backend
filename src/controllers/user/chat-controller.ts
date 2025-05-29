@@ -82,6 +82,7 @@ export const getUserChats = async (req: Request, res: Response) => {
       message: `${chatTypeFilter} chats retrieved successfully`,
       data: {
         chats: formattedChats,
+        myId: userId,
         pagination: {
           total: totalChats,
           page,

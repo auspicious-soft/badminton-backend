@@ -8,6 +8,9 @@ import { venueModel } from "src/models/venue/venue-schema";
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { inventoryModel } from "src/models/admin/inventory-schema";
+import { orderModel } from "src/models/admin/order-schema";
+import { usersModel } from "src/models/user/user-schema";
+
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
@@ -660,6 +663,150 @@ export const updateInventory = async (req: Request, res: Response) => {
       success: true,
       message: "Inventory updated successfully",
       data: response,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const getOrders = async (req: Request, res: Response) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      status, 
+      search,
+      sortBy = "createdAt",
+      order = "desc" 
+    } = req.query;
+
+    // Convert query params to numbers
+    const pageNumber = parseInt(page as string) || 1;
+    const limitNumber = parseInt(limit as string) || 10;
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Build query
+    let query: any = {};
+    
+    // Add status filter if provided
+    if (status) {
+      query.orderStatus = status;
+    }
+    
+    // Add search filter if provided
+    if (search) {
+      // First, find users matching the search criteria
+      const users = await usersModel.find({
+        $or: [
+          { fullName: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { phoneNumber: { $regex: search, $options: "i" } }
+        ]
+      }).select('_id');
+      
+      const userIds = users.map(user => user._id);
+      
+      // Add user IDs to query
+      if (userIds.length > 0) {
+        query.userId = { $in: userIds };
+      } else {
+        // If no users match, return empty result
+        return res.status(httpStatusCode.OK).json({
+          success: true,
+          message: "No orders found for the search criteria",
+          data: [],
+          meta: {
+            total: 0,
+            hasPreviousPage: false,
+            hasNextPage: false,
+            page: pageNumber,
+            limit: limitNumber,
+            totalPages: 0,
+          },
+        });
+      }
+    }
+
+    // Count total documents for pagination
+    const totalOrders = await orderModel.countDocuments(query);
+
+    // Determine sort direction
+    const sortDirection = order === "asc" ? 1 : -1;
+    const sortOptions: any = {};
+    sortOptions[sortBy as string] = sortDirection;
+
+    // Get paginated orders with all required fields
+    const orders = await orderModel
+      .find(query)
+      .populate("userId", "fullName email phoneNumber profilePic")
+      .populate("venueId", "name address")
+      .populate("items.productId", "productName primaryImage")
+      .skip(skip)
+      .limit(limitNumber)
+      .sort(sortOptions)
+      .lean();
+
+    // Transform orders to include all required fields
+    const transformedOrders = orders.map(order => {
+      const userData = order.userId as any;
+      const venueData = order.venueId as any;
+      
+      return {
+        orderId: order._id,
+        orderDate: order.createdAt,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+        totalAmount: order.totalAmount,
+        
+        // User details
+        user: {
+          id: userData?._id,
+          fullName: userData?.fullName || "Unknown",
+          email: userData?.email || "Unknown",
+          phoneNumber: userData?.phoneNumber || "Unknown",
+          profilePic: userData?.profilePic || "",
+          address: order.address || {}
+        },
+        
+        // Venue details
+        venue: {
+          id: venueData?._id || "",
+          name: venueData?.name || "Unknown",
+          address: venueData?.address || ""
+        },
+        
+        // Items details
+        items: order.items.map((item: any) => {
+          const product = item.productId as any;
+          return {
+            productId: product?._id || item.productId,
+            name: product?.productName || "Unknown Product",
+            image: product?.primaryImage || "",
+            price: item.price,
+            quantity: item.quantity,
+            total: item.total
+          };
+        })
+      };
+    });
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Orders retrieved successfully",
+      data: transformedOrders,
+      meta: {
+        total: totalOrders,
+        hasPreviousPage: pageNumber > 1,
+        hasNextPage: skip + limitNumber < totalOrders,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(totalOrders / limitNumber),
+        sortBy,
+        order
+      },
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
