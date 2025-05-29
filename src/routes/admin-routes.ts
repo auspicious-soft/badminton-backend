@@ -36,6 +36,8 @@ import {
   createUpdatePricing,
   getAdminSettings,
   getAllPricing,
+  rewardsSettings,
+  updateRewardsSettings,
 } from "src/controllers/admin/settings-controller";
 import {
   createMaintenanceBooking,
@@ -107,12 +109,8 @@ router.get("/court-list", listOfCourts)
 
 //Admin Settings routes
 router.route("/admin-settings").post(createUpdateAdminSettings).get(getAdminSettings)
-
+router.route("/reward-settings/:type").get(rewardsSettings).put(updateRewardsSettings)
 //Orders
 router.route("/orders").get(getOrders).put(updateOrderStatus)
-
-
-
-
 
 export { router };

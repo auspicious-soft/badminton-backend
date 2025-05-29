@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { freemem } from "os";
 
 const admintSettingSchema = new mongoose.Schema(
   {
@@ -33,6 +34,48 @@ const admintSettingSchema = new mongoose.Schema(
     userAgreement: {
       type: String,
       default: null,
+    },
+    referral: {
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+      bonusAmount: {
+        type: Number,
+        default: 50,
+      },
+      bonusType: {
+        type: String,
+        enum: ["playCoins"],
+        default: "playCoins",
+      },
+    },
+    loyaltyPoints: {
+      enabled: {
+        type: Boolean,
+        default: true,
+      },
+      limit: {
+        type: Number,
+        default: 2000,
+      },
+      perMatch: {
+        type: Number,
+        default: 200,
+      },
+      rewardType: {
+        type: String,
+        enum: ["freeGame", "playCoins"],
+        default: "freeGame",
+      },
+      playCointAmount: {
+        type: Number,
+        default: 50,
+      },
+      freeGameAmount: {
+        type: Number,
+        default: 1,
+      },
     },
     banners: [
       {

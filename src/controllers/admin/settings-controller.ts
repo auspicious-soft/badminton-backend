@@ -52,7 +52,7 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
     }
 
     // Check for duplicate slots
-    const slots = slotPricing.map(item => item.slot);
+    const slots = slotPricing.map((item) => item.slot);
     const uniqueSlots = new Set(slots);
     if (slots.length !== uniqueSlots.size) {
       return errorResponseHandler(
@@ -63,7 +63,7 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
     }
 
     let result;
-    
+
     if (id) {
       // Update existing pricing
       result = await priceModel.findByIdAndUpdate(
@@ -71,7 +71,7 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
         { name, description, dayType, slotPricing },
         { new: true, runValidators: true }
       );
-      
+
       if (!result) {
         return errorResponseHandler(
           "Pricing not found",
@@ -89,7 +89,7 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
           res
         );
       }
-      
+
       // Create new pricing
       result = await priceModel.create({
         name,
@@ -101,7 +101,9 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
 
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: id ? "Pricing updated successfully" : "Pricing created successfully",
+      message: id
+        ? "Pricing updated successfully"
+        : "Pricing created successfully",
       data: result,
     });
   } catch (error: any) {
@@ -116,24 +118,27 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
 export const getAllPricing = async (req: Request, res: Response) => {
   try {
     const { search, dayType } = req.query;
-    
+
     const query: any = {};
-    
+
     // Apply search filter if provided
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
       ];
     }
-    
+
     // Apply dayType filter if provided
-    if (dayType && ["weekday", "weekend", "holiday"].includes(dayType as string)) {
+    if (
+      dayType &&
+      ["weekday", "weekend", "holiday"].includes(dayType as string)
+    ) {
       query.dayType = dayType;
     }
-    
+
     const pricingPlans = await priceModel.find(query).sort({ name: 1 });
-    
+
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Pricing plans retrieved successfully",
@@ -151,7 +156,7 @@ export const getAllPricing = async (req: Request, res: Response) => {
 export const getPricingById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return errorResponseHandler(
         "Valid pricing ID is required",
@@ -159,9 +164,9 @@ export const getPricingById = async (req: Request, res: Response) => {
         res
       );
     }
-    
+
     const pricing = await priceModel.findById(id);
-    
+
     if (!pricing) {
       return errorResponseHandler(
         "Pricing not found",
@@ -169,7 +174,7 @@ export const getPricingById = async (req: Request, res: Response) => {
         res
       );
     }
-    
+
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Pricing retrieved successfully",
@@ -187,7 +192,7 @@ export const getPricingById = async (req: Request, res: Response) => {
 export const deletePricing = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return errorResponseHandler(
         "Valid pricing ID is required",
@@ -195,9 +200,9 @@ export const deletePricing = async (req: Request, res: Response) => {
         res
       );
     }
-    
+
     const pricing = await priceModel.findByIdAndDelete(id);
-    
+
     if (!pricing) {
       return errorResponseHandler(
         "Pricing not found",
@@ -205,7 +210,7 @@ export const deletePricing = async (req: Request, res: Response) => {
         res
       );
     }
-    
+
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Pricing deleted successfully",
@@ -217,15 +222,18 @@ export const deletePricing = async (req: Request, res: Response) => {
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: message || "An error occurred" });
   }
-}
+};
 
-export const createUpdateAdminSettings = async (req: Request, res: Response) => {
+export const createUpdateAdminSettings = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const {...updateFields } = req.body;
-    
+    const { ...updateFields } = req.body;
+
     const checkExist = await adminSettingModel.findOne({ isActive: true });
     let result;
-    
+
     if (checkExist) {
       // Update existing settings
       result = await adminSettingModel.findByIdAndUpdate(
@@ -233,7 +241,7 @@ export const createUpdateAdminSettings = async (req: Request, res: Response) => 
         updateFields,
         { new: true, runValidators: true }
       );
-      
+
       if (!result) {
         return errorResponseHandler(
           "Admin settings not found",
@@ -245,10 +253,12 @@ export const createUpdateAdminSettings = async (req: Request, res: Response) => 
       // Create new settings
       result = await adminSettingModel.create(updateFields);
     }
-    
+
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: checkExist ? "Admin settings updated successfully" : "Admin settings created successfully",
+      message: checkExist
+        ? "Admin settings updated successfully"
+        : "Admin settings created successfully",
       data: result,
     });
   } catch (error: any) {
@@ -262,7 +272,7 @@ export const createUpdateAdminSettings = async (req: Request, res: Response) => 
 export const getAdminSettings = async (req: Request, res: Response) => {
   try {
     const settings = await adminSettingModel.findOne();
-    
+
     if (!settings) {
       return errorResponseHandler(
         "Admin settings not found",
@@ -270,7 +280,7 @@ export const getAdminSettings = async (req: Request, res: Response) => {
         res
       );
     }
-    
+
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Admin settings retrieved successfully",
@@ -284,4 +294,69 @@ export const getAdminSettings = async (req: Request, res: Response) => {
   }
 };
 
+export const rewardsSettings = async (req: Request, res: Response) => {
+  try {
+    let settings: any = await adminSettingModel.findOne();
+    const type = req.params.type;
+    if (type && type !== "referral" && type !== "loyaltyPoints") {
+      return errorResponseHandler(
+        "Invalid type parameter. Must be 'referral' or 'loyaltyPoints'",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
 
+    if (!settings) {
+      settings = await adminSettingModel.create();
+    }
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Rewards settings retrieved successfully",
+      data: type ? settings[type] : settings,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const updateRewardsSettings = async (req: Request, res: Response) => {
+  try {
+    let settings: any = await adminSettingModel.findOne();
+    const type = req.params.type;
+    if (type && type !== "referral" && type !== "loyaltyPoints") {
+      return errorResponseHandler(
+        "Invalid type parameter. Must be 'referral' or 'loyaltyPoints'",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    if (!settings) {
+      return errorResponseHandler(
+        "Rewards settings not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    settings = await adminSettingModel.findOneAndUpdate(
+      { _id: settings._id },
+      { [type]: req.body },
+      { new: true, runValidators: true }
+    );
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Rewards settings retrieved successfully",
+      data: type ? settings[type] : settings,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};

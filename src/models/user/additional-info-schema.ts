@@ -25,6 +25,7 @@ export interface AdditionalUserInfoDocument extends Document {
   loyaltyTier: string;
   notificationPreferences: NotificationPreferences;
   clubMember: boolean;
+  freeGameCount: number;
   playerRating: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -103,6 +104,11 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
         type: Boolean,
         default: true,
       },
+    },
+    freeGameCount:{
+      type: Number,
+      default: 0,
+      min: 0,
     },
     clubMember: {
       type: Boolean,
