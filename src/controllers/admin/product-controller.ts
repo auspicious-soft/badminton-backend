@@ -11,6 +11,7 @@ import { inventoryModel } from "src/models/admin/inventory-schema";
 import { orderModel } from "src/models/admin/order-schema";
 import { usersModel } from "src/models/user/user-schema";
 import PDFDocument from "pdfkit";
+import path from "path";
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
@@ -906,13 +907,15 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
       );
     }
 
+    // Create PDF document with smaller margins
     const doc = new PDFDocument({
       size: "A4",
-      margin: 50,
+      margin: 30, // Further reduced margins
       info: {
         Title: `Order Receipt #${order._id}`,
         Author: "Your Company Name",
       },
+      autoFirstPage: true, // Ensure single page
     });
 
     // Set response headers for PDF download
@@ -925,166 +928,227 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
     // Pipe the PDF document to the response
     doc.pipe(res);
 
-    // Add company logo
-    // doc.image('path/to/logo.png', 50, 45, { width: 150 });
+    // Register custom fonts from assets folder
+    const fontPath = path.join(process.cwd(), 'src', 'assets', 'fonts');
+    doc.registerFont('Regular', path.join(fontPath, 'Roboto-Regular.ttf'));
+    doc.registerFont('Bold', path.join(fontPath, 'Roboto-Bold.ttf'));
+    doc.registerFont('Medium', path.join(fontPath, 'Roboto-Medium.ttf'));
 
-    // Add receipt title
+    // Fonts and Colors
+    const primaryColor = "#1E3A8A"; // Deep blue
+    const accentColor = "#3B82F6"; // Light blue
+
+    // Rupee Symbol (using Unicode)
+    const rupeeSymbol = "₹"; // Unicode for ₹
+
+    // Header Section
+    // Company Logo (Uncomment and provide path if available)
+    // doc.image(path.join(process.cwd(), 'src', 'assets', 'logo.png'), 30, 20, { width: 80, height: 30 });
+
     doc
-      .fontSize(20)
-      .font("Helvetica-Bold")
-      .text("ORDER RECEIPT", { align: "center" });
-    doc.moveDown();
+      .fontSize(16)
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text("Order Receipt", 30, 30, { align: "center" });
+    doc
+      .fontSize(8)
+      .font("Regular")
+      .fillColor("#4B5563")
+      .text(`Receipt #${order._id}`, 30, 50, { align: "center" });
+    doc
+      .moveTo(30, 60)
+      .lineTo(565, 60)
+      .lineWidth(1)
+      .strokeColor(accentColor)
+      .stroke();
+    doc.moveDown(0.5);
 
-    // Add order information
-    doc.fontSize(12).font("Helvetica-Bold").text("Order Information");
+    // Two-column layout for Order and Customer Info
+    const leftColumnX = 30;
+    const rightColumnX = 300;
+    const sectionY = doc.y;
+
+    // Order Information (Left Column)
     doc
       .fontSize(10)
-      .font("Helvetica")
-      .text(`Order ID: ${order._id}`)
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text("Order Details", leftColumnX, sectionY);
+    doc
+      .fontSize(8)
+      .font("Regular")
+      .fillColor("#4B5563")
+      .text(`Order ID: ${order._id}`, leftColumnX, sectionY + 15)
       .text(
         `Date: ${
-          order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A"
-        }`
+          order.createdAt
+            ? new Date(order.createdAt).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })
+            : "N/A"
+        }`,
+        leftColumnX,
+        sectionY + 27
       )
-      .text(`Status: ${order.orderStatus}`)
-      .text(`Payment Status: ${order.paymentStatus}`);
-    doc.moveDown();
+      .text(`Status: ${order.orderStatus}`, leftColumnX, sectionY + 39)
+      .text(`Payment: ${order.paymentStatus}`, leftColumnX, sectionY + 51);
 
-    // Add customer information
+    // Customer Information (Right Column)
     const userData = order.userId as any;
-    doc.fontSize(12).font("Helvetica-Bold").text("Customer Information");
     doc
       .fontSize(10)
-      .font("Helvetica")
-      .text(`Name: ${userData?.fullName || "Unknown"}`)
-      .text(`Email: ${userData?.email || "Unknown"}`)
-      .text(`Phone: ${userData?.phoneNumber || "Unknown"}`);
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text("Customer Details", rightColumnX, sectionY);
+    doc
+      .fontSize(8)
+      .font("Regular")
+      .fillColor("#4B5563")
+      .text(`Name: ${userData?.fullName || "Unknown"}`, rightColumnX, sectionY + 15)
+      .text(`Email: ${userData?.email || "Unknown"}`, rightColumnX, sectionY + 27)
+      .text(`Phone: ${userData?.phoneNumber || "Unknown"}`, rightColumnX, sectionY + 39);
 
-    // Add address if available
+    // Address
     if (order.address) {
       doc.text(
         `Address: ${order.address.street || ""}, ${order.address.city || ""}, ${
           order.address.state || ""
-        } ${order.address.pinCode || ""}`
+        } ${order.address.pinCode || ""}`,
+        rightColumnX,
+        sectionY + 51,
+        { width: 250, lineBreak: true }
       );
     }
-    doc.moveDown();
 
-    // Add venue information
+    // Venue Information
     const venueData = order.venueId as any;
-    doc.fontSize(12).font("Helvetica-Bold").text("Venue Information");
+    doc.moveDown(1);
+    const venueY = doc.y;
     doc
       .fontSize(10)
-      .font("Helvetica")
-      .text(`Name: ${venueData?.name || "Unknown"}`)
-      .text(`Address: ${venueData?.address || "Unknown"}`);
-    doc.moveDown();
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text("Venue Details", leftColumnX, venueY);
+    doc
+      .fontSize(8)
+      .font("Regular")
+      .fillColor("#4B5563")
+      .text(`Name: ${venueData?.name || "Unknown"}`, leftColumnX, venueY + 15)
+      .text(`Address: ${venueData?.address || "Unknown"}`, leftColumnX, venueY + 27, {
+        width: 250,
+      });
+    doc.moveDown(1);
 
-    // Add items table
-    doc.fontSize(12).font("Helvetica-Bold").text("Order Items");
-    doc.moveDown(0.5);
+    // Items Table
+    doc
+      .fontSize(10)
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text("Items Purchased", leftColumnX, doc.y);
+    doc.moveDown(0.3);
 
     // Table headers
     const tableTop = doc.y;
-    const itemX = 50;
-    const descriptionX = 150;
-    const quantityX = 280;
+    const itemX = 30;
+    const descriptionX = 60;
+    const quantityX = 290;
     const priceX = 350;
     const totalX = 450;
 
     doc
-      .fontSize(10)
-      .font("Helvetica-Bold")
-      .text("Item", itemX, tableTop)
-      .text("Description", descriptionX, tableTop)
+      .fontSize(8)
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text("No.", itemX, tableTop)
+      .text("Item", descriptionX, tableTop, { width: 200 })
       .text("Qty", quantityX, tableTop)
       .text("Price", priceX, tableTop)
       .text("Total", totalX, tableTop);
 
-    // Draw header line
+    // Table header underline
     doc
-      .moveTo(50, doc.y + 5)
-      .lineTo(550, doc.y + 5)
+      .moveTo(30, tableTop + 10)
+      .lineTo(565, tableTop + 10)
+      .lineWidth(1)
+      .strokeColor(accentColor)
       .stroke();
-    doc.moveDown(0.5);
+    doc.moveDown(0.3);
 
     // Table rows
     let tableRowY = doc.y;
     let totalAmount = 0;
-
-    order.items.forEach((item: any, i: number) => {
+    const maxItems = 8; // Reduced to ensure single page
+    order.items.slice(0, maxItems).forEach((item: any, i: number) => {
       const product = item.productId as any;
       const productName = product?.productName || "Unknown Product";
-      const y = tableRowY + i * 20;
+      const y = tableRowY + i * 15; // Reduced row height
 
       doc
-        .fontSize(10)
-        .font("Helvetica")
+        .fontSize(7)
+        .font("Regular")
+        .fillColor("#4B5563")
         .text((i + 1).toString(), itemX, y)
-        .text(productName, descriptionX, y, { width: 120 })
+        .text(productName, descriptionX, y, { width: 200, ellipsis: true })
         .text(item.quantity.toString(), quantityX, y)
-        .text(`₹${item.price.toFixed(2)}`, priceX, y)
-        .text(`₹${item.total.toFixed(2)}`, totalX, y);
+        .text(`${rupeeSymbol}${item.price.toFixed(2)}`, priceX, y)
+        .text(`${rupeeSymbol}${item.total.toFixed(2)}`, totalX, y);
 
       totalAmount += item.total;
     });
 
-    // Draw total line
+    // Total Amount
+    doc.moveDown(0.5);
     doc
-      .moveTo(50, doc.y + 15)
-      .lineTo(550, doc.y + 15)
+      .moveTo(30, doc.y)
+      .lineTo(565, doc.y)
+      .lineWidth(1)
+      .strokeColor(accentColor)
       .stroke();
-
-    // Add total amount
-    doc.moveDown();
+    doc.moveDown(0.3);
     doc
-      .fontSize(12)
-      .font("Helvetica-Bold")
-      .text(`Total Amount: ₹${order.totalAmount.toFixed(2)}`, {
+      .fontSize(10)
+      .font("Bold")
+      .fillColor(primaryColor)
+      .text(`${rupeeSymbol}${order.totalAmount.toFixed(2)}`, totalX - 50, doc.y, {
         align: "right",
       });
 
-    // Add payment information
-    doc.moveDown(2);
+    // Payment Information
+    doc.moveDown(0.5);
     doc
-      .fontSize(10)
-      .font("Helvetica")
+      .fontSize(8)
+      .font("Regular")
+      .fillColor("#4B5563")
       .text(
         `Payment Method: ${order.razorpayPaymentId ? "Razorpay" : "Unknown"}`,
+        rightColumnX,
+        doc.y,
         { align: "right" }
       )
-      .text(`Payment ID: ${order.razorpayPaymentId || "N/A"}`, {
+      .text(`Payment ID: ${order.razorpayPaymentId || "N/A"}`, rightColumnX, doc.y + 12, {
         align: "right",
       });
 
-    // Add footer
-    const footerTop = doc.page.height - 100;
+    // Footer
+    const footerY = doc.page.height - 60; // Moved up to save space
     doc
-      .fontSize(10)
-      .font("Helvetica")
-      .text("Thank you for your purchase!", 50, footerTop, { align: "center" })
-      .moveDown()
+      .fontSize(7)
+      .font("Regular")
+      .fillColor("#6B7280")
+      .text("Thank you for your purchase!", 30, footerY, { align: "center" })
       .text(
-        "For any questions or concerns, please contact our customer support.",
+        "Contact us at support@yourcompany.com for any inquiries.",
+        30,
+        footerY + 12,
         { align: "center" }
       );
-
-    // Add page numbers
-    const pageCount = doc.bufferedPageRange().count;
-    for (let i = 0; i < pageCount; i++) {
-      doc.switchToPage(i);
-      doc
-        .fontSize(8)
-        .font("Helvetica")
-        .text(`Page ${i + 1} of ${pageCount}`, 50, doc.page.height - 50, {
-          align: "center",
-        });
-    }
 
     // Finalize the PDF
     doc.end();
   } catch (error: any) {
-    const { code, message } = errorParser(error);
+    const { code, message }: { code: number; message: string } = errorParser(error);
     return res
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: message || "An error occurred" });

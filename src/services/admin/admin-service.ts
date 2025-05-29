@@ -1169,7 +1169,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
       })
       .populate("userId", "fullName")
       .populate("courtId", "games")
-      .select("bookingSlots")
+      .select("bookingSlots isMaintenance")
       .lean();
 
     let formatBookingData: any = [];
@@ -1180,6 +1180,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
         game: booking.courtId?.games || "Unknown",
         player: booking.userId?.fullName || "Unknown",
         duration: "60 Mins",
+        isMaintenance: booking.isMaintenance || false,
       });
     });
 
@@ -1376,6 +1377,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
         $project: {
           _id: 1,
           fullName: "$userInfo.fullName",
+          isMaintenance: "$isMaintenance",
           game: "$courtInfo.games",
           city: "$venueInfo.city",
           date: "$bookingDate",
