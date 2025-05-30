@@ -27,6 +27,7 @@ export interface UserDocument {
   country?: string;
   createdAt?: Date;
   updatedAt?: Date;
+  referralUsed: string;
   location?: {
     type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
@@ -126,6 +127,10 @@ const usersSchema = new mongoose.Schema(
         type: [Number],
         default: [0, 0],
       },
+    },
+    referralUsed: {
+      type: String,
+      default: "",
     },
     isBlocked: {
       type: Boolean,

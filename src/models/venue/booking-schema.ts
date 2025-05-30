@@ -11,7 +11,7 @@ export interface BookingDocument extends Document {
   skillRequired: number;
   team1: any;
   team2: any;
-  bookingType: "Booking" | "Complete";
+  bookingType: "Booking" | "Complete" | "Cancelled";
   bookingAmount: number;
   bookingPaymentStatus: boolean;
   bookingDate: Date;
@@ -157,8 +157,8 @@ const bookingSchema = new Schema(
     },
     bookingType: {
       type: String,
-      enum: ["Booking", "Complete"],
-      default: "Self",
+      enum: ["Booking", "Complete", "Cancelled"],
+      default: "Booking",
       required: true,
     },
     bookingAmount: {

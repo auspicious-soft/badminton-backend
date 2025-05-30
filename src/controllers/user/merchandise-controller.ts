@@ -476,7 +476,7 @@ export const getMyOrders = async (req: Request, res: Response) => {
       .lean();
 
     // Transform orders to include required fields
-    const transformedOrders = orders.map((order) => {
+    const transformedOrders = orders.map((order: any) => {
       // Handle venue data safely
       const venueData = order.venueId as any; // Cast to any to access properties
 

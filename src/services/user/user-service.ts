@@ -34,6 +34,7 @@ import { friendsModel } from "src/models/user/friends-schema";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import { Readable } from "stream";
+import { adminSettingModel } from "src/models/admin/admin-settings";
 
 configDotenv();
 export interface UserPayload {
@@ -106,8 +107,8 @@ export const loginUserService = async (
     if (passwordValidationResponse) return passwordValidationResponse;
   }
   user.token = generateUserToken(user as any, true);
-  if(!user?.fcmToken?.includes(userData?.fcmToken)){
-    user.fcmToken.push(userData.fcmToken)
+  if (!user?.fcmToken?.includes(userData?.fcmToken)) {
+    user.fcmToken.push(userData.fcmToken);
   }
   await user.save();
   return {
@@ -122,7 +123,7 @@ export const socialLoginService = async (
   authType: any,
   res: Response
 ) => {
-  const { idToken, location, fcmToken} = userData;
+  const { idToken, location, fcmToken } = userData;
 
   const decodedToken = jwt.decode(idToken) as any;
 
@@ -140,7 +141,7 @@ export const socialLoginService = async (
       profilePic: picture,
       location,
       emailVerified: true,
-      fcmToken: fcmToken
+      fcmToken: fcmToken,
     },
     authType,
     res
@@ -169,13 +170,39 @@ const createNewUser = async (userData: any, authType: string) => {
   });
 
   await newUser.save();
-  
+
+  let referralCode: string = "";
+  let exist = true;
+  while (exist) {
+    const prefix = userData?.firstName
+      ? userData.firstName.slice(0, 2).toUpperCase()
+      : "PL";
+    const randomSuffix = Math.random()
+      .toString(36)
+      .substring(2, 7)
+      .toUpperCase();
+
+    referralCode = `${prefix}${randomSuffix}`;
+    const existingCode = await additionalUserInfoModel.findOne({
+      "referrals.code": referralCode,
+    });
+
+    exist = !!existingCode;
+  }
+
   // Create additional user info document
   await additionalUserInfoModel.create({
     userId: newUser._id,
     playCoins: 0,
     loyaltyPoints: 0,
     loyaltyTier: "Bronze",
+    referrals: {
+      code: referralCode,
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Valid for 1 year
+      usageCount: 0,
+      maxUsage: 15,
+      isActive: true,
+    },
     notificationPreferences: {
       gameInvites: true,
       friendRequests: true,
@@ -262,13 +289,39 @@ export const signUpService = async (
   user.token = generateUserToken(user as any, verification);
 
   await user.save();
-  
-  // Create additional user info document
+
+  let referralCode: string = "";
+  let exist = true;
+  while (exist) {
+    const prefix = userData?.firstName
+      ? userData.firstName.slice(0, 2).toUpperCase()
+      : "PL";
+    const randomSuffix = Math.random()
+      .toString(36)
+      .substring(2, 7)
+      .toUpperCase();
+
+    referralCode = `${prefix}${randomSuffix}`;
+    const existingCode = await additionalUserInfoModel.findOne({
+      "referrals.code": referralCode,
+    });
+
+    exist = !!existingCode;
+  }
+
+  // Create additional user info document with the unique referral code
   await additionalUserInfoModel.create({
     userId: user._id,
     playCoins: 0,
     loyaltyPoints: 0,
     loyaltyTier: "Bronze",
+    referrals: {
+      code: referralCode,
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Valid for 1 year
+      usageCount: 0,
+      maxUsage: 15,
+      isActive: true,
+    },
     notificationPreferences: {
       gameInvites: true,
       friendRequests: true,
@@ -280,7 +333,7 @@ export const signUpService = async (
     clubMember: false,
     playerRating: 0,
   });
-  
+
   return {
     success: true,
     message:
@@ -473,7 +526,7 @@ export const createUserService = async (payload: any, res: Response) => {
   (newUser as any).identifier = identifier();
 
   const response = await newUser.save();
-  
+
   // Create additional user info document
   await additionalUserInfoModel.create({
     userId: response._id,
@@ -628,12 +681,29 @@ export const verifyOTPService = async (
     });
 
     if (!user) {
-      // errorResponseHandler(
-      //   "Invalid or expired Email OTP",
-      //   httpStatusCode.BAD_REQUEST,
-      //   res
-      // );
-      throw new Error("Invalid or expired Email OTP");
+      errorResponseHandler(
+        "Invalid or expired Email OTP",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+    if (user?.referralUsed) {
+      let bonusAmount = await adminSettingModel.findOne().lean();
+      const referredPerson = await additionalUserInfoModel.findOne({
+        "referrals.code": user?.referralUsed,
+      });
+
+      if (referredPerson && bonusAmount?.referral?.enabled) {
+        referredPerson.referrals.usageCount += 1;
+        referredPerson.playCoins += bonusAmount?.referral?.bonusAmount || 50; // Assuming 100 coins for referral
+        await referredPerson.save();
+      } else {
+        errorResponseHandler(
+          "Invalid referral code",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
     }
     if (user) {
       user.emailVerified = true;
@@ -795,10 +865,10 @@ export const updateUserServices = async (req: Request, res: Response) => {
   if (firstName || lastName) {
     if (firstName) updateFields.firstName = firstName;
     if (lastName) updateFields.lastName = lastName;
-    
+
     // Create fullName from firstName and lastName
-    const newFirstName = firstName || user.firstName || '';
-    const newLastName = lastName || user.lastName || '';
+    const newFirstName = firstName || user.firstName || "";
+    const newLastName = lastName || user.lastName || "";
     updateFields.fullName = `${newFirstName} ${newLastName}`.trim();
   }
 
@@ -892,24 +962,24 @@ export const uploadStreamToS3Service = async (
 ): Promise<string> => {
   const timestamp = Date.now();
   const imageKey = `users/${userEmail}/images/${timestamp}-${fileName}`;
-  
+
   // Convert stream to buffer
   const chunks: any[] = [];
   for await (const chunk of fileStream) {
     chunks.push(chunk);
   }
   const fileBuffer = Buffer.concat(chunks);
-  
+
   const params = {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: imageKey,
     Body: fileBuffer,
     ContentType: fileType,
   };
-  
+
   const s3Client = createS3Client();
   const command = new PutObjectCommand(params);
   await s3Client.send(command);
-  
+
   return imageKey;
 };

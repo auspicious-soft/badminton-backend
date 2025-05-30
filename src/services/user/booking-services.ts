@@ -1250,19 +1250,17 @@ export const getDynamicPriceServices = async (req: Request, res: Response) => {
 
 export const cancelBookingServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { bookingId, method } = req.body;
+  const { bookingId } = req.body;
 
-  if (!bookingId) {
-    return errorResponseHandler(
-      "Booking ID is required",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
+  // Start a MongoDB session for transaction consistency
+  const session = await mongoose.startSession();
+
+  await session.startTransaction();
 
   const booking = await bookingModel.findById(bookingId).lean();
 
   if (!booking) {
+    await session.abortTransaction();
     return errorResponseHandler(
       "Booking not found",
       httpStatusCode.NOT_FOUND,
@@ -1270,28 +1268,215 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
+  // Check if user is the booking creator
   if (booking.userId.toString() !== userData.id.toString()) {
+    await session.abortTransaction();
     return errorResponseHandler(
-      "You are not authorized to cancel this booking",
+      "Only the booking creator can cancel this booking",
       httpStatusCode.UNAUTHORIZED,
       res
     );
   }
 
-  if (booking.bookingDate < new Date()) {
+  // Check if askToJoin is false
+  if (booking.askToJoin === true) {
+    await session.abortTransaction();
     return errorResponseHandler(
-      "You cannot cancel a booking that has already started or passed",
+      "Cannot cancel a booking that is open for others to join",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  await bookingModel.findByIdAndUpdate(bookingId, {
-    cancellationReason: "User cancelled",
+  // Find the transaction
+  const userTransaction = await transactionModel
+    .findOne({
+      bookingId: { $in: [bookingId] },
+      userId: userData.id,
+    })
+    .lean();
+
+  if (!userTransaction || !userTransaction.isWebhookVerified) {
+    await session.abortTransaction();
+    return errorResponseHandler(
+      "No verified transaction found for this booking",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  if (userTransaction.status === "refunded") {
+    await session.abortTransaction();
+    return errorResponseHandler(
+      "This booking has already been cancelled",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Check if booking date is in the past
+  const currentDate = new Date();
+  if (booking.bookingDate < currentDate) {
+    await session.abortTransaction();
+    return errorResponseHandler(
+      "Cannot cancel a booking that has already passed",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Get the booking slot time
+  const bookingSlot = booking.bookingSlots;
+  const [slotHour, slotMinute] = bookingSlot
+    .split(":")
+    .map((num) => parseInt(num, 10));
+
+  // Create a date object for the exact booking time
+  const bookingTime = new Date(booking.bookingDate);
+  bookingTime.setHours(slotHour, slotMinute || 0, 0, 0);
+
+  // Calculate time difference in hours
+  const timeDifferenceMs = bookingTime.getTime() - currentDate.getTime();
+  const timeDifferenceHours = timeDifferenceMs / (1000 * 60 * 60);
+
+  // Check if cancellation is at least 6 hours before the booking time
+  if (timeDifferenceHours < 6) {
+    await session.abortTransaction();
+    return errorResponseHandler(
+      "Bookings can only be cancelled at least 6 hours before the scheduled time",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  // Refund playcoins if used
+  if (userTransaction.playcoinsUsed > 0) {
+    await additionalUserInfoModel.findOneAndUpdate(
+      { userId: userData.id },
+      { $inc: { playCoins: userTransaction.playcoinsUsed } },
+      { session }
+    );
+  }
+
+  // Process Razorpay refund if applicable
+  let refund;
+  if (
+    userTransaction.razorpayPaymentId &&
+    userTransaction.amount - userTransaction.playcoinsUsed > 0
+  ) {
+    try {
+      refund = await razorpayInstance.payments.refund(
+        userTransaction.razorpayPaymentId,
+        {
+          amount: Math.round(
+            (userTransaction.amount - userTransaction.playcoinsUsed) * 100
+          ), // Convert to paise and ensure it's an integer
+          notes: {
+            bookingId: bookingId,
+            userId: userData.id.toString(),
+            reason: "Booking creator cancelled booking",
+          },
+        }
+      );
+    } catch (razorpayError: any) {
+      console.error("Razorpay refund error:", razorpayError);
+      await session.abortTransaction();
+      return errorResponseHandler(
+        razorpayError.error?.description || "Failed to process refund",
+        httpStatusCode.INTERNAL_SERVER_ERROR,
+        res
+      );
+    }
+  }
+
+  // Update transaction status
+  await transactionModel.findByIdAndUpdate(
+    userTransaction._id,
+    {
+      status: "refunded",
+      isWebhookVerified: true,
+      razorpayRefundId: refund ? refund.id : null,
+      refundAmount: userTransaction.amount - userTransaction.playcoinsUsed,
+      refundDate: new Date(),
+    },
+    { session }
+  );
+
+  // Update booking status
+  await bookingModel.findByIdAndUpdate(
+    bookingId,
+    {
+      cancellationReason: "Creator cancelled booking",
+      bookingType: "Cancelled",
+    },
+    { session }
+  );
+
+  // Create notification for the booking creator
+  // await createNotification(
+  //   {
+  //     recipientId: userData.id,
+  //     type: "BOOKING_CANCELLED",
+  //     title: "Booking Cancelled",
+  //     message: `Your booking has been cancelled successfully and a refund has been initiated.`,
+  //     category: "BOOKING",
+  //     referenceId: bookingId,
+  //     referenceType: "bookings",
+  //   },
+  //   { session }
+  // );
+
+  // Notify all players in the booking about the cancellation
+  const playerIds = new Set<string>();
+
+  // Collect player IDs from both teams
+  booking.team1?.forEach((player: any) => {
+    if (
+      player.playerId &&
+      player.playerId.toString() !== userData.id.toString()
+    ) {
+      playerIds.add(player.playerId.toString());
+    }
   });
+
+  booking.team2?.forEach((player: any) => {
+    if (
+      player.playerId &&
+      player.playerId.toString() !== userData.id.toString()
+    ) {
+      playerIds.add(player.playerId.toString());
+    }
+  });
+
+  // Send notifications to all players
+  // const notificationPromises = Array.from(playerIds).map((playerId) => {
+  //   return createNotification(
+  //     {
+  //       recipientId: new mongoose.Types.ObjectId(playerId),
+  //       senderId: userData.id,
+  //       type: "BOOKING_CANCELLED",
+  //       title: "Booking Cancelled",
+  //       message: `A booking you were part of has been cancelled by the creator.`,
+  //       category: "BOOKING",
+  //       referenceId: bookingId,
+  //       referenceType: "bookings",
+  //     },
+  //     { session }
+  //   );
+  // });
+
+  // await Promise.all(notificationPromises);
+
+  await session.commitTransaction();
 
   return {
     success: true,
     message: "Booking cancelled successfully",
+    data: {
+      bookingId,
+      refundId: refund?.id,
+      refundAmount: userTransaction.amount - userTransaction.playcoinsUsed,
+      playcoinsRefunded: userTransaction.playcoinsUsed,
+    },
   };
 };

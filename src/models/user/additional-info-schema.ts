@@ -20,7 +20,7 @@ export interface NotificationPreferences {
 export interface AdditionalUserInfoDocument extends Document {
   userId: mongoose.Types.ObjectId;
   playCoins: number;
-  referrals: ReferralInfo[];
+  referrals: ReferralInfo;
   loyaltyPoints: number;
   loyaltyTier: string;
   notificationPreferences: NotificationPreferences;
@@ -45,30 +45,29 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
       default: 0,
       min: 0,
     },
-    referrals: [
-      {
-        code: {
-          type: String,
-          required: true,
-        },
-        expiryDate: {
-          type: Date,
-          required: true,
-        },
-        usageCount: {
-          type: Number,
-          default: 0,
-        },
-        maxUsage: {
-          type: Number,
-          default: 10,
-        },
-        isActive: {
-          type: Boolean,
-          default: true,
-        },
+    referrals: {
+      code: {
+        type: String,
+        required: true,
       },
-    ],
+      expiryDate: {
+        type: Date,
+        required: true,
+      },
+      usageCount: {
+        type: Number,
+        default: 0,
+      },
+      maxUsage: {
+        type: Number,
+        default: 10,
+      },
+      isActive: {
+        type: Boolean,
+        default: true,
+      },
+    },
+
     loyaltyPoints: {
       type: Number,
       default: 0,
@@ -105,7 +104,7 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
         default: true,
       },
     },
-    freeGameCount:{
+    freeGameCount: {
       type: Number,
       default: 0,
       min: 0,
@@ -128,6 +127,8 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
 additionalUserInfoSchema.index({ userId: 1 });
 additionalUserInfoSchema.index({ "referrals.code": 1 });
 
-export const additionalUserInfoModel = mongoose.model<AdditionalUserInfoDocument>(
-  "additionalUserInfo",
-  additionalUserInfoSchema)
+export const additionalUserInfoModel =
+  mongoose.model<AdditionalUserInfoDocument>(
+    "additionalUserInfo",
+    additionalUserInfoSchema
+  );

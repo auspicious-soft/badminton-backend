@@ -13,15 +13,19 @@ export interface OrderDocument extends Document {
   paymentStatus: "pending" | "paid" | "refunded";
   orderStatus?: "pending" | "confirmed" | "ready" | "delivered" | "cancelled";
   address?: {
+    nameOfRecipient?: string;
+    phoneNumber?: string;
     street: string;
     city: string;
     state: string;
     pinCode: string;
+    country?: string;
   };
   cancellationReason?: string;
   razorpayPaymentId?: string;
   razorpayOrderId?: string;
   paymentDate?: Date;
+  status?: string;
   createdAt?: Date;
   updatedAt?: Date;
   quantityUpdated?: boolean;
@@ -76,6 +80,14 @@ const orderSchema = new Schema<OrderDocument>(
       default: "pending",
     },
     address: {
+      nameOfRecipient: {
+        type: String,
+        default: null,
+      },
+      phoneNumber: {
+        type: String,
+        default: null,
+      },
       street: {
         type: String,
         required: true,
@@ -112,6 +124,10 @@ const orderSchema = new Schema<OrderDocument>(
     quantityUpdated: {
       type: Boolean,
       default: false,
+    },
+    status: {
+      type: String,
+      default: "active",
     },
   },
   { timestamps: true }
