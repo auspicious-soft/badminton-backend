@@ -1136,45 +1136,22 @@ export const getCitiesService = async (payload: any, res: Response) => {
 
 export const dashboardServices = async (payload: any, res: Response) => {
   try {
-    // Get today's scheduled bookings
     const { year } = payload.query;
-    const currentYear = Number(year) || new Date().getFullYear();
+    const now = new Date();
+    const currentYear = Number(year) || now.getUTCFullYear();
 
-    // Get current date/time in IST
-    const now = getCurrentISTTime();
-    const currentMonth = now.getMonth() + 1; // JavaScript months are 0-indexed
+    // Time boundaries in UTC
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    const startOfYear = new Date(Date.UTC(currentYear, 0, 1));
+    const endOfYear = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999));
 
-    // Calculate start and end of current month in IST
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    endOfMonth.setHours(23, 59, 59, 999);
-
-    // Calculate start and end of current year in IST
-    const startOfYear = new Date(currentYear, 0, 1);
-    startOfYear.setHours(0, 0, 0, 0);
-    
-    const endOfYear = new Date(currentYear, 11, 31);
-    endOfYear.setHours(23, 59, 59, 999);
-
-    // Get today's scheduled bookings - use getCurrentISTTime for consistent timezone
-    const todayStart = getCurrentISTTime();
-    todayStart.setHours(0, 0, 0, 0);
-    
-    const todayEnd = getCurrentISTTime();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    // Log for debugging
-    console.log(`Current IST time: ${now.toISOString()}`);
-    console.log(`Today start: ${todayStart.toISOString()}`);
-    console.log(`Today end: ${todayEnd.toISOString()}`);
-
+    // Get today's scheduled bookings
     const todayScheduledBookings = await bookingModel
       .find({
-        bookingDate: { 
-          $gte: getCurrentISTTime() // Keep this for future bookings today
-        },
+        bookingDate: { $gte: startOfDay, $lte: endOfDay },
         bookingPaymentStatus: true,
         cancellationReason: null,
       })
@@ -1183,48 +1160,29 @@ export const dashboardServices = async (payload: any, res: Response) => {
       .select("bookingSlots isMaintenance")
       .lean();
 
-    console.log(`Found ${todayScheduledBookings.length} scheduled bookings`);
-
-    // Then sort them manually with higher times at the top
     todayScheduledBookings.sort((a, b) => {
-      // Handle both array and string cases for bookingSlots
       const slotA = Array.isArray(a.bookingSlots) ? a.bookingSlots[0] : a.bookingSlots;
       const slotB = Array.isArray(b.bookingSlots) ? b.bookingSlots[0] : b.bookingSlots;
-      
-      // Extract hours and minutes for comparison
-      const [hoursA, minutesA] = slotA.split(':').map((num: string) => parseInt(num, 10));
-      const [hoursB, minutesB] = slotB.split(':').map((num: string) => parseInt(num, 10));
-      
-      // Convert to minutes for easier comparison
-      const totalMinutesA = hoursA * 60 + minutesA;
-      const totalMinutesB = hoursB * 60 + minutesB;
-      
-      // Sort in descending order (higher times first)
-      return totalMinutesA - totalMinutesB;
+      const [hA, mA] = slotA.split(':').map(Number);
+      const [hB, mB] = slotB.split(':').map(Number);
+      return hA * 60 + mA - (hB * 60 + mB);
     });
 
-    let formatBookingData: any = [];
-    todayScheduledBookings?.forEach((booking: any) => {
-      formatBookingData.push({
-        time: booking.bookingSlots,
-        matches: 1,
-        game: booking.courtId?.games || "Unknown",
-        player: booking.userId?.fullName || "Unknown",
-        duration: "60 Mins",
-        isMaintenance: booking.isMaintenance || false,
-      });
-    });
+    const formatBookingData = todayScheduledBookings.map((booking) => ({
+      time: booking.bookingSlots,
+      matches: 1,
+      game:(booking.courtId as any)?.games || "Unknown",
+      player:( booking.userId as any)?.fullName || "Unknown",
+      duration: "60 Mins",
+      isMaintenance: booking.isMaintenance || false,
+    }));
 
-    // Get yearly game composition statistics
     const yearlyGameStats = await bookingModel.aggregate([
       {
         $match: {
           bookingPaymentStatus: true,
           cancellationReason: null,
-          bookingDate: {
-            $gte: startOfYear,
-            $lte: endOfYear,
-          },
+          bookingDate: { $gte: startOfYear, $lte: endOfYear },
         },
       },
       {
@@ -1235,12 +1193,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
           as: "courtInfo",
         },
       },
-      {
-        $unwind: {
-          path: "$courtInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
+      { $unwind: { path: "$courtInfo", preserveNullAndEmptyArrays: true } },
       {
         $group: {
           _id: "$courtInfo.games",
@@ -1249,44 +1202,24 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    // Calculate game composition percentages
-    let totalYearlyGames = 0;
-    let padelYearlyGames = 0;
-    let pickleballYearlyGames = 0;
-
+    let totalYearlyGames = 0, padelYearlyGames = 0, pickleballYearlyGames = 0;
     yearlyGameStats.forEach((stat) => {
-      if (stat._id) {
-        totalYearlyGames += stat.count;
-
-        if (stat._id === "Padel") {
-          padelYearlyGames = stat.count;
-        } else if (stat._id === "Pickleball") {
-          pickleballYearlyGames = stat.count;
-        }
-      }
+      if (stat._id === "Padel") padelYearlyGames = stat.count;
+      else if (stat._id === "Pickleball") pickleballYearlyGames = stat.count;
+      totalYearlyGames += stat.count;
     });
 
     const gameComposition = {
-      Padel:
-        totalYearlyGames > 0
-          ? Math.round((padelYearlyGames / totalYearlyGames) * 100)
-          : 0,
-      Pickleball:
-        totalYearlyGames > 0
-          ? Math.round((pickleballYearlyGames / totalYearlyGames) * 100)
-          : 0,
+      Padel: totalYearlyGames ? Math.round((padelYearlyGames / totalYearlyGames) * 100) : 0,
+      Pickleball: totalYearlyGames ? Math.round((pickleballYearlyGames / totalYearlyGames) * 100) : 0,
     };
 
-    // Get monthly statistics for matches
     const monthlyStats = await bookingModel.aggregate([
       {
         $match: {
           bookingPaymentStatus: true,
           cancellationReason: null,
-          bookingDate: {
-            $gte: startOfMonth,
-            $lte: endOfMonth,
-          },
+          bookingDate: { $gte: startOfMonth, $lte: endOfMonth },
         },
       },
       {
@@ -1297,12 +1230,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
           as: "courtInfo",
         },
       },
-      {
-        $unwind: {
-          path: "$courtInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
+      { $unwind: { path: "$courtInfo", preserveNullAndEmptyArrays: true } },
       {
         $group: {
           _id: "$courtInfo.games",
@@ -1311,30 +1239,18 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    // Calculate total matches this month
-    let totalMatchesThisMonth = 0;
-    let padelMatchesThisMonth = 0;
-    let pickleballMatchesThisMonth = 0;
-
+    let totalMatchesThisMonth = 0, padelMatchesThisMonth = 0, pickleballMatchesThisMonth = 0;
     monthlyStats.forEach((stat) => {
+      if (stat._id === "Padel") padelMatchesThisMonth = stat.count;
+      else if (stat._id === "Pickleball") pickleballMatchesThisMonth = stat.count;
       totalMatchesThisMonth += stat.count;
-
-      if (stat._id === "Padel") {
-        padelMatchesThisMonth = stat.count;
-      } else if (stat._id === "Pickleball") {
-        pickleballMatchesThisMonth = stat.count;
-      }
     });
 
-    // Calculate income this month from transactions
     const incomeResult = await transactionModel.aggregate([
       {
         $match: {
-          status: "captured", // Only successful transactions
-          createdAt: {
-            $gte: startOfMonth,
-            $lte: endOfMonth,
-          },
+          status: "captured",
+          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
         },
       },
       {
@@ -1345,10 +1261,8 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    const incomeThisMonth =
-      incomeResult.length > 0 ? incomeResult[0].totalIncome : 0;
+    const incomeThisMonth = incomeResult?.[0]?.totalIncome || 0;
 
-    // Get recent bookings
     const recentBookings = await bookingModel.aggregate([
       {
         $match: {
@@ -1356,12 +1270,8 @@ export const dashboardServices = async (payload: any, res: Response) => {
           cancellationReason: null,
         },
       },
-      {
-        $sort: { createdAt: -1 },
-      },
-      {
-        $limit: 5,
-      },
+      { $sort: { createdAt: -1 } },
+      { $limit: 5 },
       {
         $lookup: {
           from: "users",
@@ -1386,24 +1296,9 @@ export const dashboardServices = async (payload: any, res: Response) => {
           as: "venueInfo",
         },
       },
-      {
-        $unwind: {
-          path: "$userInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $unwind: {
-          path: "$courtInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $unwind: {
-          path: "$venueInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
+      { $unwind: "$userInfo" },
+      { $unwind: "$courtInfo" },
+      { $unwind: "$venueInfo" },
       {
         $project: {
           _id: 1,
@@ -1416,7 +1311,6 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    // Get monthly game data for graph
     const monthlyGameGraph = await bookingModel.aggregate([
       {
         $match: {
@@ -1435,12 +1329,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
           as: "courtInfo",
         },
       },
-      {
-        $unwind: {
-          path: "$courtInfo",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
+      { $unwind: { path: "$courtInfo", preserveNullAndEmptyArrays: true } },
       {
         $group: {
           _id: {
@@ -1460,34 +1349,23 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    // Process the monthly game data
-    const processedMonthlyData = [];
-    for (let i = 1; i <= 12; i++) {
-      const monthStr = i < 10 ? `0${i}/${currentYear}` : `${i}/${currentYear}`;
+    const processedMonthlyData = Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1;
+      const padel = monthlyGameGraph.find((d) => d.month === month && d.game === "Padel")?.count || 0;
+      const pickleball = monthlyGameGraph.find((d) => d.month === month && d.game === "Pickleball")?.count || 0;
 
-      // Find padel and pickleball counts for this month
-      const padelData = monthlyGameGraph.find(
-        (item) => item.month === i && item.game === "Padel"
-      );
-      const pickleballData = monthlyGameGraph.find(
-        (item) => item.month === i && item.game === "Pickleball"
-      );
-
-      processedMonthlyData.push({
-        month: monthStr,
-        padel: padelData ? padelData.count : 0,
-        pickleball: pickleballData ? pickleballData.count : 0,
-      });
-    }
+      return {
+        month: `${month < 10 ? "0" : ""}${month}/${currentYear}`,
+        padel,
+        pickleball,
+      };
+    });
 
     const ongoingMatches: any = { Padel: 0, Pickleball: 0 };
-
-    formatBookingData?.map((data: any) => {
-      if (ongoingMatches.hasOwnProperty(data.game)) {
-        ongoingMatches[data.game] += 1;
-      } else {
-        ongoingMatches[data.game] = 1;
-      }
+    formatBookingData.forEach((entry) => {
+      const game = entry.game;
+      if (ongoingMatches[game] != null) ongoingMatches[game]++;
+      else ongoingMatches[game] = 1;
     });
 
     return {
