@@ -11,7 +11,6 @@ import { usersModel } from "src/models/user/user-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
 
-
 export const searchFriend = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
@@ -309,12 +308,11 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
 
         // Delete the friendship
         await friendsModel.findByIdAndDelete(requestId);
-
-        return {
+        return res.status(httpStatusCode.OK).json({
           success: true,
           message: "Friend removed successfully",
           data: { relationshipId: requestId },
-        };
+        });
       } catch (error) {
         console.error("Error removing friend:", error);
         return errorResponseHandler(
@@ -791,7 +789,7 @@ export const getFriendsById = async (req: Request, res: Response) => {
     }
 
     // Get previous matches played by the user
-    const previousMatches = await bookingModel
+    const previousMatches = (await bookingModel
       .find({
         $or: [
           { "team1.playerId": new mongoose.Types.ObjectId(id) },
@@ -808,11 +806,11 @@ export const getFriendsById = async (req: Request, res: Response) => {
         select: "name games",
       })
       .sort({ bookingDate: -1 })
-      .lean() as any[];
+      .lean()) as any[];
 
     // Get all player IDs from the matches
     const playerIds = new Set<string>();
-    previousMatches.forEach(match => {
+    previousMatches.forEach((match) => {
       match.team1?.forEach((player: any) => {
         if (player.playerId) playerIds.add(player.playerId.toString());
       });
@@ -834,7 +832,7 @@ export const getFriendsById = async (req: Request, res: Response) => {
     }, {} as Record<string, any>);
 
     // Get scores for all matches
-    const matchIds = previousMatches.map(match => match._id);
+    const matchIds = previousMatches.map((match) => match._id);
     const scores = await gameScoreModel
       .find({ bookingId: { $in: matchIds } })
       .lean();
@@ -846,7 +844,7 @@ export const getFriendsById = async (req: Request, res: Response) => {
     }, {} as Record<string, any>);
 
     // Process matches with player details and scores
-    const processedMatches = previousMatches.map(match => {
+    const processedMatches = previousMatches.map((match) => {
       // Process team1 players
       const team1WithDetails = (match.team1 || []).map((player: any) => {
         const playerId = player.playerId?.toString();
