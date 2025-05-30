@@ -1172,6 +1172,24 @@ export const dashboardServices = async (payload: any, res: Response) => {
       .select("bookingSlots isMaintenance")
       .lean();
 
+    // Then sort them manually with higher times at the top
+    todayScheduledBookings.sort((a, b) => {
+      // Handle both array and string cases for bookingSlots
+      const slotA = Array.isArray(a.bookingSlots) ? a.bookingSlots[0] : a.bookingSlots;
+      const slotB = Array.isArray(b.bookingSlots) ? b.bookingSlots[0] : b.bookingSlots;
+      
+      // Extract hours and minutes for comparison
+      const [hoursA, minutesA] = slotA.split(':').map((num: string) => parseInt(num, 10));
+      const [hoursB, minutesB] = slotB.split(':').map((num: string) => parseInt(num, 10));
+      
+      // Convert to minutes for easier comparison
+      const totalMinutesA = hoursA * 60 + minutesA;
+      const totalMinutesB = hoursB * 60 + minutesB;
+      
+      // Sort in descending order (higher times first)
+      return totalMinutesB - totalMinutesA;
+    });
+
     let formatBookingData: any = [];
     todayScheduledBookings?.forEach((booking: any) => {
       formatBookingData.push({
@@ -1463,7 +1481,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
       success: true,
       message: "Dashboard data retrieved successfully",
       data: {
-        todaySchedule: formatBookingData.reverse(),
+        todaySchedule: formatBookingData,
         monthlyGameGraph: processedMonthlyData,
         recentBookings,
         stats: {
