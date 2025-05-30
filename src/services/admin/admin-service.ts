@@ -1187,7 +1187,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
       const totalMinutesB = hoursB * 60 + minutesB;
       
       // Sort in descending order (higher times first)
-      return totalMinutesB - totalMinutesA;
+      return totalMinutesA - totalMinutesB;
     });
 
     let formatBookingData: any = [];
