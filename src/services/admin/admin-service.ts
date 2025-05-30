@@ -1463,7 +1463,7 @@ export const dashboardServices = async (payload: any, res: Response) => {
       success: true,
       message: "Dashboard data retrieved successfully",
       data: {
-        todaySchedule: formatBookingData,
+        todaySchedule: formatBookingData.reverse(),
         monthlyGameGraph: processedMonthlyData,
         recentBookings,
         stats: {

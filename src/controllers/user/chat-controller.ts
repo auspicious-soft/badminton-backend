@@ -550,6 +550,75 @@ export const getChatMessages = async (req: Request, res: Response) => {
   }
 };
 
+// Create a new individual chat or return existing one
+export const createOrGetIndividualChat = async (req: Request, res: Response) => {
+  try {
+    const userData = req.user as any;
+    const userId = userData.id;
+    const { recipientId } = req.body;
+    
+    // Validate recipient ID
+    if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
+      return res.status(httpStatusCode.BAD_REQUEST).json({
+        success: false,
+        message: "Valid recipient ID is required"
+      });
+    }
+    
+    // Prevent creating chat with yourself
+    if (userId === recipientId) {
+      return res.status(httpStatusCode.BAD_REQUEST).json({
+        success: false,
+        message: "Cannot create chat with yourself"
+      });
+    }
+    
+    // Check if recipient exists
+    const recipient = await usersModel.findById(recipientId);
+    if (!recipient) {
+      return res.status(httpStatusCode.NOT_FOUND).json({
+        success: false,
+        message: "Recipient user not found"
+      });
+    }
+    
+    // Find existing chat or create new one
+    const existingChat = await chatModel.findOne({
+      chatType: "individual",
+      participants: { $all: [userId, recipientId] },
+      isActive: true
+    });
+    
+    if (existingChat) {
+      return res.status(httpStatusCode.OK).json({
+        success: true,
+        message: "Existing chat retrieved",
+        data: existingChat
+      });
+    }
+    
+    // Create new chat
+    const newChat = await chatModel.create({
+      chatType: "individual",
+      participants: [userId, recipientId],
+      messages: []
+    });
+    
+    // Populate participant details
+    const populatedChat = await chatModel
+      .findById(newChat._id)
+      .populate("participants", "fullName email profilePic");
+    
+    return res.status(httpStatusCode.CREATED).json({
+      success: true,
+      message: "New chat created successfully",
+      data: populatedChat
+    });
+  } catch (error: any) {
+    return formatErrorResponse(res, error);
+  }
+};
+
 // Update group chat details (name, image)
 export const updateGroupChat = async (req: Request, res: Response) => {
   try {
