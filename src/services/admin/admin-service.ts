@@ -1140,30 +1140,41 @@ export const dashboardServices = async (payload: any, res: Response) => {
     const { year } = payload.query;
     const currentYear = Number(year) || new Date().getFullYear();
 
-    // Get current month for monthly stats
-    const now = new Date();
+    // Get current date/time in IST
+    const now = getCurrentISTTime();
     const currentMonth = now.getMonth() + 1; // JavaScript months are 0-indexed
 
-    // Calculate start and end of current month
+    // Calculate start and end of current month in IST
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
+    startOfMonth.setHours(0, 0, 0, 0);
+    
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
 
-    // Calculate start and end of current year
+    // Calculate start and end of current year in IST
     const startOfYear = new Date(currentYear, 0, 1);
-    const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59, 999);
+    startOfYear.setHours(0, 0, 0, 0);
+    
+    const endOfYear = new Date(currentYear, 11, 31);
+    endOfYear.setHours(23, 59, 59, 999);
 
-    // Get today's scheduled bookings
+    // Get today's scheduled bookings - use getCurrentISTTime for consistent timezone
+    const todayStart = getCurrentISTTime();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = getCurrentISTTime();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Log for debugging
+    console.log(`Current IST time: ${now.toISOString()}`);
+    console.log(`Today start: ${todayStart.toISOString()}`);
+    console.log(`Today end: ${todayEnd.toISOString()}`);
+
     const todayScheduledBookings = await bookingModel
       .find({
-        bookingDate: { $gte: getCurrentISTTime() },
+        bookingDate: { 
+          $gte: getCurrentISTTime() // Keep this for future bookings today
+        },
         bookingPaymentStatus: true,
         cancellationReason: null,
       })
@@ -1171,6 +1182,8 @@ export const dashboardServices = async (payload: any, res: Response) => {
       .populate("courtId", "games")
       .select("bookingSlots isMaintenance")
       .lean();
+
+    console.log(`Found ${todayScheduledBookings.length} scheduled bookings`);
 
     // Then sort them manually with higher times at the top
     todayScheduledBookings.sort((a, b) => {
