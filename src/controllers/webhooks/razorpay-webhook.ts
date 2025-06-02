@@ -11,6 +11,7 @@ import { additionalUserInfoModel } from "src/models/user/additional-info-schema"
 import { chatModel } from "src/models/chat/chat-schema";
 import { orderModel } from "src/models/admin/order-schema";
 import { productModel } from "src/models/admin/products-schema";
+import { cartModel } from "src/models/user/user-cart";
 
 configDotenv();
 
@@ -62,6 +63,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       if (notes.orderId) {
         // This is a merchandise order payment
         const merchandiseOrderId = notes.orderId;
+        const userId = notes.userId;
         
         // Start a session for transaction consistency
         const session = await mongoose.startSession();
@@ -109,6 +111,12 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                     session
                   }
                 );
+                
+                // Remove this item from the user's cart
+                await cartModel.deleteOne({
+                  userId: order.userId,
+                  productId: item.productId
+                }, { session });
               })
             );
             

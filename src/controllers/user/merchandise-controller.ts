@@ -288,19 +288,11 @@ export const orderProduct = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
     const userData = req.user as any;
-    const { items, venueId, address } = req.body;
+    const { items, address, lat, lng } = req.body;
 
     if (!items || items.length === 0) {
       return errorResponseHandler(
         "Items are required",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-
-    if (!venueId) {
-      return errorResponseHandler(
-        "Venue ID is required",
         httpStatusCode.BAD_REQUEST,
         res
       );
@@ -314,11 +306,109 @@ export const orderProduct = async (req: Request, res: Response) => {
       );
     }
 
-    // Validate venue exists
-    const venue = await mongoose.model("venues").findById(venueId);
-    if (!venue) {
+    if (!lat || !lng) {
       return errorResponseHandler(
-        "Venue not found",
+        "Location coordinates (lat, lng) are required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // First, collect all venueIds from the products' venueAndQuantity arrays
+    const allVenueIds = new Set<string>();
+    
+    for (const item of items) {
+      const product = await productModel.findOne({
+        _id: item.productId,
+        isActive: true,
+      }).lean();
+      
+      if (!product) {
+        return errorResponseHandler(
+          `Product with ID ${item.productId} not found or inactive`,
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+      
+      // Add all venueIds from this product to the set
+      product.venueAndQuantity.forEach((venue: any) => {
+        allVenueIds.add(venue.venueId.toString());
+      });
+    }
+    
+    if (allVenueIds.size === 0) {
+      return errorResponseHandler(
+        "No venues have any of the requested products",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+    
+    // Get all these venues with their locations
+    const venueModel = mongoose.model("venues");
+    const venues = await venueModel.find({
+      _id: { $in: Array.from(allVenueIds) },
+      isActive: true,
+      "location.coordinates": { $exists: true }
+    }).lean();
+    
+    // Calculate distance for each venue
+    const venuesWithDistance = venues.map(venue => {
+      if (!venue.location?.coordinates || venue.location.coordinates.length !== 2) {
+        return { ...venue, distance: Number.MAX_SAFE_INTEGER };
+      }
+      
+      const [venueLng, venueLat] = venue.location.coordinates;
+      
+      // Haversine formula for distance calculation
+      const R = 6371; // Earth radius in km
+      const dLat = ((venueLat - parseFloat(lat)) * Math.PI) / 180;
+      const dLon = ((venueLng - parseFloat(lng)) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((parseFloat(lat) * Math.PI) / 180) *
+          Math.cos((venueLat * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      return { ...venue, distance };
+    });
+    
+    // Sort venues by distance (nearest first)
+    venuesWithDistance.sort((a, b) => a.distance - b.distance);
+    
+    // Find the nearest venue that has all items in sufficient quantity
+    let selectedVenueId = null;
+    
+    for (const venue of venuesWithDistance) {
+      let allItemsAvailable = true;
+      
+      for (const item of items) {
+        const product = await productModel.findOne({
+          _id: item.productId,
+          isActive: true,
+          "venueAndQuantity.venueId": venue._id,
+          "venueAndQuantity.quantity": { $gte: item.quantity }
+        }).lean();
+        
+        if (!product) {
+          allItemsAvailable = false;
+          break;
+        }
+      }
+      
+      if (allItemsAvailable) {
+        selectedVenueId = venue._id;
+        break;
+      }
+    }
+    
+    if (!selectedVenueId) {
+      return errorResponseHandler(
+        "No venues have all requested items in sufficient quantity",
         httpStatusCode.NOT_FOUND,
         res
       );
@@ -351,7 +441,7 @@ export const orderProduct = async (req: Request, res: Response) => {
           }
 
           const venueQuantity = product.venueAndQuantity.find(
-            (venue: any) => venue.venueId.toString() === venueId.toString()
+            (venue: any) => venue.venueId.toString() === selectedVenueId.toString()
           );
 
           if (!venueQuantity) {
@@ -397,7 +487,7 @@ export const orderProduct = async (req: Request, res: Response) => {
       address: address || {},
       items: processedItems,
       totalAmount,
-      venueId,
+      venueId: selectedVenueId,
       status: "pending",
       paymentStatus: "pending",
       pickupCode: Math.random().toString(36).substring(2, 8).toUpperCase(),

@@ -1252,10 +1252,8 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const { bookingId } = req.body;
 
-  // Start a MongoDB session for transaction consistency
   const session = await mongoose.startSession();
-
-  await session.startTransaction();
+  session.startTransaction();
 
   const booking = await bookingModel.findById(bookingId).lean();
 
@@ -1268,7 +1266,6 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Check if user is the booking creator
   if (booking.userId.toString() !== userData.id.toString()) {
     await session.abortTransaction();
     return errorResponseHandler(
@@ -1278,7 +1275,6 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Check if askToJoin is false
   if (booking.askToJoin === true) {
     await session.abortTransaction();
     return errorResponseHandler(
@@ -1288,10 +1284,9 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Find the transaction
   const userTransaction = await transactionModel
     .findOne({
-      bookingId: { $in: [bookingId] },
+      bookingId,
       userId: userData.id,
     })
     .lean();
@@ -1314,9 +1309,14 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Check if booking date is in the past
-  const currentDate = new Date();
-  if (booking.bookingDate < currentDate) {
+  // Construct booking datetime in IST
+  const [slotHour, slotMinute] = booking.bookingSlots.split(":").map(Number);
+  const bookingDateTime = new Date(booking.bookingDate);
+  bookingDateTime.setUTCHours(slotHour - 5, slotMinute - 30, 0, 0); // Convert IST to UTC
+
+  const currentUTC = new Date();
+
+  if (bookingDateTime < currentUTC) {
     await session.abortTransaction();
     return errorResponseHandler(
       "Cannot cancel a booking that has already passed",
@@ -1325,22 +1325,10 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Get the booking slot time
-  const bookingSlot = booking.bookingSlots;
-  const [slotHour, slotMinute] = bookingSlot
-    .split(":")
-    .map((num) => parseInt(num, 10));
+  const diffMs = bookingDateTime.getTime() - currentUTC.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
 
-  // Create a date object for the exact booking time
-  const bookingTime = new Date(booking.bookingDate);
-  bookingTime.setHours(slotHour, slotMinute || 0, 0, 0);
-
-  // Calculate time difference in hours
-  const timeDifferenceMs = bookingTime.getTime() - currentDate.getTime();
-  const timeDifferenceHours = timeDifferenceMs / (1000 * 60 * 60);
-
-  // Check if cancellation is at least 6 hours before the booking time
-  if (timeDifferenceHours < 6) {
+  if (diffHours < 6) {
     await session.abortTransaction();
     return errorResponseHandler(
       "Bookings can only be cancelled at least 6 hours before the scheduled time",
@@ -1358,51 +1346,38 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Process Razorpay refund if applicable
-  let refund;
-  if (
-    userTransaction.razorpayPaymentId &&
-    userTransaction.amount - userTransaction.playcoinsUsed > 0
-  ) {
-    try {
-      refund = await razorpayInstance.payments.refund(
-        userTransaction.razorpayPaymentId,
-        {
-          amount: Math.round(
-            (userTransaction.amount - userTransaction.playcoinsUsed) * 100
-          ), // Convert to paise and ensure it's an integer
-          notes: {
-            bookingId: bookingId,
-            userId: userData.id.toString(),
-            reason: "Booking creator cancelled booking",
-          },
-        }
-      );
-    } catch (razorpayError: any) {
-      console.error("Razorpay refund error:", razorpayError);
-      await session.abortTransaction();
-      return errorResponseHandler(
-        razorpayError.error?.description || "Failed to process refund",
-        httpStatusCode.INTERNAL_SERVER_ERROR,
-        res
-      );
-    }
+  // Refund via Razorpay if applicable
+  let refund = null;
+  const actualRefundAmount =
+    userTransaction.amount - userTransaction.playcoinsUsed;
+  if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
+    refund = await razorpayInstance.payments.refund(
+      userTransaction.razorpayPaymentId,
+      {
+        amount: Math.round(actualRefundAmount * 100),
+        notes: {
+          bookingId,
+          userId: userData.id.toString(),
+          reason: "Booking creator cancelled booking",
+        },
+      }
+    );
   }
 
-  // Update transaction status
+  // Update transaction record
   await transactionModel.findByIdAndUpdate(
     userTransaction._id,
     {
       status: "refunded",
       isWebhookVerified: true,
-      razorpayRefundId: refund ? refund.id : null,
-      refundAmount: userTransaction.amount - userTransaction.playcoinsUsed,
+      razorpayRefundId: refund?.id || null,
+      refundAmount: actualRefundAmount,
       refundDate: new Date(),
     },
     { session }
   );
 
-  // Update booking status
+  // Update booking record
   await bookingModel.findByIdAndUpdate(
     bookingId,
     {
@@ -1412,60 +1387,33 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     { session }
   );
 
-  // Create notification for the booking creator
-  // await createNotification(
-  //   {
-  //     recipientId: userData.id,
+  // Collect IDs of teammates (excluding self)
+  const playerIds = new Set<string>();
+  booking.team1?.forEach((player: any) => {
+    if (player.playerId?.toString() !== userData.id.toString()) {
+      playerIds.add(player.playerId.toString());
+    }
+  });
+  booking.team2?.forEach((player: any) => {
+    if (player.playerId?.toString() !== userData.id.toString()) {
+      playerIds.add(player.playerId.toString());
+    }
+  });
+
+  // Optional: Notify teammates (commented for now)
+  // const notifications = Array.from(playerIds).map((playerId) =>
+  //   createNotification({
+  //     recipientId: new mongoose.Types.ObjectId(playerId),
+  //     senderId: userData.id,
   //     type: "BOOKING_CANCELLED",
   //     title: "Booking Cancelled",
-  //     message: `Your booking has been cancelled successfully and a refund has been initiated.`,
+  //     message: "A booking you were part of has been cancelled by the creator.",
   //     category: "BOOKING",
   //     referenceId: bookingId,
   //     referenceType: "bookings",
-  //   },
-  //   { session }
+  //   }, { session })
   // );
-
-  // Notify all players in the booking about the cancellation
-  const playerIds = new Set<string>();
-
-  // Collect player IDs from both teams
-  booking.team1?.forEach((player: any) => {
-    if (
-      player.playerId &&
-      player.playerId.toString() !== userData.id.toString()
-    ) {
-      playerIds.add(player.playerId.toString());
-    }
-  });
-
-  booking.team2?.forEach((player: any) => {
-    if (
-      player.playerId &&
-      player.playerId.toString() !== userData.id.toString()
-    ) {
-      playerIds.add(player.playerId.toString());
-    }
-  });
-
-  // Send notifications to all players
-  // const notificationPromises = Array.from(playerIds).map((playerId) => {
-  //   return createNotification(
-  //     {
-  //       recipientId: new mongoose.Types.ObjectId(playerId),
-  //       senderId: userData.id,
-  //       type: "BOOKING_CANCELLED",
-  //       title: "Booking Cancelled",
-  //       message: `A booking you were part of has been cancelled by the creator.`,
-  //       category: "BOOKING",
-  //       referenceId: bookingId,
-  //       referenceType: "bookings",
-  //     },
-  //     { session }
-  //   );
-  // });
-
-  // await Promise.all(notificationPromises);
+  // await Promise.all(notifications);
 
   await session.commitTransaction();
 
@@ -1475,7 +1423,7 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     data: {
       bookingId,
       refundId: refund?.id,
-      refundAmount: userTransaction.amount - userTransaction.playcoinsUsed,
+      refundAmount: actualRefundAmount,
       playcoinsRefunded: userTransaction.playcoinsUsed,
     },
   };

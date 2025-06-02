@@ -983,3 +983,12 @@ export const uploadStreamToS3Service = async (
 
   return imageKey;
 };
+
+export const getAppInfoServices = async (req: Request, res: Response) => {
+  const getInfo = await adminSettingModel.findOne();
+  return {
+    success: true,
+    message: "Data fetched successfully",
+    data: getInfo,
+  };
+};

@@ -28,6 +28,7 @@ import {
   bookCourt,
   bookingPayment,
   cancelBooking,
+  getAppInfo,
   getCourts,
   getDynamicPrice,
   getOpenMatches,
@@ -75,9 +76,9 @@ router.get("/get-friends", getFriends);
 router.get("/get-friends-byId/:id", getFriendsById);
 
 router.route("/merchandise").get(getMerchandise).post(orderProduct);
-router.route("/get-orders").get(getMyOrders)
-router.route("/get-orders/:id").get(getOrderById)
-router.route("/merchandise/:id").get(getMerchandiseById)
+router.route("/get-orders").get(getMyOrders);
+router.route("/get-orders/:id").get(getOrderById);
+router.route("/merchandise/:id").get(getMerchandiseById);
 router
   .route("/cart")
   .get(getCart)
@@ -86,6 +87,7 @@ router
   .delete(deleteCartItem);
 
 router.get("/user-transactions", getMyTransactions);
+router.get("/application-info", getAppInfo);
 
 // router.post("/upload-image", upload.single('image'), uploadUserImageController);
 router.post("/upload-image", uploadUserImageController);
