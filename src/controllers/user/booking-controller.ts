@@ -575,7 +575,7 @@ export const getMyTransactions = async (req: Request, res: Response) => {
       .find({
         userId: userData.id,
       })
-      .select('amount method status playcoinsUsed createdAt notes razorpayAmount')
+      .select('amount method status playcoinsUsed createdAt notes razorpayAmount text')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit as string))

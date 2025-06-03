@@ -1,15 +1,39 @@
-import admin from 'firebase-admin';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { readFile } from 'fs/promises';
+import admin from "firebase-admin";
+import path from "path";
+import { fileURLToPath } from "url";
+import { readFile } from "fs/promises";
+import { configDotenv } from "dotenv";
 // Initialize Firebase Admin SDK
+configDotenv();
 
+export const initializeFirebase = () => {
+  try {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("Missing Firebase service account credentials");
+    }
+
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    serviceAccount.private_key = serviceAccount.private_key.replace(
+      /\\n/g,
+      "\n"
+    );
+
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      console.log("✅ Firebase Admin initialized");
+    }
+  } catch (error) {
+    console.error("❌ Error initializing Firebase:", error);
+    throw error;
+  }
+};
 
 // admin.initializeApp({
 //   credential: admin.credential.cert(serviceAccount),
 // });
 // Function to send notification
-
 
 // export const sendNotification = async (fcmToken: string, title: string, body: string): Promise<void> => {
 //     const message: NotificationMessage = {
@@ -34,13 +58,13 @@ import { readFile } from 'fs/promises';
 //             if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
 //                 throw new Error('Missing Firebase service account credentials');
 //             }
-    
+
 //             // Parse JSON from the environment variable
 //             const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    
+
 //             // Fix the private_key formatting issue (replace escaped \\n with actual newlines)
 //             serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-    
+
 //             if (!admin.apps.length) {
 //                 admin.initializeApp({
 //                     credential: admin.credential.cert({
@@ -65,37 +89,40 @@ import { readFile } from 'fs/promises';
 //         }
 // }
 
-
 export interface NotificationMessage {
-    notification: {
-        title: string;
-        body: string;
-    };
-    token: string;
+  notification: {
+    title: string;
+    body: string;
+  };
+  token: string;
 }
 
 export interface NotificationPayload {
-    title: string;
-    description: string;
-    userIds?: string[];
+  title: string;
+  description: string;
+  userIds?: string[];
 }
 
-export const sendNotification = async (fcmToken: string, title: string, body: string): Promise<void> => {
-    const message: NotificationMessage = {
-        notification: {
-            title,
-            body,
-        },
-        token: fcmToken,
-    };
+export const sendNotification = async (
+  fcmToken: string,
+  title: string,
+  body: string
+): Promise<void> => {
+  const message: NotificationMessage = {
+    notification: {
+      title,
+      body,
+    },
+    token: fcmToken,
+  };
 
-    try {
-        const response = await admin.messaging().send(message);
-        console.log('Successfully sent FCM message:', response);
-    } catch (error) {
-        console.error('Error sending FCM message:', error);
-        throw error;
-    }
+  try {
+    const response = await admin.messaging().send(message);
+    console.log("Successfully sent FCM message:", response);
+  } catch (error) {
+    console.error("Error sending FCM message:", error);
+    throw error;
+  }
 };
 // Example usage
 // sendNotification('<CLIENT_FCM_TOKEN>', 'Hello', 'This is a test notification');

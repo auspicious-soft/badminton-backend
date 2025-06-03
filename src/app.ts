@@ -12,6 +12,7 @@ import { Server } from "socket.io";
 import { setIo, initializeSocketEvents } from "./socket";
 import webhookRoutes from "./routes/webhook-routes";
 import { downloadOrderReceipt } from "./controllers/admin/product-controller";
+import { initializeFirebase } from "./utils/FCM/FCM";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +20,8 @@ const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 8000;
 const app = express();
+
+initializeFirebase();
 
 // Create HTTP server
 const server = http.createServer(app);
