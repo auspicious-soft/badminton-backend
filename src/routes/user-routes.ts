@@ -23,6 +23,7 @@ import {
   getMyOrders,
   getOrderById,
   orderProduct,
+  rateProduct,
 } from "src/controllers/user/merchandise-controller";
 import {
   bookCourt,
@@ -75,7 +76,7 @@ router.post("/block-user", blockUser);
 router.get("/get-friends", getFriends);
 router.get("/get-friends-byId/:id", getFriendsById);
 
-router.route("/merchandise").get(getMerchandise).post(orderProduct);
+router.route("/merchandise").get(getMerchandise).post(orderProduct).put(rateProduct);
 router.route("/get-orders").get(getMyOrders);
 router.route("/get-orders/:id").get(getOrderById);
 router.route("/merchandise/:id").get(getMerchandiseById);

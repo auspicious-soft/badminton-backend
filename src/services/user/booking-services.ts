@@ -101,6 +101,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
               ? completeCourtPrice * bookingSlots.length
               : bookingPrice * bookingSlots.length,
           currency: "INR",
+          text: "Court Booking",
           status: "created",
           notes: bookingSlots,
           isWebhookVerified: false,
@@ -387,6 +388,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           paidFor: [new mongoose.Types.ObjectId(userData.id)],
           amount: slotPrice,
           currency: "INR",
+          text: "Court Joining",
           status: transactionStatus,
           notes: {
             bookingSlot,

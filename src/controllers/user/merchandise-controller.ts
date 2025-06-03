@@ -316,13 +316,15 @@ export const orderProduct = async (req: Request, res: Response) => {
 
     // First, collect all venueIds from the products' venueAndQuantity arrays
     const allVenueIds = new Set<string>();
-    
+
     for (const item of items) {
-      const product = await productModel.findOne({
-        _id: item.productId,
-        isActive: true,
-      }).lean();
-      
+      const product = await productModel
+        .findOne({
+          _id: item.productId,
+          isActive: true,
+        })
+        .lean();
+
       if (!product) {
         return errorResponseHandler(
           `Product with ID ${item.productId} not found or inactive`,
@@ -330,13 +332,13 @@ export const orderProduct = async (req: Request, res: Response) => {
           res
         );
       }
-      
+
       // Add all venueIds from this product to the set
       product.venueAndQuantity.forEach((venue: any) => {
         allVenueIds.add(venue.venueId.toString());
       });
     }
-    
+
     if (allVenueIds.size === 0) {
       return errorResponseHandler(
         "No venues have any of the requested products",
@@ -344,23 +346,28 @@ export const orderProduct = async (req: Request, res: Response) => {
         res
       );
     }
-    
+
     // Get all these venues with their locations
     const venueModel = mongoose.model("venues");
-    const venues = await venueModel.find({
-      _id: { $in: Array.from(allVenueIds) },
-      isActive: true,
-      "location.coordinates": { $exists: true }
-    }).lean();
-    
+    const venues = await venueModel
+      .find({
+        _id: { $in: Array.from(allVenueIds) },
+        isActive: true,
+        "location.coordinates": { $exists: true },
+      })
+      .lean();
+
     // Calculate distance for each venue
-    const venuesWithDistance = venues.map(venue => {
-      if (!venue.location?.coordinates || venue.location.coordinates.length !== 2) {
+    const venuesWithDistance = venues.map((venue) => {
+      if (
+        !venue.location?.coordinates ||
+        venue.location.coordinates.length !== 2
+      ) {
         return { ...venue, distance: Number.MAX_SAFE_INTEGER };
       }
-      
+
       const [venueLng, venueLat] = venue.location.coordinates;
-      
+
       // Haversine formula for distance calculation
       const R = 6371; // Earth radius in km
       const dLat = ((venueLat - parseFloat(lat)) * Math.PI) / 180;
@@ -373,39 +380,41 @@ export const orderProduct = async (req: Request, res: Response) => {
           Math.sin(dLon / 2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       const distance = R * c;
-      
+
       return { ...venue, distance };
     });
-    
+
     // Sort venues by distance (nearest first)
     venuesWithDistance.sort((a, b) => a.distance - b.distance);
-    
+
     // Find the nearest venue that has all items in sufficient quantity
     let selectedVenueId = null;
-    
+
     for (const venue of venuesWithDistance) {
       let allItemsAvailable = true;
-      
+
       for (const item of items) {
-        const product = await productModel.findOne({
-          _id: item.productId,
-          isActive: true,
-          "venueAndQuantity.venueId": venue._id,
-          "venueAndQuantity.quantity": { $gte: item.quantity }
-        }).lean();
-        
+        const product = await productModel
+          .findOne({
+            _id: item.productId,
+            isActive: true,
+            "venueAndQuantity.venueId": venue._id,
+            "venueAndQuantity.quantity": { $gte: item.quantity },
+          })
+          .lean();
+
         if (!product) {
           allItemsAvailable = false;
           break;
         }
       }
-      
+
       if (allItemsAvailable) {
         selectedVenueId = venue._id;
         break;
       }
     }
-    
+
     if (!selectedVenueId) {
       return errorResponseHandler(
         "No venues have all requested items in sufficient quantity",
@@ -441,7 +450,8 @@ export const orderProduct = async (req: Request, res: Response) => {
           }
 
           const venueQuantity = product.venueAndQuantity.find(
-            (venue: any) => venue.venueId.toString() === selectedVenueId.toString()
+            (venue: any) =>
+              venue.venueId.toString() === selectedVenueId.toString()
           );
 
           if (!venueQuantity) {
@@ -672,6 +682,7 @@ export const getOrderById = async (req: Request, res: Response) => {
       updatedAt: order.updatedAt,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      orderStatus: order.orderStatus,
       totalAmount: order.totalAmount,
       cancellationReason: order.cancellationReason,
 
@@ -719,6 +730,95 @@ export const getOrderById = async (req: Request, res: Response) => {
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     console.error("Get order by ID error:", error);
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const rateProduct = async (req: Request, res: Response) => {
+  try {
+    console.log("req.body: ", req.user);
+    const userData = req.user as any;
+    const { productId, rating, description } = req.body;
+
+    if (!productId) {
+      return errorResponseHandler(
+        "Product ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      return errorResponseHandler(
+        "Rating must be between 1 and 5",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const product = await productModel.findOne({
+      _id: productId,
+      isActive: true,
+    });
+
+    if (!product) {
+      return errorResponseHandler(
+        "Product not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    // Check if the user has already rated this product
+    const existingReview = product.reviews.find(
+      (review) => review.userId.toString() === userData.id.toString()
+    );
+
+    if (existingReview) {
+      return errorResponseHandler(
+        "You have already rated this product",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    // Add the new review
+    const newReview = {
+      userId: userData.id,
+      name: userData.name || "Anonymous",
+      rating,
+      description: description || "",
+      createdAt: new Date(),
+    };
+
+    product.reviews.push(newReview);
+
+    // Update average rating and total reviews
+    const totalReviews = product.reviews.length;
+    const averageRating =
+      product.reviews.reduce((sum, review) => sum + review.rating, 0) /
+      totalReviews;
+
+    product.averageRating = averageRating;
+    product.totalReviews = totalReviews;
+
+    await product.save();
+
+    const response = {
+      success: true,
+      message: "Product rated successfully",
+      data: {
+        averageRating: product.averageRating,
+        totalReviews: product.totalReviews,
+      },
+    };
+
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    console.error("Rate product error:", error);
     const { code, message } = errorParser(error);
     return res
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)

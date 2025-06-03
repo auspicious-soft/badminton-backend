@@ -84,6 +84,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             },
             { new: true, session }
           );
+
           
           if (!order) {
             console.error(`Order not found for ID: ${merchandiseOrderId}`);
@@ -96,6 +97,18 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
           
           // Only update quantities if they haven't been updated yet
           if (!order.quantityUpdated) {
+            await transactionModel.create({
+              userId,
+              orderId: merchandiseOrderId,
+              razorpayPaymentId: paymentId,
+              razorpayOrderId: orderId,
+              amount,
+              text: "Merchandise order payment",
+              status,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+
             // Update product quantities
             await Promise.all(
               order.items.map(async (item: any) => {

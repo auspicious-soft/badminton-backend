@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import { courtModel } from "src/models/venue/court-schema";
 import { getCurrentISTTime, isDateTodayInIST } from "../../utils";
 import { priceModel } from "src/models/admin/price-schema";
+import { adminSettingModel } from "src/models/admin/admin-settings";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
@@ -70,93 +71,104 @@ export const userHomeServices = async (req: Request, res: Response) => {
   }
 
   // Get current time in IST
-const currentISTTime = getCurrentISTTime();
-const currentDate = new Date(currentISTTime);
-currentDate.setHours(0, 0, 0, 0); // Set to beginning of day in IST
-console.log(`Current IST time: ${currentISTTime.toISOString()}, Hour: ${currentISTTime.getHours()}, Minute: ${currentISTTime.getMinutes()}`);
+  const currentISTTime = getCurrentISTTime();
+  const currentDate = new Date(currentISTTime);
+  currentDate.setHours(0, 0, 0, 0); // Set to beginning of day in IST
+  console.log(
+    `Current IST time: ${currentISTTime.toISOString()}, Hour: ${currentISTTime.getHours()}, Minute: ${currentISTTime.getMinutes()}`
+  );
 
-const upcomingMatchData = await bookingModel.aggregate([
-  {
-    $addFields: {
-      // Construct full booking datetime by combining bookingDate and bookingSlots
-      bookingDateTime: {
-        $dateFromParts: {
-          year: { $year: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
-          month: { $month: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
-          day: { $dayOfMonth: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
-          hour: { $toInt: { $substr: ["$bookingSlots", 0, 2] } },
-          minute: { $toInt: { $substr: ["$bookingSlots", 3, 2] } },
-          timezone: "Asia/Kolkata"
-        }
-      }
-    }
-  },
-  {
-    $match: {
-      // Only include bookings where bookingDateTime is in the future
-      bookingDateTime: { $gt: currentISTTime },
-      $or: [
-        {
-          $and: [
-            { bookingType: "Self" },
-            {
-              $or: [
-                {
-                  team1: {
-                    $elemMatch: {
-                      playerId: new mongoose.Types.ObjectId(userData.id),
-                      paymentStatus: "Paid"
-                    }
-                  }
-                },
-                {
-                  team2: {
-                    $elemMatch: {
-                      playerId: new mongoose.Types.ObjectId(userData.id),
-                      paymentStatus: "Paid"
-                    }
-                  }
-                }
-              ]
-            }
-          ]
+  const upcomingMatchData = await bookingModel.aggregate([
+    {
+      $addFields: {
+        // Construct full booking datetime by combining bookingDate and bookingSlots
+        bookingDateTime: {
+          $dateFromParts: {
+            year: { $year: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
+            month: {
+              $month: { date: "$bookingDate", timezone: "Asia/Kolkata" },
+            },
+            day: {
+              $dayOfMonth: { date: "$bookingDate", timezone: "Asia/Kolkata" },
+            },
+            hour: { $toInt: { $substr: ["$bookingSlots", 0, 2] } },
+            minute: { $toInt: { $substr: ["$bookingSlots", 3, 2] } },
+            timezone: "Asia/Kolkata",
+          },
         },
-        {
-          $and: [
-            { bookingType: { $in: ["Booking", "Complete"] } },
-            { bookingPaymentStatus: true },
-            {
-              $or: [
-                {
-                  team1: {
-                    $elemMatch: {
-                      playerId: new mongoose.Types.ObjectId(userData.id)
-                    }
-                  }
-                },
-                {
-                  team2: {
-                    $elemMatch: {
-                      playerId: new mongoose.Types.ObjectId(userData.id)
-                    }
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    $sort: {
-      bookingDateTime: 1
-    }
-  }
-]);
+      },
+    },
+    {
+      $match: {
+        // Only include bookings where bookingDateTime is in the future
+        bookingDateTime: { $gt: currentISTTime },
+        $or: [
+          {
+            $and: [
+              { bookingType: "Self" },
+              {
+                $or: [
+                  {
+                    team1: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                        paymentStatus: "Paid",
+                      },
+                    },
+                  },
+                  {
+                    team2: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                        paymentStatus: "Paid",
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            $and: [
+              { bookingType: { $in: ["Booking", "Complete"] } },
+              { bookingPaymentStatus: true },
+              {
+                $or: [
+                  {
+                    team1: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                      },
+                    },
+                  },
+                  {
+                    team2: {
+                      $elemMatch: {
+                        playerId: new mongoose.Types.ObjectId(userData.id),
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      $sort: {
+        bookingDateTime: 1,
+      },
+    },
+  ]);
+
+  const banners = await adminSettingModel
+    .findOne({ isActive: true })
+    .select("banners")
+    .lean();
 
   const data = {
-    banners: [],
+    banners: banners?.banners || [],
     upcomingMatches: upcomingMatchData,
     venueNearby: nearbyVenues,
     playersRanking: [],

@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface TransactionDocument extends Document {
   userId: mongoose.Types.ObjectId;
+  text?: string;
   bookingId?: mongoose.Types.ObjectId[];
   paidFor?: mongoose.Types.ObjectId[];
   razorpayOrderId: string;
@@ -17,7 +18,7 @@ export interface TransactionDocument extends Document {
   playcoinsReserved: boolean;
   playcoinsReceived: number;
   playcoinsDeducted: boolean;
-
+  orderId: mongoose.Types.ObjectId;
   // Refund related
   refundedAmount?: number;
   refundId?: string;
@@ -36,12 +37,21 @@ const transactionSchema = new Schema<TransactionDocument>(
       ref: "users",
       required: true,
     },
+    text:{
+      type: String,
+      default: null,
+    },
     bookingId: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "bookings",
       },
     ],
+    orderId:{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "orders",
+      default: null,
+    },
     paidFor: [
       {
         type: mongoose.Schema.Types.ObjectId,
