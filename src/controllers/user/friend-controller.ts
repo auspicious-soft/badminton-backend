@@ -10,6 +10,7 @@ import { friendsModel } from "src/models/user/friends-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 export const searchFriend = async (req: Request, res: Response) => {
   try {
@@ -217,16 +218,18 @@ export const sendRequest = async (req: Request, res: Response) => {
 
       // Create notification for the recipient
       try {
-        await createNotification({
+        await notifyUser({
           recipientId: friendId,
-          senderId: userData.id,
           type: "FRIEND_REQUEST",
           title: "New Friend Request",
           message: `${
             userData.fullName || userData.email
           } sent you a friend request.`,
           category: "FRIEND",
-          referenceId: request._id,
+          metadata: {
+            friendId: userData.id,
+          },
+          referenceId: (request as any)._id,
           referenceType: "users",
         });
       } catch (notificationError) {
@@ -360,16 +363,18 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
         // Send notification to the requester if accepted
         if (status === "accepted") {
           try {
-            await createNotification({
-              recipientId: friendRequest.userId,
-              senderId: userData.id,
+            await notifyUser({
+              recipientId: (updatedRequest as any).userId,
               type: "FRIEND_REQUEST_ACCEPTED",
               title: "Friend Request Accepted",
               message: `${
                 userData.fullName || userData.email
               } accepted your friend request.`,
               category: "FRIEND",
-              referenceId: requestId,
+              metadata: {
+                friendId: userData.id,
+              },
+              referenceId: (updatedRequest as any)._id,
               referenceType: "users",
             });
           } catch (notificationError) {

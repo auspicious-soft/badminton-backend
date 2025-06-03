@@ -13,6 +13,8 @@ import { priceModel } from "src/models/admin/price-schema";
 import razorpayInstance from "src/config/razorpay";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { chatModel } from "src/models/chat/chat-schema";
+import { usersModel } from "src/models/user/user-schema";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -456,18 +458,6 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
       session,
     })) as any;
 
-    // 3. Create notification for the booking owner
-    await createNotification({
-      recipientId: booking.userId,
-      senderId: userData.id,
-      type: "GAME_INVITATION",
-      title: "Game Invitation",
-      message: `${userData.name} requested to join your game.`,
-      category: "GAME",
-      referenceId: bookingId,
-      referenceType: "bookings",
-    });
-
     // 4. If payment is completed with playcoins, update the booking immediately
     if (isWebhookVerified) {
       // Create player object with payment details
@@ -520,20 +510,91 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
 
         await bookingToUpdate.save({ session });
 
-        // Create notification for the user that their request was accepted
-        // await createNotification(
-        //   {
-        //     recipientId: userData.id,
-        //     senderId: booking.userId,
-        //     type: "REQUEST_ACCEPTED",
-        //     title: "Request Accepted",
-        //     message: `Your request to join the game has been accepted.`,
-        //     category: "GAME",
-        //     referenceId: bookingId,
-        //     referenceType: "bookings",
-        //   },
-        //   { session }
-        // );
+        // Get the new player's details
+        const newPlayer = await usersModel
+          .findById(userData.id)
+          .select("fullName profilePic")
+          .lean();
+
+        if (!newPlayer) {
+          console.error(`User not found for ID: ${userData.id}`);
+        }
+
+        // Get all existing players in the booking
+        const existingPlayerIds = [
+          ...bookingToUpdate.team1
+            .map((player: any) => player.playerId?.toString())
+            .filter(Boolean),
+          ...bookingToUpdate.team2
+            .map((player: any) => player.playerId?.toString())
+            .filter(Boolean),
+        ];
+
+        // Remove the new player from the list (to avoid sending notification to themselves)
+        const otherPlayerIds = existingPlayerIds.filter(
+          (id) => id !== userData.id.toString()
+        );
+
+        // Add booking owner to notification recipients if not already included
+        if (
+          bookingToUpdate.userId.toString() !== userData.id.toString() &&
+          !otherPlayerIds.includes(bookingToUpdate.userId.toString())
+        ) {
+          otherPlayerIds.push(bookingToUpdate.userId.toString());
+        }
+
+        // Send notifications to all existing players about the new player joining
+        if (newPlayer && otherPlayerIds.length > 0) {
+          const teamName = requestedTeam === "team1" ? "Team 1" : "Team 2";
+          const positionName =
+            requestedPosition.charAt(0).toUpperCase() +
+            requestedPosition.slice(1);
+
+          // Send notifications to all existing players
+          for (const playerId of otherPlayerIds) {
+            try {
+              await notifyUser({
+                recipientId: playerId,
+                type: "PLAYER_JOINED",
+                title: "New Player Joined",
+                message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
+                category: "GAME",
+                notificationType: "BOTH", // Send both in-app and push notification
+                referenceId: bookingId,
+                referenceType: "bookings",
+                priority: "MEDIUM",
+                metadata: {
+                  bookingId,
+                  newPlayerId: userData.id,
+                  newPlayerName: newPlayer.fullName,
+                  newPlayerPosition: requestedPosition,
+                  newPlayerTeam: requestedTeam,
+                  timestamp: new Date().toISOString(),
+                },
+              });
+            } catch (error) {
+              console.error(
+                `Failed to send notification to player ${playerId}:`,
+                error
+              );
+              // Continue with other notifications even if one fails
+            }
+          }
+        }
+
+        // Create notification for the booking owner
+        await notifyUser({
+          recipientId: bookingToUpdate.userId,
+          type: "PLAYER_JOINED",
+          title: "New Player Joined",
+          message: `${
+            userData.name || newPlayer?.fullName || "A player"
+          } has joined your game.`,
+          category: "GAME",
+          referenceId: bookingId,
+          referenceType: "bookings",
+          notificationType: "BOTH",
+        });
       }
     }
 
@@ -777,19 +838,17 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
         }
 
         // Create notification for booking owner
-        await createNotification(
-          {
-            recipientId: booking.userId,
-            senderId: transaction.userId,
-            type: "PAYMENT_SUCCESSFUL",
-            title: "Payment Successful",
-            message: `Your payment of ₹${transaction.amount} for booking has been successfully processed using playcoins.`,
-            category: "PAYMENT",
-            referenceId: booking._id,
-            referenceType: "bookings",
-          },
-          { session }
-        );
+        await notifyUser({
+          recipientId: booking.userId,
+          type: "PAYMENT_SUCCESSFUL",
+          title: "Payment Successful",
+          message: `Your payment of ₹${transaction.amount} for booking has been successfully processed using playcoins.`,
+          category: "PAYMENT",
+          priority: "MEDIUM",
+          notificationType: "IN_APP",
+          referenceId: (booking as any)._id,
+          referenceType: "bookings",
+        });
       }
 
       await session.commitTransaction();
@@ -880,19 +939,17 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           await booking.save({ session });
 
           // Create notification for booking owner
-          await createNotification(
-            {
-              recipientId: booking.userId,
-              senderId: transaction.userId,
-              type: "PAYMENT_SUCCESSFUL",
-              title: "Payment Successful",
-              message: `Your payment of ₹${transaction.amount} for booking has been successfully processed using playcoins.`,
-              category: "PAYMENT",
-              referenceId: booking._id,
-              referenceType: "bookings",
-            },
-            { session }
-          );
+          await notifyUser({
+            recipientId: booking.userId,
+            type: "PAYMENT_SUCCESSFUL",
+            title: "Payment Successful",
+            message: `Your payment of ₹${transaction.amount} for booking has been successfully processed using playcoins.`,
+            category: "PAYMENT",
+            priority: "MEDIUM",
+            notificationType: "IN_APP",
+            referenceId: (booking as any)._id,
+            referenceType: "bookings",
+          });
         }
 
         await session.commitTransaction();
@@ -1402,20 +1459,23 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     }
   });
 
-  // Optional: Notify teammates (commented for now)
-  // const notifications = Array.from(playerIds).map((playerId) =>
-  //   createNotification({
-  //     recipientId: new mongoose.Types.ObjectId(playerId),
-  //     senderId: userData.id,
-  //     type: "BOOKING_CANCELLED",
-  //     title: "Booking Cancelled",
-  //     message: "A booking you were part of has been cancelled by the creator.",
-  //     category: "BOOKING",
-  //     referenceId: bookingId,
-  //     referenceType: "bookings",
-  //   }, { session })
-  // );
-  // await Promise.all(notifications);
+  // Create notifications for teammates
+  const notifications = Array.from(playerIds).map((playerId) => ({
+    recipientId: playerId,
+    type: "BOOKING_CANCELLED",
+    title: "Booking Cancelled",
+    message: `The booking scheduled for ${booking.bookingDate.toLocaleDateString()} at ${
+      booking.bookingSlots
+    } has been cancelled by the creator.`,
+    category: "BOOKING",
+    referenceId: bookingId,
+    referenceType: "bookings",
+    notificationType: "BOTH", // Send both in-app and push notification
+  }));
+
+  await Promise.all(
+    notifications.map((notification) => notifyUser(notification as any))
+  );
 
   await session.commitTransaction();
 

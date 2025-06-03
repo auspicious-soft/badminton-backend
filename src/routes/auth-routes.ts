@@ -90,10 +90,14 @@ router.post("/test-notifications", async (req, res) => {
     recipientId: new mongoose.Types.ObjectId("683ea4354b7ad72347298c82"),
     type: "NEW_MESSAGE",
     title: "You have a new message!",
-    message: "Tap to view your chat",
+    message: "Hello, this is a test notification.",
     category: "CHAT",
   });
   console.log("Notification sent successfully");
+  res.status(200).json({
+    success: true,
+    message: "Notification sent successfully",
+  });
 });
 
 export { router };

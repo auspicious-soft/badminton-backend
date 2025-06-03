@@ -12,6 +12,7 @@ export interface NotificationDocument extends Document {
   referenceType?: string;
   metadata?: Record<string, any>;
   isRead: boolean;
+  isReadyByAdmin: boolean;
   isDeleted: boolean;
   expiresAt?: Date;
   createdAt: Date;
@@ -147,6 +148,11 @@ const notificationSchema = new Schema(
       default: false,
       index: true,
     },
+    isReadyByAdmin: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,
@@ -174,6 +180,17 @@ notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 notificationSchema.methods.markAsRead = async function () {
   this.isRead = true;
   await this.save();
+};
+
+notificationSchema.methods.markAsReadyByAdmin = async function () {
+  this.isReadyByAdmin = true;
+  await this.save();
+};
+
+notificationSchema.methods.getAdminUnreadCount = async function () {
+  return this.countDocuments({
+    isReadyByAdmin: false,
+  });
 };
 
 notificationSchema.methods.softDelete = async function () {

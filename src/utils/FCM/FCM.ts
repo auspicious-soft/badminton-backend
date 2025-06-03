@@ -33,6 +33,7 @@ export interface NotificationMessage {
     body: string;
     metadata?: Record<string, any>;
   };
+  data?: Record<string, string>;
   token: string;
 }
 
@@ -46,14 +47,14 @@ export const sendNotification = async (
   fcmToken: string,
   title: string,
   body: string,
-  metadata: Record<string, any> = {}
+  data : Record<string, string> = {}  // Optional data payload
 ): Promise<void> => {
   const message: NotificationMessage = {
     notification: {
       title,
       body,
-      metadata
     },
+    data,
     token: fcmToken,
   };
 

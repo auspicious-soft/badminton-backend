@@ -12,6 +12,7 @@ import { orderModel } from "src/models/admin/order-schema";
 import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
 import { notifyUser } from "src/utils/FCM/FCM";
+import { usersModel } from "src/models/user/user-schema";
 
 configDotenv();
 
@@ -113,8 +114,9 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               recipientId: userId,
               type: "ORDER_PLACED",
               title: "Order Placed Successfully",
-              message: `Your payment of ₹${amount} for merchandise order ${merchandiseOrderId} has been successfully processed.`,
+              message: `Your payment of ₹${amount} for merchandise order has been successfully processed.`,
               category: "PAYMENT",
+              notificationType: "BOTH",
               referenceId: merchandiseOrderId,
               priority: "HIGH",
               referenceType: "orders",
@@ -190,10 +192,11 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
           recipientId: (existingTransaction as any).userId,
           type: "PAYMENT_ALREADY_PROCESSED",
           title: "Payment Already Processed",
-          message: `Your payment of ₹${amount} for order ${orderId} has already been processed.`,
+          message: `Your payment of ₹${amount} for order this has already been processed.`,
           category: "PAYMENT",
           referenceId: (existingTransaction as any)._id.toString(),
           priority: "MEDIUM",
+          notificationType: "PUSH",
           referenceType: "transactions",
           metadata: {
             orderId,
@@ -326,7 +329,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               recipientId: booking.userId,
               type: "BOOKING_CONFIRMATION",
               title: "Booking Confirmed",
-              message: `Your booking ${booking._id} has been confirmed with payment of ₹${transaction.amount}.`,
+              message: `Your booking has been confirmed with payment of ₹${transaction.amount}.`,
               category: "BOOKING",
               referenceId: (booking as any)._id.toString(),
               priority: "HIGH",
@@ -415,6 +418,80 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
               await booking.save({ session });
 
+              // Get the new player's details
+              const newPlayer = await usersModel
+                .findById(transaction.userId)
+                .select("fullName profilePic")
+                .lean();
+
+              if (!newPlayer) {
+                console.error(`User not found for ID: ${transaction.userId}`);
+              }
+
+              // Get all existing players in the booking
+              const existingPlayerIds = [
+                ...booking.team1
+                  .map((player: any) => player.playerId?.toString())
+                  .filter(Boolean),
+                ...booking.team2
+                  .map((player: any) => player.playerId?.toString())
+                  .filter(Boolean),
+              ];
+
+              // Remove the new player from the list (to avoid sending notification to themselves)
+              const otherPlayerIds = existingPlayerIds.filter(
+                (id) => id !== transaction.userId.toString()
+              );
+
+              // Add booking owner to notification recipients if not already included
+              if (
+                booking.userId.toString() !== transaction.userId.toString() &&
+                !otherPlayerIds.includes(booking.userId.toString())
+              ) {
+                otherPlayerIds.push(booking.userId.toString());
+              }
+
+              // Send notifications to all existing players about the new player joining
+              if (newPlayer) {
+                const teamName =
+                  requestedTeam === "team1" ? "Team 1" : "Team 2";
+                const positionName =
+                  requestedPosition.charAt(0).toUpperCase() +
+                  requestedPosition.slice(1);
+
+                // Send notifications to all existing players
+                for (const playerId of otherPlayerIds) {
+                  try {
+                    await notifyUser({
+                      recipientId: playerId,
+                      type: "PLAYER_JOINED",
+                      title: "New Player Joined",
+                      message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
+                      category: "GAME",
+                      notificationType: "BOTH", // Send both in-app and push notification
+                      referenceId: bookingId,
+                      referenceType: "bookings",
+                      priority: "MEDIUM",
+                      metadata: {
+                        bookingId,
+                        newPlayerId: transaction.userId,
+                        newPlayerName: newPlayer.fullName,
+                        newPlayerPosition: requestedPosition,
+                        newPlayerTeam: requestedTeam,
+                        timestamp: new Date().toISOString(),
+                      },
+                    });
+                  } catch (error) {
+                    console.error(
+                      `Failed to send notification to player ${playerId}:`,
+                      error
+                    );
+                    // Continue with other notifications even if one fails
+                  }
+                }
+              }
+
+              // Update chat group to include the new player
               const checkGroupExist = await chatModel.findOne({
                 bookingId: booking._id,
                 participants: { $all: [booking.userId, transaction.userId] },
@@ -496,7 +573,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               recipientId: booking.userId,
               type: "PAYMENT_FAILED",
               title: "Payment Failed",
-              message: `Your payment of ₹${transaction.amount} for booking ${bookingId} has failed. Reason: ${failureReason}. Please try again.`,
+              message: `Your payment of ₹${transaction.amount} for booking has failed. Reason: ${failureReason}. Please try again.`,
               category: "PAYMENT",
             });
           }
@@ -570,7 +647,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               recipientId: booking.userId,
               type: "REFUND_COMPLETED",
               title: "Refund Completed",
-              message: `Your refund of ₹${amount} for booking ${booking._id} has been processed successfully.`,
+              message: `Your refund of ₹${amount} for booking has been processed successfully.`,
               category: "PAYMENT",
             });
 
@@ -605,13 +682,12 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               recipientId: booking.userId,
               type: "REFUND_FAILED",
               title: "Refund Failed",
-              message: `Your refund of ₹${amount} for booking ${bookingId} has failed. Please contact support for assistance.`,
+              message: `Your refund of ₹${amount} for booking has failed. Please contact support for assistance.`,
               category: "PAYMENT",
             });
           }
         }
       }
-
       return res.status(httpStatusCode.OK).json({
         success: true,
         message: `Refund ${status} recorded successfully`,

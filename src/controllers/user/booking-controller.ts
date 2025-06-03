@@ -7,9 +7,7 @@ import {
 } from "src/lib/errors/error-response-handler";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
-import { object } from "webidl-conversions";
 import { getCurrentISTTime } from "../../utils";
-import { createNotification } from "src/models/notification/notification-schema";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 
@@ -512,26 +510,6 @@ export const uploadScore = async (req: Request, res: Response) => {
         playerIds.add(player.playerId.toString());
       }
     });
-
-    // Send notifications to all players except the one uploading the score
-    // const notificationPromises = Array.from(playerIds).map((playerId) => {
-    //   return createNotification({
-    //     recipientId: new mongoose.Types.ObjectId(playerId),
-    //     senderId: (req.user as any).id,
-    //     type: "SCORE_UPDATE",
-    //     title: "Match Score Updated",
-    //     message: `The score for your match on ${new Date(
-    //       checkExist.bookingDate
-    //     ).toLocaleDateString()} has been ${
-    //       checkScoreExist ? "updated" : "recorded"
-    //     }.`,
-    //     category: "GAME",
-    //     referenceId: bookingId,
-    //     referenceType: "bookings",
-    //   });
-    // });
-
-    // await Promise.all(notificationPromises);
 
     return res.status(httpStatusCode.OK).json({
       success: true,
