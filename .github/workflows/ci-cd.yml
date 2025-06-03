@@ -72,6 +72,7 @@ jobs:
               -e MONGO_URL='${{ secrets.MONGO_URL }}' \
               -e PORT='${{ secrets.PORT }}' \
               -e WEATHER_API_KEY='${{ secrets.WEATHER_API_KEY }}' \
+              -e FIREBASE_SERVICE_ACCOUNT='${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' \
               -e NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
               -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
               -e COMPANY_RESEND_GMAIL_ACCOUNT='${{ secrets.COMPANY_RESEND_GMAIL_ACCOUNT }}' \
