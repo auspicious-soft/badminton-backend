@@ -4,7 +4,6 @@ import { transactionModel } from "../../models/admin/transaction-schema";
 import { bookingModel } from "../../models/venue/booking-schema";
 import mongoose from "mongoose";
 import { httpStatusCode } from "../../lib/constant";
-import { createNotification } from "../../models/notification/notification-schema";
 import { configDotenv } from "dotenv";
 import { bookingRequestModel } from "src/models/venue/booking-request-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
@@ -12,6 +11,7 @@ import { chatModel } from "src/models/chat/chat-schema";
 import { orderModel } from "src/models/admin/order-schema";
 import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 configDotenv();
 
@@ -57,20 +57,20 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       const amount = event.payload.payment.entity.amount / 100; // Convert from paise to rupees
       const status =
         eventType === "payment.captured" ? "captured" : "authorized";
-      
+
       // Check if this is a merchandise order
       const notes = event.payload.payment.entity.notes || {};
       if (notes.orderId) {
         // This is a merchandise order payment
         const merchandiseOrderId = notes.orderId;
         const userId = notes.userId;
-        
+
         // Start a session for transaction consistency
         const session = await mongoose.startSession();
-        
+
         try {
           session.startTransaction();
-          
+
           // Update the order status but DON'T set quantityUpdated yet
           const order = await orderModel.findByIdAndUpdate(
             merchandiseOrderId,
@@ -79,13 +79,12 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               status: "confirmed",
               razorpayPaymentId: paymentId,
               razorpayOrderId: orderId,
-              paymentDate: new Date()
+              paymentDate: new Date(),
               // Remove quantityUpdated: true from here
             },
             { new: true, session }
           );
 
-          
           if (!order) {
             console.error(`Order not found for ID: ${merchandiseOrderId}`);
             await session.abortTransaction();
@@ -94,7 +93,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               message: "Order not found, but acknowledging webhook",
             });
           }
-          
+
           // Only update quantities if they haven't been updated yet
           if (!order.quantityUpdated) {
             await transactionModel.create({
@@ -109,6 +108,23 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               updatedAt: new Date(),
             });
 
+            // Create notification for merchandise order payment
+            await notifyUser({
+              recipientId: userId,
+              type: "ORDER_PLACED",
+              title: "Order Placed Successfully",
+              message: `Your payment of ₹${amount} for merchandise order ${merchandiseOrderId} has been successfully processed.`,
+              category: "PAYMENT",
+              referenceId: merchandiseOrderId,
+              priority: "HIGH",
+              referenceType: "orders",
+              metadata: {
+                orderId: merchandiseOrderId,
+                paymentId,
+                amount,
+              },
+            });
+
             // Update product quantities
             await Promise.all(
               order.items.map(async (item: any) => {
@@ -121,18 +137,21 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   },
                   {
                     arrayFilters: [{ "venue.venueId": order.venueId }],
-                    session
+                    session,
                   }
                 );
-                
+
                 // Remove this item from the user's cart
-                await cartModel.deleteOne({
-                  userId: order.userId,
-                  productId: item.productId
-                }, { session });
+                await cartModel.deleteOne(
+                  {
+                    userId: order.userId,
+                    productId: item.productId,
+                  },
+                  { session }
+                );
               })
             );
-            
+
             // Mark quantities as updated AFTER updating the quantities
             await orderModel.findByIdAndUpdate(
               merchandiseOrderId,
@@ -140,11 +159,13 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               { session }
             );
           }
-          
+
           await session.commitTransaction();
-          
-          console.log(`Merchandise order ${merchandiseOrderId} payment processed successfully`);
-          
+
+          console.log(
+            `Merchandise order ${merchandiseOrderId} payment processed successfully`
+          );
+
           // Continue with the rest of the webhook processing
         } catch (error) {
           await session.abortTransaction();
@@ -164,6 +185,22 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
       if (existingTransaction) {
         console.log(`Transaction ${paymentId} already processed, skipping`);
+
+        await notifyUser({
+          recipientId: (existingTransaction as any).userId,
+          type: "PAYMENT_ALREADY_PROCESSED",
+          title: "Payment Already Processed",
+          message: `Your payment of ₹${amount} for order ${orderId} has already been processed.`,
+          category: "PAYMENT",
+          referenceId: (existingTransaction as any)._id.toString(),
+          priority: "MEDIUM",
+          referenceType: "transactions",
+          metadata: {
+            orderId,
+            paymentId,
+            amount,
+          },
+        });
         return res.status(httpStatusCode.OK).json({
           success: true,
           message: "Payment already processed",
@@ -190,7 +227,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         );
 
         if (!transaction) {
-          console.error(`Transaction not found for order ID: ${orderId}`);
           await session.abortTransaction();
           return res.status(httpStatusCode.OK).json({
             success: false,
@@ -286,15 +322,19 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             }
 
             // Create notification for booking owner
-            await createNotification({
+            await notifyUser({
               recipientId: booking.userId,
-              senderId: transaction.userId,
-              type: "PAYMENT_SUCCESSFUL",
-              title: "Payment Successful",
-              message: `Your payment of ₹${amount} for booking has been successfully processed.`,
-              category: "PAYMENT",
-              referenceId: booking._id,
+              type: "BOOKING_CONFIRMATION",
+              title: "Booking Confirmed",
+              message: `Your booking ${booking._id} has been confirmed with payment of ₹${transaction.amount}.`,
+              category: "BOOKING",
+              referenceId: (booking as any)._id.toString(),
+              priority: "HIGH",
               referenceType: "bookings",
+              metadata: {
+                transactionId: transaction._id,
+                amount: transaction.amount,
+              },
             });
           }
         }
@@ -391,35 +431,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   { session }
                 );
               }
-
-              // Create notifications for both the requester and the booking owner
-              await createNotification(
-                {
-                  recipientId: transaction.userId,
-                  senderId: booking.userId,
-                  type: "GAME_REQUEST_ACCEPTED",
-                  title: "Join Request Accepted",
-                  message: `Your request to join the game has been accepted and payment processed.`,
-                  category: "GAME",
-                  referenceId: bookingId,
-                  referenceType: "bookings",
-                },
-                { session }
-              );
-
-              await createNotification(
-                {
-                  recipientId: booking.userId,
-                  senderId: transaction.userId,
-                  type: "PLAYER_JOINED_GAME",
-                  title: "Player Joined Game",
-                  message: `A player has joined your game and completed payment.`,
-                  category: "GAME",
-                  referenceId: bookingId,
-                  referenceType: "bookings",
-                },
-                { session }
-              );
             }
           }
         }
@@ -460,7 +471,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       const orderId = event.payload.payment.entity.order_id;
       const failureReason =
         event.payload.payment.entity.error_description || "Payment failed";
-
       // Update transaction with failure details
       const transaction = await transactionModel.findOneAndUpdate(
         { razorpayOrderId: orderId },
@@ -482,15 +492,12 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         for (const bookingId of transaction.bookingId) {
           const booking = await bookingModel.findById(bookingId);
           if (booking) {
-            await createNotification({
+            await notifyUser({
               recipientId: booking.userId,
-              senderId: transaction.userId,
               type: "PAYMENT_FAILED",
               title: "Payment Failed",
-              message: `Your payment for booking failed: ${failureReason}`,
+              message: `Your payment of ₹${transaction.amount} for booking ${bookingId} has failed. Reason: ${failureReason}. Please try again.`,
               category: "PAYMENT",
-              referenceId: bookingId,
-              referenceType: "bookings",
             });
           }
         }
@@ -559,20 +566,20 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
           for (const booking of bookings) {
             // Create notification for refund
-            await createNotification({
+            await notifyUser({
               recipientId: booking.userId,
-              senderId: transaction.userId,
               type: "REFUND_COMPLETED",
               title: "Refund Completed",
-              message: `Your refund of ₹${amount} has been processed successfully.`,
+              message: `Your refund of ₹${amount} for booking ${booking._id} has been processed successfully.`,
               category: "PAYMENT",
-              referenceId: booking._id,
-              referenceType: "bookings",
             });
 
-            // Update player payment status to "Refunded" if needed
-            // This depends on your business logic - whether you want to mark as refunded
-            // or keep as paid but track the refund separately
+            // Update team1 players
+            for (const playerId of paidForPlayerIds) {
+              await bookingModel.findByIdAndUpdate(booking._id, {
+                $addToSet: { team1: playerId },
+              });
+            }
           }
 
           await session.commitTransaction();
@@ -594,15 +601,12 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         for (const bookingId of transaction.bookingId) {
           const booking = await bookingModel.findById(bookingId);
           if (booking) {
-            await createNotification({
+            await notifyUser({
               recipientId: booking.userId,
-              senderId: transaction.userId,
               type: "REFUND_FAILED",
               title: "Refund Failed",
-              message: `Your refund of ₹${amount} could not be processed. Please contact support.`,
+              message: `Your refund of ₹${amount} for booking ${bookingId} has failed. Please contact support for assistance.`,
               category: "PAYMENT",
-              referenceId: bookingId,
-              referenceType: "bookings",
             });
           }
         }

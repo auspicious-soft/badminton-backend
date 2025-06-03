@@ -2,7 +2,6 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface NotificationDocument extends Document {
   recipientId: mongoose.Types.ObjectId;
-  senderId?: mongoose.Types.ObjectId;
   type: string;
   title: string;
   message: string;
@@ -27,10 +26,6 @@ const notificationSchema = new Schema(
       required: true,
       index: true,
     },
-    senderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "users",
-    },
     type: {
       type: String,
       required: true,
@@ -51,6 +46,11 @@ const notificationSchema = new Schema(
         "PLAYER_LEFT_GAME",
         "PLAYER_JOINED_GAME",
 
+        // Order related
+        "ORDER_PLACED",
+        "ORDER_CONFIRMED",
+        "ORDER_DELIVERED",
+
         // Chat related
         "NEW_MESSAGE",
         "GROUP_MESSAGE",
@@ -66,6 +66,7 @@ const notificationSchema = new Schema(
         "REFUND_COMPLETED",
         "REFUND_FAILED",
         "PAYMENT_REMINDER",
+        "PAYMENT_ALREADY_PROCESSED",
 
         // System notifications
         "SYSTEM_MAINTENANCE",
@@ -99,7 +100,18 @@ const notificationSchema = new Schema(
     },
     category: {
       type: String,
-      enum: ["FRIEND", "GAME", "CHAT", "PAYMENT", "SYSTEM", "VENUE", "CUSTOM"],
+      enum: [
+        "FRIEND",
+        "GAME",
+        "CHAT",
+        "PAYMENT",
+        "SYSTEM",
+        "VENUE",
+        "BOOKING",
+        "CUSTOM",
+        "ORDER",
+      ],
+      default: "CUSTOM",
       required: true,
       index: true,
     },
@@ -122,6 +134,7 @@ const notificationSchema = new Schema(
         "venues",
         "courts",
         "chats",
+        "orders",
         "chat_groups",
       ],
     },
@@ -190,53 +203,6 @@ notificationSchema.statics.markAllAsRead = async function (userId: string) {
   );
 };
 
-// Example usage of metadata for different notification types
-const metadataExamples: {
-  FRIEND_REQUEST: {
-    senderName: string;
-    senderProfilePic: string;
-  };
-  GAME_INVITATION: {
-    gameId: string;
-    venueName: string;
-    dateTime: Date;
-    gameType: string;
-  };
-  PAYMENT_SUCCESSFUL: {
-    transactionId: string;
-    amount: number;
-    currency: string;
-    paymentMethod: string;
-  };
-  NEW_MESSAGE: {
-    chatId: string;
-    messagePreview: string;
-    senderName: string;
-  };
-} = {
-  FRIEND_REQUEST: {
-    senderName: "",
-    senderProfilePic: "",
-  },
-  GAME_INVITATION: {
-    gameId: "",
-    venueName: "",
-    dateTime: new Date(),
-    gameType: "",
-  },
-  PAYMENT_SUCCESSFUL: {
-    transactionId: "",
-    amount: 0,
-    currency: "",
-    paymentMethod: "",
-  },
-  NEW_MESSAGE: {
-    chatId: "",
-    messagePreview: "",
-    senderName: "",
-  },
-};
-
 export const notificationModel = mongoose.model<NotificationDocument>(
   "notifications",
   notificationSchema
@@ -297,5 +263,3 @@ export const createNotification = async (
 
   return notification;
 };
-
-

@@ -67,19 +67,18 @@ export const loginUserService = async (
     ],
   });
 
+  if (
+    !user &&
+    (authType === "Google" || authType === "Apple" || authType === "Facebook")
+  ) {
+    user = await createNewUser(userData, authType); // You should implement the createNewUser function as per your needs
+  }
   if (!user) {
     return errorResponseHandler(
       "User not found",
       httpStatusCode.BAD_REQUEST,
       res
     );
-  }
-
-  if (
-    !user &&
-    (authType === "Google" || authType === "Apple" || authType === "Facebook")
-  ) {
-    user = await createNewUser(userData, authType); // You should implement the createNewUser function as per your needs
   }
 
   if (authType !== user.authType) {
@@ -813,7 +812,7 @@ export const getUserServices = async (req: Request, res: Response) => {
   const additionalInfo = await additionalUserInfoModel
     .findOne({ userId: userId })
     .lean()
-    .select("playCoins loyaltyTier");
+    .select("playCoins loyaltyTier referrals");
 
   // Get total matches played
   const totalMatches = await bookingModel.countDocuments({
@@ -840,6 +839,13 @@ export const getUserServices = async (req: Request, res: Response) => {
       totalFriends,
       playCoins: additionalInfo?.playCoins || 0,
       loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
+      referrals: additionalInfo?.referrals || {
+        code: "",
+        expiryDate: new Date(),
+        usageCount: 0,
+        maxUsage: 15,
+        isActive: true,
+      },
     },
   };
 };

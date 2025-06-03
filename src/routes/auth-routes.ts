@@ -17,7 +17,7 @@ import {
 } from "src/controllers/user/user-controller";
 import { checkOTPAuth } from "src/middleware/check-auth";
 import { usersModel } from "src/models/user/user-schema";
-import { sendNotification } from "src/utils/FCM/FCM";
+import { notifyUser, sendNotification } from "src/utils/FCM/FCM";
 import { sendEmailVerificationMail } from "src/utils/mails/mail";
 import { generateTwilioVerificationOTP } from "src/utils/sms/sms";
 
@@ -30,7 +30,7 @@ router.post("/forgot-password", forgotPassword);
 router.patch("/new-password-otp-verified", newPassswordAfterOTPVerified);
 
 //userAuth routes
-router.post("/social-login", socialLogin)
+router.post("/social-login", socialLogin);
 router.post("/user-signup", userSignup);
 router.post("/verify-otp", checkOTPAuth, verifyOTP);
 router.post("/user-login", loginUser);
@@ -83,27 +83,17 @@ router.patch(
 //   });
 // });
 
-router.post('/test-notifications', async (req, res) => {
-  // Simulate sending a notification
-  const {id} = req.body;
+import mongoose from "mongoose";
 
-  const user = await usersModel.findById(id);
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      message: "User not found",
-    });
-  }
-  for(const fcmToken of user?.fcmToken || []) {
-    console.log(`Sending notification to ${fcmToken}`);
-    // Here you would call your FCM send function
-    await sendNotification(fcmToken, "Test Notification", "This is a test notification");
-  }
-  console.log("Sending test notification...");
-  res.status(200).json({
-    success: true,
-    message: "Test notification sent successfully",
+router.post("/test-notifications", async (req, res) => {
+  await notifyUser({
+    recipientId: new mongoose.Types.ObjectId("683ea4354b7ad72347298c82"),
+    type: "NEW_MESSAGE",
+    title: "You have a new message!",
+    message: "Tap to view your chat",
+    category: "CHAT",
   });
+  console.log("Notification sent successfully");
 });
 
 export { router };
