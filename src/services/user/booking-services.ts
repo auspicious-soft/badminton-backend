@@ -837,18 +837,32 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           });
         }
 
-        // Create notification for booking owner
-        await notifyUser({
-          recipientId: booking.userId,
-          type: "PAYMENT_SUCCESSFUL",
-          title: "Payment Successful",
-          message: `Your payment of ₹${transaction.amount} for booking has been successfully processed using playcoins.`,
-          category: "PAYMENT",
-          priority: "MEDIUM",
-          notificationType: "IN_APP",
-          referenceId: (booking as any)._id,
-          referenceType: "bookings",
-        });
+        const allPlayerIds = [
+          booking.userId,
+          ...booking.team1.map((player: any) => player.playerId),
+          ...booking.team2.map((player: any) => player.playerId),
+        ];
+        for (const playerId of allPlayerIds) {
+          if (playerId.toString() !== transaction.userId.toString()) {
+            await notifyUser({
+              recipientId: playerId,
+              type: "PAYMENT_SUCCESS",
+              title: "Game Booked Successfully",
+              message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+              category: "PAYMENT",
+              notificationType: "BOTH",
+              referenceId: (booking as any)._id.toString(),
+              priority: "HIGH",
+              referenceType: "bookings",
+              metadata: {
+                bookingId: booking._id,
+                transactionId: transaction._id,
+                amount: transaction.amount,
+                timestamp: new Date().toISOString(),
+              },
+            });
+          }
+        }
       }
 
       await session.commitTransaction();
@@ -938,18 +952,32 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
 
           await booking.save({ session });
 
-          // Create notification for booking owner
-          await notifyUser({
-            recipientId: booking.userId,
-            type: "PAYMENT_SUCCESSFUL",
-            title: "Payment Successful",
-            message: `Your payment of ₹${transaction.amount} for booking has been successfully processed using playcoins.`,
-            category: "PAYMENT",
-            priority: "MEDIUM",
-            notificationType: "IN_APP",
-            referenceId: (booking as any)._id,
-            referenceType: "bookings",
-          });
+          const allPlayerIds = [
+            booking.userId,
+            ...booking.team1.map((player: any) => player.playerId),
+            ...booking.team2.map((player: any) => player.playerId),
+          ];
+          for (const playerId of allPlayerIds) {
+            if (playerId.toString() !== transaction.userId.toString()) {
+              await notifyUser({
+                recipientId: playerId,
+                type: "PAYMENT_SUCCESS",
+                title: "Game Booked Successfully",
+                message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                category: "PAYMENT",
+                notificationType: "BOTH",
+                referenceId: (booking as any)._id.toString(),
+                priority: "HIGH",
+                referenceType: "bookings",
+                metadata: {
+                  bookingId: booking._id,
+                  transactionId: transaction._id,
+                  amount: transaction.amount,
+                  timestamp: new Date().toISOString(),
+                },
+              });
+            }
+          }
         }
 
         await session.commitTransaction();

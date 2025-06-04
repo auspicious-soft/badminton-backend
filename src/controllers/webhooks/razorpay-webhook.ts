@@ -324,22 +324,33 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 isActive: true,
               });
             }
-
-            // Create notification for booking owner
-            await notifyUser({
-              recipientId: booking.userId,
-              type: "BOOKING_CONFIRMATION",
-              title: "Booking Confirmed",
-              message: `Your booking has been confirmed with payment of ₹${transaction.amount}.`,
-              category: "BOOKING",
-              referenceId: (booking as any)._id.toString(),
-              priority: "HIGH",
-              referenceType: "bookings",
-              metadata: {
-                transactionId: transaction._id,
-                amount: transaction.amount,
-              },
-            });
+            // Send notifications to all players in the booking
+            const allPlayerIds = [
+              booking.userId,
+              ...booking.team1.map((player: any) => player.playerId),
+              ...booking.team2.map((player: any) => player.playerId),
+            ];
+            for (const playerId of allPlayerIds) {
+              if (playerId.toString() !== transaction.userId.toString()) {
+                await notifyUser({
+                  recipientId: playerId,
+                  type: "PAYMENT_SUCCESS",
+                  title: "Game Booked Successfully",
+                  message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                  category: "PAYMENT",
+                  notificationType: "BOTH",
+                  referenceId: (booking as any)._id.toString(),
+                  priority: "HIGH",
+                  referenceType: "bookings",
+                  metadata: {
+                    bookingId: booking._id,
+                    transactionId: transaction._id,
+                    amount: transaction.amount,
+                    timestamp: new Date().toISOString(),
+                  },
+                });
+              }
+            }
           }
         }
 
