@@ -826,7 +826,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           await chatModel.create({
             bookingId: booking._id,
             chatType: "group",
-            groupName: `Booking Chat - ${booking._id}`,
+            groupName: `Match on ${booking.bookingDate.toLocaleDateString()}`,
             participants: [
               ...booking.team1.map((player: any) => player.playerId),
               ...booking.team2.map((player: any) => player.playerId),

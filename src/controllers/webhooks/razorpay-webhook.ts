@@ -312,7 +312,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               await chatModel.create({
                 bookingId: booking._id,
                 chatType: "group",
-                groupName: `Booking Chat - ${booking._id}`,
+                groupName: `Match on ${booking.bookingDate.toLocaleDateString()}`,
+                // groupName: `Booking Chat - ${booking._id}`,
                 participants: [
                   // booking.userId,
                   ...booking.team1.map((player: any) => player.playerId),

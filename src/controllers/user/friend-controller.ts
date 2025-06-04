@@ -102,7 +102,6 @@ export const searchFriend = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-
 export const sendRequest = async (req: Request, res: Response) => {
   try {
     console.log("req.body: ", req.user);
@@ -223,7 +222,7 @@ export const sendRequest = async (req: Request, res: Response) => {
           type: "FRIEND_REQUEST",
           title: "New Friend Request",
           message: `${
-            userData.fullName || userData.email
+            userData.name || userData.email
           } sent you a friend request.`,
           category: "FRIEND",
           metadata: {
@@ -368,7 +367,7 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
               type: "FRIEND_REQUEST_ACCEPTED",
               title: "Friend Request Accepted",
               message: `${
-                userData.fullName || userData.email
+                userData.name || userData.email
               } accepted your friend request.`,
               category: "FRIEND",
               metadata: {

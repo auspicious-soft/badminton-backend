@@ -403,7 +403,7 @@ export const sendMessage = async (req: Request, res: Response) => {
         await notifyUser({
           recipientId: new mongoose.Types.ObjectId(participantIdStr),
           type: "NEW_MESSAGE",
-          title: `${userData.fullName} sent a message`,
+          title: `${userData.name} sent a message`,
           message:
             contentType === "text" ? content : `📎 ${contentType} message`,
           category: "CHAT",
