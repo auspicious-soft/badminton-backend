@@ -13,6 +13,7 @@ import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { usersModel } from "src/models/user/user-schema";
+import { getCurrentISTTime } from "src/utils";
 
 configDotenv();
 
@@ -80,7 +81,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               status: "confirmed",
               razorpayPaymentId: paymentId,
               razorpayOrderId: orderId,
-              paymentDate: new Date(),
+              paymentDate: getCurrentISTTime(), // Use utility function to get current IST time
               // Remove quantityUpdated: true from here
             },
             { new: true, session }

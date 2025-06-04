@@ -84,8 +84,13 @@ router.patch(
 // });
 
 import mongoose from "mongoose";
+import { getCurrentISTTime } from "src/utils";
 
 router.post("/test-notifications", async (req, res) => {
+  console.log("XXXXXX",getCurrentISTTime().toTimeString());
+  console.log("XXXXXX",getCurrentISTTime().toLocaleDateString("in-IN", {
+    timeZone: "Asia/Kolkata",
+  }))
   await notifyUser({
     recipientId: new mongoose.Types.ObjectId("683eefca209b9aff52b6c8f9"),
     type: "NEW_MESSAGE",
