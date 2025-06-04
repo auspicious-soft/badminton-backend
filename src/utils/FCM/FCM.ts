@@ -47,14 +47,18 @@ export const sendNotification = async (
   fcmToken: string,
   title: string,
   body: string,
-  data : Record<string, string> = {}  // Optional data payload
+  data: Record<string, string> = {} // Optional data payload
 ): Promise<void> => {
+  const stringifiedData: Record<string, string> = {};
+  for (const key in data) {
+    stringifiedData[key] = String(data[key]);
+  }
   const message: NotificationMessage = {
     notification: {
       title,
       body,
     },
-    data,
+    data: stringifiedData,
     token: fcmToken,
   };
 

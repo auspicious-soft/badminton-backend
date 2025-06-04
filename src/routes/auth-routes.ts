@@ -87,11 +87,16 @@ import mongoose from "mongoose";
 
 router.post("/test-notifications", async (req, res) => {
   await notifyUser({
-    recipientId: new mongoose.Types.ObjectId("683ea4354b7ad72347298c82"),
+    recipientId: new mongoose.Types.ObjectId("683eefca209b9aff52b6c8f9"),
     type: "NEW_MESSAGE",
     title: "You have a new message!",
     message: "Hello, this is a test notification.",
     category: "CHAT",
+    notificationType: "BOTH",
+    metadata: {
+      chatId: 111,
+      senderId: 111,
+    },
   });
   console.log("Notification sent successfully");
   res.status(200).json({
