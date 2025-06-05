@@ -164,42 +164,68 @@ export const getProducts = async (req: Request, res: Response) => {
       .lean();
 
     // Transform the response to include venue name directly in venueAndQuantity
-    const transformedProducts = products.map((product) => {
-      const transformedProduct = { ...product };
+    const transformedProducts = await Promise.all(
+      products.map(async (product) => {
+        const transformedProduct = { ...product };
 
-      // Transform venueAndQuantity to include venue name
-      if (transformedProduct.venueAndQuantity) {
-        transformedProduct.venueAndQuantity =
-          transformedProduct.venueAndQuantity.map((item) => {
-            if (item.venueId) {
-              // Extract venue details
-              const venueDetails =
-                typeof item.venueId === "object" ? item.venueId : null;
+        // Transform venueAndQuantity to include venue name
+        if (transformedProduct.venueAndQuantity) {
+          transformedProduct.venueAndQuantity =
+            transformedProduct.venueAndQuantity.map((item) => {
+              if (item.venueId) {
+                // Extract venue details
+                const venueDetails =
+                  typeof item.venueId === "object" ? item.venueId : null;
 
-              return {
-                venueId: venueDetails?._id || item.venueId,
-                quantity: item.quantity,
-                venueName:
-                  venueDetails && "name" in venueDetails
-                    ? String(venueDetails.name)
-                    : "Unknown Venue",
-                venueLocation:
-                  venueDetails &&
-                  typeof venueDetails === "object" &&
-                  "address" in venueDetails
-                    ? String(venueDetails.address)
-                    : "Unknown Location",
-              };
-            }
-            return item;
-          });
-      }
+                return {
+                  venueId: venueDetails?._id || item.venueId,
+                  quantity: item.quantity,
+                  venueName:
+                    venueDetails && "name" in venueDetails
+                      ? String(venueDetails.name)
+                      : "Unknown Venue",
+                  venueLocation:
+                    venueDetails &&
+                    typeof venueDetails === "object" &&
+                    "address" in venueDetails
+                      ? String(venueDetails.address)
+                      : "Unknown Location",
+                };
+              }
+              return item;
+            });
+        }
 
-      // Add soldThisMonth field with dummy data
-      (transformedProduct as any).soldThisMonth = 50;
+        // Add soldThisMonth field with dummy data
+        (transformedProduct as any).soldThisMonth = await orderModel
+          .aggregate([
+            {
+              $match: {
+                paymentStatus: "paid",
+                createdAt: {
+                  $gte: new Date(new Date().setDate(1)), // First day of current month
+                  $lte: new Date(), // Current date
+                },
+              },
+            },
+            { $unwind: "$items" },
+            {
+              $match: {
+                "items.productId": product._id,
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                totalSold: { $sum: "$items.quantity" },
+              },
+            },
+          ])
+          .then((result) => result[0]?.totalSold || 0);
 
-      return transformedProduct;
-    });
+        return transformedProduct;
+      })
+    );
 
     const venues = await venueModel
       .find({ isActive: true })
@@ -929,10 +955,10 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
     doc.pipe(res);
 
     // Register custom fonts from assets folder
-    const fontPath = path.join(process.cwd(), 'src', 'assets', 'fonts');
-    doc.registerFont('Regular', path.join(fontPath, 'Roboto-Regular.ttf'));
-    doc.registerFont('Bold', path.join(fontPath, 'Roboto-Bold.ttf'));
-    doc.registerFont('Medium', path.join(fontPath, 'Roboto-Medium.ttf'));
+    const fontPath = path.join(process.cwd(), "src", "assets", "fonts");
+    doc.registerFont("Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+    doc.registerFont("Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+    doc.registerFont("Medium", path.join(fontPath, "Roboto-Medium.ttf"));
 
     // Fonts and Colors
     const primaryColor = "#1E3A8A"; // Deep blue
@@ -1006,9 +1032,21 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
       .fontSize(8)
       .font("Regular")
       .fillColor("#4B5563")
-      .text(`Name: ${userData?.fullName || "Unknown"}`, rightColumnX, sectionY + 15)
-      .text(`Email: ${userData?.email || "Unknown"}`, rightColumnX, sectionY + 27)
-      .text(`Phone: ${userData?.phoneNumber || "Unknown"}`, rightColumnX, sectionY + 39);
+      .text(
+        `Name: ${userData?.fullName || "Unknown"}`,
+        rightColumnX,
+        sectionY + 15
+      )
+      .text(
+        `Email: ${userData?.email || "Unknown"}`,
+        rightColumnX,
+        sectionY + 27
+      )
+      .text(
+        `Phone: ${userData?.phoneNumber || "Unknown"}`,
+        rightColumnX,
+        sectionY + 39
+      );
 
     // Address
     if (order.address) {
@@ -1036,9 +1074,14 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
       .font("Regular")
       .fillColor("#4B5563")
       .text(`Name: ${venueData?.name || "Unknown"}`, leftColumnX, venueY + 15)
-      .text(`Address: ${venueData?.address || "Unknown"}`, leftColumnX, venueY + 27, {
-        width: 250,
-      });
+      .text(
+        `Address: ${venueData?.address || "Unknown"}`,
+        leftColumnX,
+        venueY + 27,
+        {
+          width: 250,
+        }
+      );
     doc.moveDown(1);
 
     // Items Table
@@ -1111,9 +1154,14 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
       .fontSize(10)
       .font("Bold")
       .fillColor(primaryColor)
-      .text(`${rupeeSymbol}${order.totalAmount.toFixed(2)}`, totalX - 50, doc.y, {
-        align: "right",
-      });
+      .text(
+        `${rupeeSymbol}${order.totalAmount.toFixed(2)}`,
+        totalX - 50,
+        doc.y,
+        {
+          align: "right",
+        }
+      );
 
     // Payment Information
     doc.moveDown(0.5);
@@ -1127,9 +1175,14 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
         doc.y,
         { align: "right" }
       )
-      .text(`Payment ID: ${order.razorpayPaymentId || "N/A"}`, rightColumnX, doc.y + 12, {
-        align: "right",
-      });
+      .text(
+        `Payment ID: ${order.razorpayPaymentId || "N/A"}`,
+        rightColumnX,
+        doc.y + 12,
+        {
+          align: "right",
+        }
+      );
 
     // Footer
     const footerY = doc.page.height - 60; // Moved up to save space
@@ -1148,7 +1201,8 @@ export const downloadOrderReceipt = async (req: Request, res: Response) => {
     // Finalize the PDF
     doc.end();
   } catch (error: any) {
-    const { code, message }: { code: number; message: string } = errorParser(error);
+    const { code, message }: { code: number; message: string } =
+      errorParser(error);
     return res
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: message || "An error occurred" });
