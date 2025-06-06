@@ -44,9 +44,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
     }
 
     // Get current time in IST
-    const currentDate = getCurrentISTTime();
-
-    console.log(`Current IST time: ${currentDate.toISOString()}`);
+    const currentDate = new Date().setHours(0, 0, 0, 0);
 
     if (type === "all") {
       // For all type, get all bookings (previous, current, and upcoming)
@@ -96,10 +94,8 @@ export const getMyMatches = async (req: Request, res: Response) => {
       }, {} as Record<string, any>);
 
       // Define date boundaries for categorization
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const endOfToday = new Date();
-      endOfToday.setHours(23, 59, 59, 999);
+      const today = new Date().setHours(0, 0, 0, 0);
+      const endOfToday = new Date().setHours(23, 59, 59, 999);
 
       // Process all bookings to include player data, scores, and status
       const processedBookings = await Promise.all(
@@ -133,7 +129,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
 
           // Determine booking status based on date
           let status = "upcoming";
-          const bookingDate = new Date(booking.bookingDate);
+          const bookingDate = new Date(booking.bookingDate).getTime()
 
           if (bookingDate < today) {
             status = "previous";
