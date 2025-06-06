@@ -189,9 +189,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     bookingId,
     requestedTeam,
     requestedPosition,
-    racketA,
-    racketB,
-    racketC,
+    rackets,
     balls,
     paymentMethod = "razorpay", // Default payment method
   } = req.body;
@@ -396,9 +394,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
             bookingSlot,
             requestedTeam,
             requestedPosition,
-            racketA: racketA || 0,
-            racketB: racketB || 0,
-            racketC: racketC || 0,
+            rackets: rackets || 0,
             balls: balls || 0,
           },
           isWebhookVerified: isWebhookVerified,
@@ -445,9 +441,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
       requestedTeam,
       requestedPosition,
       status: canCompleteWithPlaycoins ? "completed" : "pending", // If fully paid with playcoins, mark as completed
-      racketA: racketA || 0,
-      racketB: racketB || 0,
-      racketC: racketC || 0,
+      rackets: rackets || 0,
       balls: balls || 0,
       playerPayment: slotPrice,
       paymentStatus: isWebhookVerified ? "Paid" : "Pending",
@@ -468,9 +462,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
         paymentStatus: "Paid",
         transactionId: transaction[0]._id,
         paidBy: "Self",
-        racketA: racketA || 0,
-        racketB: racketB || 0,
-        racketC: racketC || 0,
+        rackets: rackets || 0,
         balls: balls || 0,
       };
 

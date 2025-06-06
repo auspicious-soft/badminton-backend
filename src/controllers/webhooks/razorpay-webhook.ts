@@ -400,9 +400,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 paymentStatus: "Paid",
                 transactionId: transaction._id,
                 paidBy: "Self",
-                racketA: transaction.notes.racketA || 0,
-                racketB: transaction.notes.racketB || 0,
-                racketC: transaction.notes.racketC || 0,
+                rackets: transaction.notes.rackets || 0,
                 balls: transaction.notes.balls || 0,
               };
 

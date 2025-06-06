@@ -7,9 +7,7 @@ export interface BookingRequestDocument extends Document {
   requestedTeam: "team1" | "team2";
   requestedPosition: "player1" | "player2" | "player3" | "player4";
   status: "pending" | "accepted" | "rejected" | "completed";
-  racketA: number;
-  racketB: number;
-  racketC: number;
+  rackets: number;
   balls: number;
   playerPayment: number;
   paymentStatus: "Pending" | "Paid" | "Cancelled" | "Refunded";
@@ -50,15 +48,7 @@ const bookingRequestSchema = new Schema(
       enum: ["pending", "rejected", "completed"],
       default: "pending",
     },
-    racketA: {
-      type: Number,
-      default: 0,
-    },
-    racketB: {
-      type: Number,
-      default: 0,
-    },
-    racketC: {
+    rackets: {
       type: Number,
       default: 0,
     },
