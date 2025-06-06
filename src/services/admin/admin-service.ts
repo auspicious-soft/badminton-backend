@@ -330,36 +330,10 @@ export const getEmployeesService = async (payload: any, res: Response) => {
       })
       .exec();
     
-    const venues = await venueModel.find().lean();
-
-    let workingEmpoyees : any= [];
-    venues.forEach((venue: any) => {
-      const venueEmployees = venue.employees.map((emp: any) => {
-        const employee = employees.find(
-          (e: any) => e._id.toString() === emp.employeeId.toString()
-        );
-        if (employee) {
-          return {
-            ...employee,
-            venueId: venue._id,
-            venueName: venue.name,
-            isActive: emp.isActive,
-          };
-        }
-        return null;
-      }).filter((emp: any) => emp !== null);
-
-      workingEmpoyees = [...workingEmpoyees, ...venueEmployees];
-    });
-
-    // employees.map((employee: any) => {
-    //   employee.venue = venues.find((venue: any) => employee._id === employee.;
-    // });
-
     return {
       success: true,
       message: "All users retrieved successfully",
-      data: workingEmpoyees,
+      data: employees,
       meta: {
         total: totalEmployees,
         hasPreviousPage: page > 1,
