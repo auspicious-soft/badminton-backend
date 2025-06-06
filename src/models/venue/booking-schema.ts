@@ -79,15 +79,7 @@ const bookingSchema = new Schema(
           enum: ["User", "Self"],
           default: "Self",
         },
-        racketA: {
-          type: Number,
-          default: 0,
-        },
-        racketB: {
-          type: Number,
-          default: 0,
-        },
-        racketC: {
+        rackets: {
           type: Number,
           default: 0,
         },
@@ -127,15 +119,7 @@ const bookingSchema = new Schema(
           enum: ["Self", "User"],
           default: "Self",
         },
-        racketA: {
-          type: Number,
-          default: 0,
-        },
-        racketB: {
-          type: Number,
-          default: 0,
-        },
-        racketC: {
+        rackets: {
           type: Number,
           default: 0,
         },
