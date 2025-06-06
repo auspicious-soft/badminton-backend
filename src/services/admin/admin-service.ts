@@ -26,6 +26,7 @@ import { productModel } from "src/models/admin/products-schema";
 import { getCurrentISTTime } from "../../utils";
 import { request } from "http";
 import { transactionModel } from "src/models/admin/transaction-schema";
+import { match } from "assert";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -329,7 +330,7 @@ export const getEmployeesService = async (payload: any, res: Response) => {
         strength: 2, // Case-insensitive sorting
       })
       .exec();
-    
+
     return {
       success: true,
       message: "All users retrieved successfully",
@@ -960,9 +961,9 @@ export const getMatchesService = async (payload: any, res: Response) => {
 
   try {
     // Get current time in IST
-    const currentDate = getCurrentISTTime();
-
-    console.log(`Current IST time: ${currentDate.toISOString()}`);
+    const currentDate = new Date().setHours(0, 0, 0, 0); // Normalize to start of the day
+    const currentISTHour = getCurrentISTTime().getHours();
+    // console.log(`Current IST time: ${currentDate.toISOString()}`);
 
     let matchQuery: any = {};
     matchQuery.bookingPaymentStatus = true;
@@ -990,9 +991,20 @@ export const getMatchesService = async (payload: any, res: Response) => {
     } else {
       // If no date is provided, use the type filter
       if (type === "upcoming") {
-        matchQuery.bookingDate = { $gt: currentDate };
+        matchQuery.bookingDate = { $gte: currentDate };
+        matchQuery.bookingSlots = { $gte: currentISTHour };
       } else if (type === "completed") {
-        matchQuery.bookingDate = { $lt: currentDate };
+        matchQuery.$or = [
+          {
+            // Case 1: Any booking from before today (fully completed)
+            bookingDate: { $lt: currentDate },
+          },
+          {
+            // Case 2: Today's booking, but time has passed
+            bookingDate: currentDate,
+            bookingSlots: { $lt: currentISTHour },
+          },
+        ];
       }
     }
 
@@ -1141,10 +1153,33 @@ export const dashboardServices = async (payload: any, res: Response) => {
     const currentYear = Number(year) || now.getUTCFullYear();
 
     // Time boundaries in UTC
-    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
-    const endOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    const startOfDay = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0
+      )
+    );
+    const endOfDay = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        23,
+        59,
+        59,
+        999
+      )
+    );
+    const startOfMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+    );
+    const endOfMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)
+    );
     const startOfYear = new Date(Date.UTC(currentYear, 0, 1));
     const endOfYear = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999));
 
@@ -1161,18 +1196,22 @@ export const dashboardServices = async (payload: any, res: Response) => {
       .lean();
 
     todayScheduledBookings.sort((a, b) => {
-      const slotA = Array.isArray(a.bookingSlots) ? a.bookingSlots[0] : a.bookingSlots;
-      const slotB = Array.isArray(b.bookingSlots) ? b.bookingSlots[0] : b.bookingSlots;
-      const [hA, mA] = slotA.split(':').map(Number);
-      const [hB, mB] = slotB.split(':').map(Number);
+      const slotA = Array.isArray(a.bookingSlots)
+        ? a.bookingSlots[0]
+        : a.bookingSlots;
+      const slotB = Array.isArray(b.bookingSlots)
+        ? b.bookingSlots[0]
+        : b.bookingSlots;
+      const [hA, mA] = slotA.split(":").map(Number);
+      const [hB, mB] = slotB.split(":").map(Number);
       return hA * 60 + mA - (hB * 60 + mB);
     });
 
     const formatBookingData = todayScheduledBookings.map((booking) => ({
       time: booking.bookingSlots,
       matches: 1,
-      game:(booking.courtId as any)?.games || "Unknown",
-      player:( booking.userId as any)?.fullName || "Unknown",
+      game: (booking.courtId as any)?.games || "Unknown",
+      player: (booking.userId as any)?.fullName || "Unknown",
       duration: "60 Mins",
       isMaintenance: booking.isMaintenance || false,
     }));
@@ -1202,7 +1241,9 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    let totalYearlyGames = 0, padelYearlyGames = 0, pickleballYearlyGames = 0;
+    let totalYearlyGames = 0,
+      padelYearlyGames = 0,
+      pickleballYearlyGames = 0;
     yearlyGameStats.forEach((stat) => {
       if (stat._id === "Padel") padelYearlyGames = stat.count;
       else if (stat._id === "Pickleball") pickleballYearlyGames = stat.count;
@@ -1210,8 +1251,12 @@ export const dashboardServices = async (payload: any, res: Response) => {
     });
 
     const gameComposition = {
-      Padel: totalYearlyGames ? Math.round((padelYearlyGames / totalYearlyGames) * 100) : 0,
-      Pickleball: totalYearlyGames ? Math.round((pickleballYearlyGames / totalYearlyGames) * 100) : 0,
+      Padel: totalYearlyGames
+        ? Math.round((padelYearlyGames / totalYearlyGames) * 100)
+        : 0,
+      Pickleball: totalYearlyGames
+        ? Math.round((pickleballYearlyGames / totalYearlyGames) * 100)
+        : 0,
     };
 
     const monthlyStats = await bookingModel.aggregate([
@@ -1239,10 +1284,13 @@ export const dashboardServices = async (payload: any, res: Response) => {
       },
     ]);
 
-    let totalMatchesThisMonth = 0, padelMatchesThisMonth = 0, pickleballMatchesThisMonth = 0;
+    let totalMatchesThisMonth = 0,
+      padelMatchesThisMonth = 0,
+      pickleballMatchesThisMonth = 0;
     monthlyStats.forEach((stat) => {
       if (stat._id === "Padel") padelMatchesThisMonth = stat.count;
-      else if (stat._id === "Pickleball") pickleballMatchesThisMonth = stat.count;
+      else if (stat._id === "Pickleball")
+        pickleballMatchesThisMonth = stat.count;
       totalMatchesThisMonth += stat.count;
     });
 
@@ -1351,8 +1399,13 @@ export const dashboardServices = async (payload: any, res: Response) => {
 
     const processedMonthlyData = Array.from({ length: 12 }, (_, i) => {
       const month = i + 1;
-      const padel = monthlyGameGraph.find((d) => d.month === month && d.game === "Padel")?.count || 0;
-      const pickleball = monthlyGameGraph.find((d) => d.month === month && d.game === "Pickleball")?.count || 0;
+      const padel =
+        monthlyGameGraph.find((d) => d.month === month && d.game === "Padel")
+          ?.count || 0;
+      const pickleball =
+        monthlyGameGraph.find(
+          (d) => d.month === month && d.game === "Pickleball"
+        )?.count || 0;
 
       return {
         month: `${month < 10 ? "0" : ""}${month}/${currentYear}`,
