@@ -77,8 +77,9 @@ export const loginService = async (payload: any, res: Response) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const venue = await venueModel
-      .findOne({ "employees.employeeId": { $in: [user._id] } })
+    const venue = await venueModel.findOne({
+      "employees.employeeId": { $in: [user._id] },
+    });
 
     if (venue) {
       userObject.venueId = venue._id;
@@ -110,7 +111,7 @@ export const loginService = async (payload: any, res: Response) => {
 };
 
 export const logoutService = async (payload: any, res: Response) => {
-  const { id : employeeId} = payload.user;
+  const { id: employeeId } = payload.user;
 
   if (!employeeId) {
     return errorResponseHandler(
@@ -977,6 +978,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
     type = "upcoming",
     game = "all",
     date,
+    venueId,
   } = payload.query;
   const pageNumber = parseInt(page) || 1;
   const limitNumber = parseInt(limit) || 10;
@@ -1057,6 +1059,11 @@ export const getMatchesService = async (payload: any, res: Response) => {
       // Then use those venue IDs in our booking query
       const venueIds = venues.map((venue) => venue._id);
       matchQuery.venueId = { $in: venueIds };
+    }
+
+    if(venueId) {
+      // If venueId is provided, filter by that specific venue
+      matchQuery.venueId = new mongoose.Types.ObjectId(venueId);
     }
 
     // First, get all bookings without game filtering

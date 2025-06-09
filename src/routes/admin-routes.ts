@@ -36,6 +36,7 @@ import {
   createUpdatePricing,
   getAdminSettings,
   getAllPricing,
+  getNotifications,
   rewardsSettings,
   updateRewardsSettings,
 } from "src/controllers/admin/settings-controller";
@@ -112,6 +113,7 @@ router.route("/admin-settings").post(createUpdateAdminSettings).get(getAdminSett
 router.route("/reward-settings/:type").get(rewardsSettings).put(updateRewardsSettings)
 //Orders
 router.route("/orders").get(getOrders).put(updateOrderStatus)
+router.route("/notifications").get(getNotifications)
 
 
 export { router };

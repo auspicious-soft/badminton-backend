@@ -360,3 +360,28 @@ export const updateRewardsSettings = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
+export const getNotifications = async (req: Request, res: Response) => {
+  try {
+    const notifications = await adminSettingModel.findOne().select("notifications");
+
+    if (!notifications) {
+      return errorResponseHandler(
+        "Notifications not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Notifications retrieved successfully",
+      // data: notifications.notifications,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+}
