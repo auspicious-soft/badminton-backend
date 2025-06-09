@@ -110,7 +110,7 @@ export const loginService = async (payload: any, res: Response) => {
 };
 
 export const logoutService = async (payload: any, res: Response) => {
-  const { id: employeeId } = payload;
+  const { id : employeeId} = payload.user;
 
   if (!employeeId) {
     return errorResponseHandler(
@@ -137,13 +137,13 @@ export const logoutService = async (payload: any, res: Response) => {
     );
   }
 
-  if (attendanceRecord.checkOutTime) {
-    return errorResponseHandler(
-      "Employee has already checked out",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
+  // if (attendanceRecord.checkOutTime) {
+  //   return errorResponseHandler(
+  //     "Employee has already checked out",
+  //     httpStatusCode.BAD_REQUEST,
+  //     res
+  //   );
+  // }
   attendanceRecord.checkOutTime = new Date();
   await attendanceRecord.save();
 

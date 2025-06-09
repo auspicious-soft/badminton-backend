@@ -130,7 +130,7 @@ export const updateAdminDetails = async (req: Request, res: Response) => {
 
 export const logoutEmployee = async (req: Request, res: Response) => {
   try {
-    const response = await logoutService(req.body, res);
+    const response = await logoutService(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
