@@ -71,11 +71,19 @@ export const loginService = async (payload: any, res: Response) => {
   const userObject = user.toObject();
   delete userObject.password;
 
-  user.venueId = null
+  userObject.venueId = null;
 
   if (user.role === "employee") {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    const venue = await venueModel
+      .findOne({ "employees.employeeId": { $in: [user._id] } })
+
+    if (venue) {
+      userObject.venueId = venue._id;
+      userObject.venueName = venue.name;
+    }
 
     const existingAttendance = await attendanceModel.findOne({
       employeeId: user._id,
@@ -327,9 +335,6 @@ export const getEmployeesService = async (payload: any, res: Response) => {
 
     const venues = await venueModel.find({}).lean();
 
-
-
-
     // Execute aggregation with collation for case-insensitive sorting
     let employees = await employeesModel
       .aggregate(pipeline as any)
@@ -339,7 +344,6 @@ export const getEmployeesService = async (payload: any, res: Response) => {
       })
       .exec();
 
-    
     employees.forEach((employee: any) => {
       let exist = venues.find((venue: any) => {
         return venue.employees.some(
@@ -352,9 +356,9 @@ export const getEmployeesService = async (payload: any, res: Response) => {
       }
     });
 
-    if( free !== null) {
+    if (free !== null) {
       employees = employees.filter((employee: any) => {
-        return employee.free === free;
+        return !employee.venueId;
       });
     }
 
