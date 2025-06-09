@@ -71,6 +71,8 @@ export const loginService = async (payload: any, res: Response) => {
   const userObject = user.toObject();
   delete userObject.password;
 
+  user.venueId = null
+
   if (user.role === "employee") {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -322,6 +324,11 @@ export const getEmployeesService = async (payload: any, res: Response) => {
       },
     ];
 
+    const venues = await venueModel.find({}).lean();
+
+
+
+
     // Execute aggregation with collation for case-insensitive sorting
     const employees = await employeesModel
       .aggregate(pipeline as any)
@@ -330,6 +337,19 @@ export const getEmployeesService = async (payload: any, res: Response) => {
         strength: 2, // Case-insensitive sorting
       })
       .exec();
+
+    
+    employees.forEach((employee: any) => {
+      let exist = venues.find((venue: any) => {
+        return venue.employees.some(
+          (emp: any) => emp.employeeId.toString() === employee._id.toString()
+        );
+      });
+      if (exist) {
+        employee.venueId = exist._id;
+        employee.venueName = exist.name;
+      }
+    });
 
     return {
       success: true,
