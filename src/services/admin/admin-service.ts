@@ -259,6 +259,7 @@ export const getEmployeesService = async (payload: any, res: Response) => {
   const offset = (page - 1) * limit;
   const order = payload.order || "desc";
   const status = payload.status || ""; // Remove default "Working" status
+  const free = payload.free || null; // Default to false if not provided
   const sortBy =
     payload.sortBy === "fullName" || payload.sortBy === "createdAt"
       ? payload.sortBy
@@ -330,7 +331,7 @@ export const getEmployeesService = async (payload: any, res: Response) => {
 
 
     // Execute aggregation with collation for case-insensitive sorting
-    const employees = await employeesModel
+    let employees = await employeesModel
       .aggregate(pipeline as any)
       .collation({
         locale: "en",
@@ -350,6 +351,12 @@ export const getEmployeesService = async (payload: any, res: Response) => {
         employee.venueName = exist.name;
       }
     });
+
+    if( free !== null) {
+      employees = employees.filter((employee: any) => {
+        return employee.free === free;
+      });
+    }
 
     return {
       success: true,
