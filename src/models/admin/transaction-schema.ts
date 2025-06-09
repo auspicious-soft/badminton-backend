@@ -10,7 +10,7 @@ export interface TransactionDocument extends Document {
   razorpaySignature?: string;
   amount: number;
   currency: string;
-  status: "created" | "authorized" | "captured" | "failed" | "refunded";
+  status: "created" | "authorized" | "captured" | "failed" | "refunded" | "received";
   method?: string;
   notes?: any;
   isWebhookVerified: boolean;
@@ -81,7 +81,7 @@ const transactionSchema = new Schema<TransactionDocument>(
     },
     status: {
       type: String,
-      enum: ["created", "authorized", "captured", "failed", "refunded"],
+      enum: ["created", "authorized", "captured", "failed", "refunded", "received"],
       default: "created",
     },
     method: {

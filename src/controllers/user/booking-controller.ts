@@ -572,7 +572,7 @@ export const getMyTransactions = async (req: Request, res: Response) => {
       
       return {
         ...transaction,
-        transactionType: transaction.status === 'refunded' ? 'received' : 'deducted',
+        transactionType: transaction.status === 'refunded' || "received" ? 'received' : 'deducted',
         paymentMethod: paymentMethod,
         paymentBreakdown: {
           totalAmount: totalAmount,

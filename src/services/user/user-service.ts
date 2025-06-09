@@ -35,6 +35,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import { Readable } from "stream";
 import { adminSettingModel } from "src/models/admin/admin-settings";
+import { transactionModel } from "src/models/admin/transaction-schema";
 
 configDotenv();
 export interface UserPayload {
@@ -696,6 +697,12 @@ export const verifyOTPService = async (
         referredPerson.referrals.usageCount += 1;
         referredPerson.playCoins += bonusAmount?.referral?.bonusAmount || 50; // Assuming 100 coins for referral
         await referredPerson.save();
+        await transactionModel.create({
+          userId: referredPerson.userId,
+          amount: bonusAmount?.referral?.bonusAmount || 50,
+          status: 'received',
+          text: "Referral bonus received"
+        });
       } else {
         errorResponseHandler(
           "Invalid referral code",
