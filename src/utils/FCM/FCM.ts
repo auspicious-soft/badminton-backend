@@ -1,6 +1,6 @@
 import admin from "firebase-admin";
 import { configDotenv } from "dotenv";
-import mongoose from "mongoose";
+import mongoose, {Types} from "mongoose";
 import { createNotification } from "src/models/notification/notification-schema";
 configDotenv();
 
@@ -83,7 +83,7 @@ export const notifyUser = async ({
   metadata = {},
   notificationType = "BOTH",
   expiresAt,
-  session
+  session,
 }: {
   recipientId: mongoose.Types.ObjectId;
   type: string;
@@ -98,12 +98,20 @@ export const notifyUser = async ({
   expiresAt?: Date;
   session?: mongoose.ClientSession;
 }) => {
-  let user = await mongoose.model("users").findById(recipientId);
+  if (typeof recipientId === "string") {
+    if (!Types.ObjectId.isValid(recipientId)) {
+      throw new Error("Invalid recipientId: not a valid ObjectId string");
+    }
+    recipientId = new Types.ObjectId(recipientId);
+  }
+  const user = await mongoose.model("users").findById(recipientId);
   if (notificationType === "PUSH" || notificationType === "BOTH") {
     for (const token of user.fcmToken) {
       if (!token) continue;
       try {
-        console.log(`✅ ✅ ✅ Sending ✅ ✅ ✅ notification ✅ ✅ ✅ ${user?.fullName}`);
+        console.log(
+          `✅ ✅ ✅ Sending ✅ ✅ ✅ notification ✅ ✅ ✅ ${user?.fullName}`
+        );
         await sendNotification(token, title, message, metadata);
       } catch (error) {
         console.warn(`⚠️ Failed to send notification to token ${token}`);
@@ -114,20 +122,22 @@ export const notifyUser = async ({
   if (notificationType === "IN_APP" || notificationType === "BOTH") {
     try {
       console.log(`✅ ❌ ✅ Notification ✅ ❌ ✅ Saving ✅ ❌ ✅ `);
-      await createNotification({
-        recipientId,
-        type,
-        title,
-        message,
-        category,
-        priority,
-        referenceId,
-        referenceType,
-        metadata,
-        notificationType,
-        expiresAt,
-      },
-      { session });
+      await createNotification(
+        {
+          recipientId,
+          type,
+          title,
+          message,
+          category,
+          priority,
+          referenceId,
+          referenceType,
+          metadata,
+          notificationType,
+          expiresAt,
+        },
+        { session }
+      );
     } catch (error) {
       console.error("❌ Error saving notification to DB:", error);
     }

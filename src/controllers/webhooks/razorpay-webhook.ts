@@ -126,7 +126,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 paymentId,
                 amount,
               },
-              session
+              session,
             });
 
             // Update product quantities
@@ -332,28 +332,33 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               ...booking.team1.map((player: any) => player.playerId),
               ...booking.team2.map((player: any) => player.playerId),
             ];
-            for (const playerId of allPlayerIds) {
-              if (playerId.toString() !== transaction.userId.toString()) {
-                await notifyUser({
-                  recipientId: playerId,
-                  type: "PAYMENT_SUCCESSFUL",
-                  title: "Game Booked Successfully",
-                  message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-                  category: "PAYMENT",
-                  notificationType: "BOTH",
-                  referenceId: (booking as any)._id.toString(),
-                  priority: "HIGH",
-                  referenceType: "bookings",
-                  metadata: {
-                    bookingId: booking._id,
-                    transactionId: transaction._id,
-                    amount: transaction.amount,
-                    timestamp: new Date().toISOString(),
-                  },
-                  session,
-                });
-              }
-            }
+            await Promise.all(
+              allPlayerIds
+                .filter(
+                  (playerId) =>
+                    playerId.toString() !== transaction.userId.toString()
+                )
+                .map((playerId) =>
+                  notifyUser({
+                    recipientId: playerId,
+                    type: "PAYMENT_SUCCESSFUL",
+                    title: "Game Booked Successfully",
+                    message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                    category: "PAYMENT",
+                    notificationType: "BOTH",
+                    referenceId: (booking as any)._id.toString(),
+                    priority: "HIGH",
+                    referenceType: "bookings",
+                    metadata: {
+                      bookingId: booking._id,
+                      transactionId: transaction._id,
+                      amount: transaction.amount,
+                      timestamp: new Date().toISOString(),
+                    },
+                    session,
+                  })
+                )
+            );
           }
         }
 
@@ -473,36 +478,37 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   requestedPosition.slice(1);
 
                 // Send notifications to all existing players
-                for (const playerId of otherPlayerIds) {
-                  try {
-                    await notifyUser({
-                      recipientId: playerId,
-                      type: "PLAYER_JOINED",
-                      title: "New Player Joined",
-                      message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
-                      category: "GAME",
-                      notificationType: "BOTH", // Send both in-app and push notification
-                      referenceId: bookingId,
-                      referenceType: "bookings",
-                      priority: "HIGH",
-                      metadata: {
-                        bookingId,
-                        newPlayerId: transaction.userId,
-                        newPlayerName: newPlayer.fullName,
-                        newPlayerPosition: requestedPosition,
-                        newPlayerTeam: requestedTeam,
-                        timestamp: new Date().toISOString(),
-                      },
-                      session,
-                    });
-                  } catch (error) {
-                    console.error(
-                      `Failed to send notification to player ${playerId}:`,
-                      error
-                    );
-                    // Continue with other notifications even if one fails
-                  }
-                }
+                await Promise.all(
+                  otherPlayerIds.map(async (playerId) => {
+                    try {
+                      await notifyUser({
+                        recipientId: playerId,
+                        type: "PLAYER_JOINED",
+                        title: "New Player Joined",
+                        message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
+                        category: "GAME",
+                        notificationType: "BOTH",
+                        referenceId: bookingId,
+                        referenceType: "bookings",
+                        priority: "HIGH",
+                        metadata: {
+                          bookingId,
+                          newPlayerId: transaction.userId,
+                          newPlayerName: newPlayer.fullName,
+                          newPlayerPosition: requestedPosition,
+                          newPlayerTeam: requestedTeam,
+                          timestamp: new Date().toISOString(),
+                        },
+                        session,
+                      });
+                    } catch (error) {
+                      console.error(
+                        `Failed to send notification to player ${playerId}:`,
+                        error
+                      );
+                    }
+                  })
+                );
               }
 
               // Update chat group to include the new player
@@ -580,20 +586,29 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         transaction.bookingId.length > 0
       ) {
         // Create notification for payment failure
-        for (const bookingId of transaction.bookingId) {
-          const booking = await bookingModel.findById(bookingId);
-          if (booking) {
-            await notifyUser({
-              recipientId: booking.userId,
-              type: "PAYMENT_FAILED",
-              title: "Payment Failed",
-              priority: "HIGH",
-              notificationType: "BOTH",
-              message: `Your payment of ₹${transaction.amount} for booking has failed. Reason: ${failureReason}. Please try again.`,
-              category: "PAYMENT",
-            });
-          }
-        }
+        await Promise.all(
+          transaction.bookingId.map(async (bookingId) => {
+            const booking = await bookingModel.findById(bookingId);
+            if (booking) {
+              try {
+                await notifyUser({
+                  recipientId: booking.userId,
+                  type: "PAYMENT_FAILED",
+                  title: "Payment Failed",
+                  priority: "HIGH",
+                  notificationType: "BOTH",
+                  message: `Your payment of ₹${transaction.amount} for booking has failed. Reason: ${failureReason}. Please try again.`,
+                  category: "PAYMENT",
+                });
+              } catch (err) {
+                console.error(
+                  `Failed to send notification for booking ${bookingId}:`,
+                  err
+                );
+              }
+            }
+          })
+        );
       }
 
       return res.status(httpStatusCode.OK).json({
