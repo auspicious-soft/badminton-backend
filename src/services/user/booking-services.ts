@@ -554,7 +554,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
                 notificationType: "BOTH", // Send both in-app and push notification
                 referenceId: bookingId,
                 referenceType: "bookings",
-                priority: "MEDIUM",
+                priority: "HIGH",
                 metadata: {
                   bookingId,
                   newPlayerId: userData.id,
@@ -579,6 +579,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           recipientId: bookingToUpdate.userId,
           type: "PLAYER_JOINED",
           title: "New Player Joined",
+          priority: "HIGH",
           message: `${
             userData.name || newPlayer?.fullName || "A player"
           } has joined your game.`,

@@ -482,7 +482,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                       notificationType: "BOTH", // Send both in-app and push notification
                       referenceId: bookingId,
                       referenceType: "bookings",
-                      priority: "MEDIUM",
+                      priority: "HIGH",
                       metadata: {
                         bookingId,
                         newPlayerId: transaction.userId,
@@ -584,6 +584,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               recipientId: booking.userId,
               type: "PAYMENT_FAILED",
               title: "Payment Failed",
+              priority: "HIGH",
+              notificationType: "BOTH",
               message: `Your payment of ₹${transaction.amount} for booking has failed. Reason: ${failureReason}. Please try again.`,
               category: "PAYMENT",
             });
@@ -657,6 +659,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             await notifyUser({
               recipientId: booking.userId,
               type: "REFUND_COMPLETED",
+              priority: "HIGH",
+              notificationType: "BOTH",
               title: "Refund Completed",
               message: `Your refund of ₹${amount} for booking has been processed successfully.`,
               category: "PAYMENT",
@@ -692,6 +696,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             await notifyUser({
               recipientId: booking.userId,
               type: "REFUND_FAILED",
+              priority: "HIGH",
+              notificationType: "BOTH",
               title: "Refund Failed",
               message: `Your refund of ₹${amount} for booking has failed. Please contact support for assistance.`,
               category: "PAYMENT",
