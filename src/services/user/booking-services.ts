@@ -563,6 +563,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
                   newPlayerTeam: requestedTeam,
                   timestamp: new Date().toISOString(),
                 },
+                session
               });
             } catch (error) {
               console.error(
@@ -587,6 +588,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           referenceId: bookingId,
           referenceType: "bookings",
           notificationType: "BOTH",
+          session
         });
       }
     }
@@ -853,6 +855,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
                 amount: transaction.amount,
                 timestamp: new Date().toISOString(),
               },
+              session,
             });
           }
         }
@@ -968,6 +971,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
                   amount: transaction.amount,
                   timestamp: new Date().toISOString(),
                 },
+                session,
               });
             }
           }
@@ -1492,6 +1496,7 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     referenceId: bookingId,
     referenceType: "bookings",
     notificationType: "BOTH", // Send both in-app and push notification
+    session,
   }));
 
   await Promise.all(
