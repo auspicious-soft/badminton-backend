@@ -240,6 +240,7 @@ export const createNotification = async (
     metadata = {},
     notificationType = "BOTH",
     expiresAt,
+    session
   }: {
     recipientId: mongoose.Types.ObjectId;
     senderId?: mongoose.Types.ObjectId;
@@ -253,10 +254,11 @@ export const createNotification = async (
     metadata?: Record<string, any>;
     notificationType?: "PUSH" | "IN_APP" | "BOTH";
     expiresAt?: Date;
+    session?: mongoose.ClientSession;
   },
   options: { session?: mongoose.ClientSession } = {}
 ) => {
-  const { session } = options;
+  // const { session } = options;
 
   const [notification] = await notificationModel.create(
     [

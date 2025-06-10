@@ -44,6 +44,7 @@ import {
 } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
 import { uploadUserImageController } from "src/controllers/user/user-controller";
+import { logout } from "src/controllers/user/settings-controller";
 
 const router = Router();
 
@@ -92,4 +93,6 @@ router.get("/application-info", getAppInfo);
 
 // router.post("/upload-image", upload.single('image'), uploadUserImageController);
 router.post("/upload-image", uploadUserImageController);
+router.post("/logout", logout)
+
 export { router };

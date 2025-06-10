@@ -103,6 +103,7 @@ export const notifyUser = async ({
     for (const token of user.fcmToken) {
       if (!token) continue;
       try {
+        console.log(`✅ ✅ ✅ Sending ✅ ✅ ✅ notification ✅ ✅ ✅ ${user?.fullName}`);
         await sendNotification(token, title, message, metadata);
       } catch (error) {
         console.warn(`⚠️ Failed to send notification to token ${token}`);
