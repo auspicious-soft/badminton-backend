@@ -228,6 +228,7 @@ export const sendRequest = async (req: Request, res: Response) => {
           metadata: {
             friendId: userData.id,
           },
+          notificationType: "BOTH", // Send both push and in-app notifications
           referenceId: (request as any)._id,
           referenceType: "users",
         });
@@ -373,6 +374,7 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
               metadata: {
                 friendId: userData.id,
               },
+              notificationType: "BOTH", // Send both push and in-app notifications
               referenceId: (updatedRequest as any)._id,
               referenceType: "users",
             });

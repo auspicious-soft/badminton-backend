@@ -414,7 +414,7 @@ export const sendMessage = async (req: Request, res: Response) => {
             chatId: (chat as any)._id.toString(),
             senderId: userId,
           },
-          notificationType: "BOTH", // customize if needed
+          notificationType: "PUSH", // customize if needed
         });
       }
     });
