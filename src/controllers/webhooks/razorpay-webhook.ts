@@ -14,6 +14,7 @@ import { cartModel } from "src/models/user/user-cart";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { usersModel } from "src/models/user/user-schema";
 import { getCurrentISTTime } from "src/utils";
+import { venueModel } from "src/models/venue/venue-schema";
 
 configDotenv();
 
@@ -311,10 +312,15 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             });
 
             if (!checkGroupExist) {
+              const groupImage = await venueModel.findById(
+                booking.venueId,
+                "image"
+              );
               await chatModel.create({
                 bookingId: booking._id,
                 chatType: "group",
                 groupName: `Match on ${booking.bookingDate.toLocaleDateString()}`,
+                groupImage: groupImage?.image || "",
                 // groupName: `Booking Chat - ${booking._id}`,
                 participants: [
                   // booking.userId,
@@ -647,11 +653,27 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       }
 
       // Update transaction with refund details
-      await transactionModel.findByIdAndUpdate(transaction._id, {
-        refundId,
-        refundedAmount: amount,
-        status: status === "refunded" ? "refunded" : transaction.status,
-      });
+
+      await transactionModel.create(
+        {
+          userId: transaction.userId,
+          orderId: transaction.orderId,
+          razorpayPaymentId: paymentId,
+          refundId: refundId,
+          method: transaction.method,
+          amount,
+          text: "Booking cancelled by creator",
+          status,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      );
+
+      // await transactionModel.findByIdAndUpdate(transaction._id, {
+      //   refundId,
+      //   refundedAmount: amount,
+      //   status: status === "refunded" ? "refunded" : transaction.status,
+      // });
 
       // If refund was processed successfully, update bookings and create notifications
       if (

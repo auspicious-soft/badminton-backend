@@ -882,6 +882,7 @@ export const getFriendsById = async (req: Request, res: Response) => {
         team1: team1WithDetails,
         team2: team2WithDetails,
         score: matchScore,
+        isCompetitive: match.isCompetitive || false,
       };
     });
 

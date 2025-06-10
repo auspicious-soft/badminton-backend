@@ -15,6 +15,7 @@ import { additionalUserInfoModel } from "src/models/user/additional-info-schema"
 import { chatModel } from "src/models/chat/chat-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
+import { venueModel } from "src/models/venue/venue-schema";
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -766,6 +767,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           status: "completed",
           isWebhookVerified: true,
           method: "playcoins",
+          playcoinsUsed: transaction.amount,
           paymentDate: new Date(),
         },
         { session }
@@ -818,8 +820,13 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
         });
 
         if (!checkGroupExist) {
+          const groupImage = await venueModel.findById(
+            booking.venueId,
+            "image"
+          );
           await chatModel.create({
             bookingId: booking._id,
+            groupImage: groupImage?.image || "",
             chatType: "group",
             groupName: `Match on ${booking.bookingDate.toLocaleDateString()}`,
             participants: [
@@ -1453,16 +1460,33 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Update transaction record
-  await transactionModel.findByIdAndUpdate(
-    userTransaction._id,
-    {
-      status: "refunded",
-      isWebhookVerified: true,
-      razorpayRefundId: refund?.id || null,
-      refundAmount: actualRefundAmount,
-      refundDate: new Date(),
-    },
+  console.log({
+    userId: userData.id,
+    bookingId,
+    amount: userTransaction.playcoinsUsed,
+    playcoinsUsed: userTransaction.playcoinsUsed,
+    method: userTransaction?.method,
+    status: "refunded",
+    isWebhookVerified: true,
+    razorpayRefundId: refund?.id || null,
+    transactionDate: new Date(),
+  });
+
+  await transactionModel.create(
+    [
+      {
+        userId: userData.id,
+        bookingId,
+        text: "Booking cancelled by creator",
+        amount: userTransaction.playcoinsUsed,
+        playcoinsUsed: userTransaction.playcoinsUsed,
+        method: userTransaction?.method,
+        status: "refunded",
+        isWebhookVerified: true,
+        razorpayRefundId: refund?.id || null,
+        transactionDate: new Date(),
+      },
+    ],
     { session }
   );
 
@@ -1498,6 +1522,7 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
       booking.bookingSlots
     } has been cancelled by the creator.`,
     category: "BOOKING",
+    priority: "HIGH",
     referenceId: bookingId,
     referenceType: "bookings",
     notificationType: "BOTH", // Send both in-app and push notification

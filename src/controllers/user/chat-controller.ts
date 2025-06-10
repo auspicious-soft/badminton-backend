@@ -69,7 +69,7 @@ export const getUserChats = async (req: Request, res: Response) => {
           (chatObj as any).unseenCount = unseenCount;
         }
       } else if (chatTypeFilter === "group") {
-        (chatObj as any).groupImage = chatObj.groupImage || null;
+        (chatObj as any).recipientProfilePic = chatObj.groupImage || null;
         (chatObj as any).unseenCount = unseenCount;
       }
 
