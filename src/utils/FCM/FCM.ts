@@ -113,6 +113,7 @@ export const notifyUser = async ({
 
   if (notificationType === "IN_APP" || notificationType === "BOTH") {
     try {
+      console.log(`✅ ❌ ✅ Notification ✅ ❌ ✅ Saving ✅ ❌ ✅ `);
       await createNotification({
         recipientId,
         type,

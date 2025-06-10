@@ -336,7 +336,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               if (playerId.toString() !== transaction.userId.toString()) {
                 await notifyUser({
                   recipientId: playerId,
-                  type: "PAYMENT_SUCCESS",
+                  type: "PAYMENT_SUCCESSFUL",
                   title: "Game Booked Successfully",
                   message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
                   category: "PAYMENT",

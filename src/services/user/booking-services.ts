@@ -563,7 +563,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
                   newPlayerTeam: requestedTeam,
                   timestamp: new Date().toISOString(),
                 },
-                session
+                session,
               });
             } catch (error) {
               console.error(
@@ -588,7 +588,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           referenceId: bookingId,
           referenceType: "bookings",
           notificationType: "BOTH",
-          session
+          session,
         });
       }
     }
@@ -841,7 +841,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           if (playerId.toString() !== transaction.userId.toString()) {
             await notifyUser({
               recipientId: playerId,
-              type: "PAYMENT_SUCCESS",
+              type: "PAYMENT_SUCCESSFUL",
               title: "Game Booked Successfully",
               message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
               category: "PAYMENT",
@@ -953,28 +953,33 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
             ...booking.team1.map((player: any) => player.playerId),
             ...booking.team2.map((player: any) => player.playerId),
           ];
-          for (const playerId of allPlayerIds) {
-            if (playerId.toString() !== transaction.userId.toString()) {
-              await notifyUser({
-                recipientId: playerId,
-                type: "PAYMENT_SUCCESS",
-                title: "Game Booked Successfully",
-                message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-                category: "PAYMENT",
-                notificationType: "BOTH",
-                referenceId: (booking as any)._id.toString(),
-                priority: "HIGH",
-                referenceType: "bookings",
-                metadata: {
-                  bookingId: booking._id,
-                  transactionId: transaction._id,
-                  amount: transaction.amount,
-                  timestamp: new Date().toISOString(),
-                },
-                session,
-              });
-            }
-          }
+          await Promise.all(
+            allPlayerIds
+              .filter(
+                (playerId) =>
+                  playerId.toString() !== transaction.userId.toString()
+              )
+              .map((playerId) =>
+                notifyUser({
+                  recipientId: playerId,
+                  type: "PAYMENT_SUCCESSFUL",
+                  title: "Game Booked Successfully",
+                  message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                  category: "PAYMENT",
+                  notificationType: "BOTH",
+                  referenceId: (booking as any)._id.toString(),
+                  priority: "HIGH",
+                  referenceType: "bookings",
+                  metadata: {
+                    bookingId: booking._id,
+                    transactionId: transaction._id,
+                    amount: transaction.amount,
+                    timestamp: new Date().toISOString(),
+                  },
+                  session,
+                })
+              )
+          );
         }
 
         await session.commitTransaction();
