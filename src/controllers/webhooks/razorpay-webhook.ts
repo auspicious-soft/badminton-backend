@@ -126,6 +126,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 paymentId,
                 amount,
               },
+              session
             });
 
             // Update product quantities
@@ -349,6 +350,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                     amount: transaction.amount,
                     timestamp: new Date().toISOString(),
                   },
+                  session,
                 });
               }
             }
@@ -491,6 +493,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                         newPlayerTeam: requestedTeam,
                         timestamp: new Date().toISOString(),
                       },
+                      session,
                     });
                   } catch (error) {
                     console.error(
@@ -664,6 +667,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               title: "Refund Completed",
               message: `Your refund of ₹${amount} for booking has been processed successfully.`,
               category: "PAYMENT",
+              session,
             });
 
             // Update team1 players

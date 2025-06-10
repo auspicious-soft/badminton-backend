@@ -11,7 +11,6 @@ import { getCurrentISTTime } from "../../utils";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 
-
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
@@ -129,7 +128,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
 
           // Determine booking status based on date
           let status = "upcoming";
-          const bookingDate = new Date(booking.bookingDate).getTime()
+          const bookingDate = new Date(booking.bookingDate).getTime();
 
           if (bookingDate < today) {
             status = "previous";
@@ -166,45 +165,59 @@ export const getMyMatches = async (req: Request, res: Response) => {
 
       response.data = sortedBookings;
     } else {
-      // Keep the existing implementation for type === "current"
-      const previous = await bookingModel
-        .find({
-          $or: [
-            { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
-            { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
-          ],
-          bookingDate: { $lt: new Date() },
-        })
-        .populate({
-          path: "venueId",
-          select: "name city state address",
-        })
-        .populate({
-          path: "courtId",
-          select: "games",
-        })
-        .lean();
+      const nowIST = getCurrentISTTime();
+      const currentISTHour = nowIST.getHours();
 
-      const current = await bookingModel
+      // Normalize today's date in IST
+      const todayStartIST = new Date(nowIST);
+      todayStartIST.setHours(0, 0, 0, 0);
+
+      const todayEndIST = new Date(nowIST);
+      todayEndIST.setHours(23, 59, 59, 999);
+      // Keep the existing implementation for type === "current"
+      const todayBookings = await bookingModel
         .find({
           $or: [
             { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
             { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
           ],
           bookingDate: {
-            $gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            $lt: new Date(new Date().setHours(23, 59, 59, 999)),
+            $gte: todayStartIST,
+            $lte: todayEndIST,
           },
         })
-        .populate({
-          path: "venueId",
-          select: "name city state address",
-        })
-        .populate({
-          path: "courtId",
-          select: "games",
-        })
+        .populate("venueId", "name city state address")
+        .populate("courtId", "games")
         .lean();
+
+      // Split into current and previous using slot hour comparison
+      const current: any[] = [];
+      const currentPrevious: any[] = [];
+
+      for (const booking of todayBookings) {
+        const slotHour = parseInt(booking.bookingSlots.split(":")[0], 10);
+        if (slotHour >= currentISTHour) {
+          current.push(booking);
+        } else {
+          currentPrevious.push(booking);
+        }
+      }
+
+      // Fetch all previous day bookings
+      const previousDaysBookings = await bookingModel
+        .find({
+          $or: [
+            { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
+            { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
+          ],
+          bookingDate: { $lt: todayStartIST }, // strictly before today
+        })
+        .populate("venueId", "name city state address")
+        .populate("courtId", "games")
+        .lean();
+
+      // Combine with today’s past-hour slots for full "previous"
+      const previous = [...previousDaysBookings, ...currentPrevious];
 
       // Get all player IDs from both previous and current bookings
       const playerIds = new Set<string>();
@@ -520,7 +533,6 @@ export const uploadScore = async (req: Request, res: Response) => {
   }
 };
 
-
 export const getMyTransactions = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
@@ -532,7 +544,7 @@ export const getMyTransactions = async (req: Request, res: Response) => {
     const userInfo = await additionalUserInfoModel
       .findOne({ userId: userData.id })
       .lean();
-    
+
     const playCoinsBalance = userInfo?.playCoins || 0;
 
     // Get total matches played by the user
@@ -549,36 +561,41 @@ export const getMyTransactions = async (req: Request, res: Response) => {
       .find({
         userId: userData.id,
       })
-      .select('amount method status playcoinsUsed createdAt notes razorpayAmount text')
+      .select(
+        "amount method status playcoinsUsed createdAt notes razorpayAmount text"
+      )
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit as string))
       .lean();
 
     // Process transactions to add transaction type (received/deducted) and payment breakdown
-    const transactionHistory = transactions.map(transaction => {
+    const transactionHistory = transactions.map((transaction) => {
       // Calculate total amount (amount paid + playcoins used)
       const moneyAmount = transaction.amount - transaction.playcoinsUsed;
       const playcoinsUsed = transaction.playcoinsUsed || 0;
       const totalAmount = moneyAmount + playcoinsUsed;
-      
+
       // Determine payment method
-      let paymentMethod = transaction.method || 'razorpay';
+      let paymentMethod = transaction.method || "razorpay";
       if (playcoinsUsed > 0 && moneyAmount > 0) {
-        paymentMethod = 'both'; // Both playcoins and money were used
+        paymentMethod = "both"; // Both playcoins and money were used
       } else if (playcoinsUsed > 0 && moneyAmount === 0) {
-        paymentMethod = 'playcoins'; // Only playcoins were used
+        paymentMethod = "playcoins"; // Only playcoins were used
       }
-      
+
       return {
         ...transaction,
-        transactionType: transaction.status === 'refunded' || "received" ? 'received' : 'deducted',
+        transactionType:
+          transaction.status === "refunded" || transaction.status === "received"
+            ? "received"
+            : "deducted",
         paymentMethod: paymentMethod,
         paymentBreakdown: {
           totalAmount: totalAmount,
           moneyPaid: moneyAmount,
-          playcoinsUsed: playcoinsUsed
-        }
+          playcoinsUsed: playcoinsUsed,
+        },
       };
     });
 
@@ -592,7 +609,7 @@ export const getMyTransactions = async (req: Request, res: Response) => {
       data: {
         totalPlayCoinsBalance: playCoinsBalance,
         totalMatches: totalMatches,
-        transactionHistory: transactionHistory
+        transactionHistory: transactionHistory,
       },
       meta: {
         total: totalTransactions,
@@ -612,4 +629,3 @@ export const getMyTransactions = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-

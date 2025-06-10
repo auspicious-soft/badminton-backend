@@ -83,6 +83,7 @@ export const notifyUser = async ({
   metadata = {},
   notificationType = "BOTH",
   expiresAt,
+  session
 }: {
   recipientId: mongoose.Types.ObjectId;
   type: string;
@@ -95,6 +96,7 @@ export const notifyUser = async ({
   metadata?: Record<string, any>;
   notificationType?: "PUSH" | "IN_APP" | "BOTH";
   expiresAt?: Date;
+  session?: mongoose.ClientSession;
 }) => {
   let user = await mongoose.model("users").findById(recipientId);
   if (notificationType === "PUSH" || notificationType === "BOTH") {
@@ -122,7 +124,8 @@ export const notifyUser = async ({
         metadata,
         notificationType,
         expiresAt,
-      });
+      },
+      { session });
     } catch (error) {
       console.error("❌ Error saving notification to DB:", error);
     }
