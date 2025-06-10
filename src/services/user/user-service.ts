@@ -36,6 +36,7 @@ import fs from "fs";
 import { Readable } from "stream";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { transactionModel } from "src/models/admin/transaction-schema";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 configDotenv();
 export interface UserPayload {
@@ -700,8 +701,20 @@ export const verifyOTPService = async (
         await transactionModel.create({
           userId: referredPerson.userId,
           amount: bonusAmount?.referral?.bonusAmount || 50,
-          status: 'received',
-          text: "Referral bonus received"
+          status: "received",
+          text: "Referral bonus received",
+        });
+        await notifyUser({
+          recipientId: referredPerson.userId,
+          type: "Referral",
+          title: "Referral Bonus Received",
+          message: `You have received ${
+            bonusAmount?.referral?.bonusAmount || 50
+          } coins for referring a friend!`,
+          category: "Referral",
+          priority: "HIGH",
+          referenceType: "User",
+          metadata: { referralCode: user?.referralUsed },
         });
       } else {
         errorResponseHandler(
