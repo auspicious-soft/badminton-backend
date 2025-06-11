@@ -3,6 +3,7 @@ import {
   createEmployee,
   createVenue,
   dashboard,
+  employeeDashboard,
   getAdminDetails,
   getCities,
   getEmployees,
@@ -53,6 +54,7 @@ import {
 const router = Router();
 
 router.get("/dashboard", dashboard)
+router.get("/dashboard-emp", employeeDashboard)
 
 //Emmpoyee routes
 

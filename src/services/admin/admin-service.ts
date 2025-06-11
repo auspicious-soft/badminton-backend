@@ -1061,7 +1061,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
       matchQuery.venueId = { $in: venueIds };
     }
 
-    if(venueId) {
+    if (venueId) {
       // If venueId is provided, filter by that specific venue
       matchQuery.venueId = new mongoose.Types.ObjectId(venueId);
     }
@@ -1480,6 +1480,324 @@ export const dashboardServices = async (payload: any, res: Response) => {
     console.error("Dashboard error:", error);
     return errorResponseHandler(
       "Error retrieving dashboard data: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+};
+
+export const employeeDashboardServices = async (req: any, res: Response) => {
+  try {
+    const { year, venueId } = req.query;
+
+    if (!venueId) {
+      return res.status(400).json({
+        success: false,
+        message: "Venue ID is required",
+      });
+    }
+
+    const now = new Date();
+    const currentYear = Number(year) || now.getUTCFullYear();
+
+    // Time boundaries in UTC
+    const startOfDay = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0
+      )
+    );
+    const endOfDay = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        23,
+        59,
+        59,
+        999
+      )
+    );
+    const startOfMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+    );
+    const endOfMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)
+    );
+    const startOfYear = new Date(Date.UTC(currentYear, 0, 1));
+    const endOfYear = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999));
+
+    // Bookings for today (filtered by venue)
+    const todayScheduledBookings = await bookingModel
+      .find({
+        venueId,
+        bookingDate: { $gte: startOfDay, $lte: endOfDay },
+        bookingPaymentStatus: true,
+        cancellationReason: null,
+      })
+      .populate("userId", "fullName")
+      .populate("courtId", "games")
+      .select("bookingSlots isMaintenance")
+      .lean();
+
+    todayScheduledBookings.sort((a, b) => {
+      const slotA = Array.isArray(a.bookingSlots)
+        ? a.bookingSlots[0]
+        : a.bookingSlots;
+      const slotB = Array.isArray(b.bookingSlots)
+        ? b.bookingSlots[0]
+        : b.bookingSlots;
+      const [hA, mA] = slotA.split(":").map(Number);
+      const [hB, mB] = slotB.split(":").map(Number);
+      return hA * 60 + mA - (hB * 60 + mB);
+    });
+
+    const formatBookingData = todayScheduledBookings.map((booking) => ({
+      time: booking.bookingSlots,
+      matches: 1,
+      game: (booking.courtId as any)?.games || "Unknown",
+      player: (booking.userId as any)?.fullName || "Unknown",
+      duration: "60 Mins",
+      isMaintenance: booking.isMaintenance || false,
+    }));
+
+    // Yearly stats
+    const yearlyGameStats = await bookingModel.aggregate([
+      {
+        $match: {
+          venueId: new mongoose.Types.ObjectId(venueId),
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+          bookingDate: { $gte: startOfYear, $lte: endOfYear },
+        },
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo",
+        },
+      },
+      { $unwind: { path: "$courtInfo", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$courtInfo.games",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    let totalYearlyGames = 0,
+      padelYearlyGames = 0,
+      pickleballYearlyGames = 0;
+    yearlyGameStats.forEach((stat) => {
+      if (stat._id === "Padel") padelYearlyGames = stat.count;
+      else if (stat._id === "Pickleball") pickleballYearlyGames = stat.count;
+      totalYearlyGames += stat.count;
+    });
+
+    const gameComposition = {
+      Padel: totalYearlyGames
+        ? Math.round((padelYearlyGames / totalYearlyGames) * 100)
+        : 0,
+      Pickleball: totalYearlyGames
+        ? Math.round((pickleballYearlyGames / totalYearlyGames) * 100)
+        : 0,
+    };
+
+    // Monthly stats
+    const monthlyStats = await bookingModel.aggregate([
+      {
+        $match: {
+          venueId: new mongoose.Types.ObjectId(venueId),
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+          bookingDate: { $gte: startOfMonth, $lte: endOfMonth },
+        },
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo",
+        },
+      },
+      { $unwind: { path: "$courtInfo", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: "$courtInfo.games",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    let totalMatchesThisMonth = 0,
+      padelMatchesThisMonth = 0,
+      pickleballMatchesThisMonth = 0;
+    monthlyStats.forEach((stat) => {
+      if (stat._id === "Padel") padelMatchesThisMonth = stat.count;
+      else if (stat._id === "Pickleball")
+        pickleballMatchesThisMonth = stat.count;
+      totalMatchesThisMonth += stat.count;
+    });
+
+    // Income this month
+    const incomeResult = await transactionModel.aggregate([
+      {
+        $match: {
+          venueId: new mongoose.Types.ObjectId(venueId),
+          status: "captured",
+          createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalIncome: { $sum: "$amount" },
+        },
+      },
+    ]);
+    const incomeThisMonth = incomeResult?.[0]?.totalIncome || 0;
+
+    // Recent bookings
+    const recentBookings = await bookingModel.aggregate([
+      {
+        $match: {
+          venueId: new mongoose.Types.ObjectId(venueId),
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: 5 },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "userInfo",
+        },
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo",
+        },
+      },
+      {
+        $lookup: {
+          from: "venues",
+          localField: "venueId",
+          foreignField: "_id",
+          as: "venueInfo",
+        },
+      },
+      { $unwind: "$userInfo" },
+      { $unwind: "$courtInfo" },
+      { $unwind: "$venueInfo" },
+      {
+        $project: {
+          _id: 1,
+          fullName: "$userInfo.fullName",
+          isMaintenance: "$isMaintenance",
+          game: "$courtInfo.games",
+          city: "$venueInfo.city",
+          date: "$bookingDate",
+        },
+      },
+    ]);
+
+    // Monthly Game Graph
+    const monthlyGameGraph = await bookingModel.aggregate([
+      {
+        $match: {
+          venueId: new mongoose.Types.ObjectId(venueId),
+          bookingPaymentStatus: true,
+          cancellationReason: null,
+          $expr: { $eq: [{ $year: "$bookingDate" }, currentYear] },
+        },
+      },
+      {
+        $lookup: {
+          from: "courts",
+          localField: "courtId",
+          foreignField: "_id",
+          as: "courtInfo",
+        },
+      },
+      { $unwind: { path: "$courtInfo", preserveNullAndEmptyArrays: true } },
+      {
+        $group: {
+          _id: {
+            month: { $month: "$bookingDate" },
+            game: "$courtInfo.games",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          month: "$_id.month",
+          game: "$_id.game",
+          count: 1,
+        },
+      },
+    ]);
+
+    const processedMonthlyData = Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1;
+      const padel =
+        monthlyGameGraph.find((d) => d.month === month && d.game === "Padel")
+          ?.count || 0;
+      const pickleball =
+        monthlyGameGraph.find(
+          (d) => d.month === month && d.game === "Pickleball"
+        )?.count || 0;
+
+      return {
+        month: `${month < 10 ? "0" : ""}${month}/${currentYear}`,
+        padel,
+        pickleball,
+      };
+    });
+
+    const ongoingMatches: any = { Padel: 0, Pickleball: 0 };
+    formatBookingData.forEach((entry) => {
+      const game = entry.game;
+      if (ongoingMatches[game] != null) ongoingMatches[game]++;
+      else ongoingMatches[game] = 1;
+    });
+
+    return {
+      success: true,
+      message: "Dashboard data retrieved successfully",
+      data: {
+        todaySchedule: formatBookingData,
+        monthlyGameGraph: processedMonthlyData,
+        recentBookings,
+        stats: {
+          totalMatchesThisMonth,
+          padelMatchesThisMonth,
+          pickleballMatchesThisMonth,
+          incomeThisMonth,
+          gameComposition,
+          ongoingMatches,
+        },
+      },
+    };
+  } catch (error) {
+    console.error("Employee dashboard error:", error);
+    return errorResponseHandler(
+      "Error retrieving employee dashboard data: " + (error as Error).message,
       httpStatusCode.INTERNAL_SERVER_ERROR,
       res
     );
