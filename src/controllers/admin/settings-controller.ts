@@ -364,20 +364,70 @@ export const updateRewardsSettings = async (req: Request, res: Response) => {
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {
-    const notifications = await notificationModel.findOne().select("notifications");
+    const venueId = req.query.venueId as string;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
 
-    if (!notifications) {
-      return errorResponseHandler(
-        "Notifications not found",
-        httpStatusCode.NOT_FOUND,
-        res
-      );
+    const matchFilter: any = {
+      type: { $nin: ["PLAYER_JOINED_GAME"] },
+      isReadyByAdmin: false,
+      isDeleted: false,
+    };
+
+    // Count total matching documents
+    let totalNotifications = 0;
+
+    // Build aggregation
+    const aggregationPipeline: any[] = [
+      { $match: matchFilter },
+      {
+        $lookup: {
+          from: "bookings", // collection name
+          localField: "referenceId",
+          foreignField: "_id",
+          as: "bookingData",
+        },
+      },
+      { $unwind: { path: "$bookingData", preserveNullAndEmptyArrays: true } },
+    ];
+
+    if (venueId) {
+      aggregationPipeline.push({
+        $match: {
+          "bookingData.venueId": new mongoose.Types.ObjectId(venueId),
+        },
+      });
     }
+
+    // Clone pipeline for count before pagination stages
+    const countPipeline = [...aggregationPipeline, { $count: "total" }];
+    const countResult = await notificationModel.aggregate(countPipeline);
+    totalNotifications = countResult[0]?.total || 0;
+
+    // Add pagination
+    aggregationPipeline.push(
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit }
+    );
+
+    const notifications = await notificationModel.aggregate(
+      aggregationPipeline
+    );
 
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Notifications retrieved successfully",
-      // data: notifications.notifications,
+      data: notifications,
+      meta: {
+        total: totalNotifications,
+        hasPreviousPage: page > 1,
+        hasNextPage: skip + limit < totalNotifications,
+        page,
+        limit,
+        totalPages: Math.ceil(totalNotifications / limit),
+      },
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
@@ -385,4 +435,4 @@ export const getNotifications = async (req: Request, res: Response) => {
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: message || "An error occurred" });
   }
-}
+};
