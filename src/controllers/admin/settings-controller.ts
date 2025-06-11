@@ -436,3 +436,45 @@ export const getNotifications = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+export const readNotification = async (req: Request, res: Response) => {
+  try {
+    const { notificationId } = req.body;
+
+    let updateResult;
+
+    if (!notificationId) {
+      // Mark all not-ready notifications as ready
+      updateResult = await notificationModel.updateMany(
+        { isReadyByAdmin: false, isDeleted: false },
+        { $set: { isReadyByAdmin: true } }
+      );
+    } else {
+      if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+        return errorResponseHandler(
+          "Invalid notificationId",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+
+      updateResult = await notificationModel.updateOne(
+        { _id: new mongoose.Types.ObjectId(notificationId), isDeleted: false },
+        { $set: { isReadyByAdmin: true } }
+      );
+    }
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message:
+        updateResult.modifiedCount > 1
+          ? "All unread notifications marked as ready by admin"
+          : "Notification marked as ready by admin",
+      updatedCount: updateResult.modifiedCount,
+    });
+  } catch (error: any) {
+    const { code, message } = error;
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};

@@ -582,8 +582,9 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
           type: "PLAYER_JOINED_GAME",
           title: "New Player Joined",
           priority: "HIGH",
-          message: `${userData.name || newPlayer?.fullName || "A player"
-            } has joined your game.`,
+          message: `${
+            userData.name || newPlayer?.fullName || "A player"
+          } has joined your game.`,
           category: "GAME",
           referenceId: bookingId,
           referenceType: "bookings",
@@ -667,16 +668,75 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
 
 export const userNotificationServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
 
-  const data = await notificationModel.find({
-    recipientId: userData.id,
-  });
+  const skip = (page - 1) * limit;
+
+  const [data, total] = await Promise.all([
+    notificationModel
+      .find({
+        recipientId: userData.id,
+        isDeleted: false,
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    notificationModel.countDocuments({
+      recipientId: userData.id,
+      isDeleted: false,
+    }),
+  ]);
 
   return {
     success: true,
     message: "Notifications retrieved successfully",
-    data: data,
+    data,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasPreviousPage: page > 1,
+      hasNextPage: page * limit < total,
+    },
   };
+};
+
+export const readUserNotificationServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { notificationId } = req.body;
+
+  try {
+    let result;
+
+    if (!notificationId) {
+      result = await notificationModel.updateMany(
+        { recipientId: userData.id, isRead: false, isDeleted: false },
+        { $set: { isRead: true } }
+      );
+    } else {
+      result = await notificationModel.updateOne(
+        {
+          _id: new mongoose.Types.ObjectId(notificationId),
+          recipientId: userData.id,
+          isDeleted: false,
+        },
+        { $set: { isRead: true } }
+      );
+    }
+
+    return {
+      success: true,
+      message:
+        result.modifiedCount > 1
+          ? "All notifications marked as read"
+          : "Notification marked as read",
+      updatedCount: result.modifiedCount,
+    };
+  } catch (error: any) {
+    throw error;
+  }
 };
 
 export const paymentBookingServices = async (req: Request, res: Response) => {

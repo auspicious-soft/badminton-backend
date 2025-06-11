@@ -38,6 +38,7 @@ import {
   getVenues,
   joinOpenCourt,
   modifyBooking,
+  readUserNotifications,
   updateUser,
   userHome,
   userNotifications,
@@ -68,7 +69,10 @@ router.get("/my-matches", getMyMatches);
 router.get("/my-matches/:id", getMatchesById);
 router.post("/upload-score", uploadScore);
 
-router.get("/user-notifications", userNotifications);
+router
+  .route("/user-notifications")
+  .get(userNotifications)
+  .post(readUserNotifications);
 
 router.get("/search-friend", searchFriend);
 router.post("/send-request", sendRequest);
@@ -77,7 +81,11 @@ router.post("/block-user", blockUser);
 router.get("/get-friends", getFriends);
 router.get("/get-friends-byId/:id", getFriendsById);
 
-router.route("/merchandise").get(getMerchandise).post(orderProduct).put(rateProduct);
+router
+  .route("/merchandise")
+  .get(getMerchandise)
+  .post(orderProduct)
+  .put(rateProduct);
 router.route("/get-orders").get(getMyOrders);
 router.route("/get-orders/:id").get(getOrderById);
 router.route("/merchandise/:id").get(getMerchandiseById);
@@ -93,6 +101,6 @@ router.get("/application-info", getAppInfo);
 
 // router.post("/upload-image", upload.single('image'), uploadUserImageController);
 router.post("/upload-image", uploadUserImageController);
-router.post("/logout", logout)
+router.post("/logout", logout);
 
 export { router };
