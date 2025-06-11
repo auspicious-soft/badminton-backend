@@ -489,7 +489,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                     try {
                       await notifyUser({
                         recipientId: playerId,
-                        type: "PLAYER_JOINED",
+                        type: "PLAYER_JOINED_GAME",
                         title: "New Player Joined",
                         message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
                         category: "GAME",

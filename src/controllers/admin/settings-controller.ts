@@ -7,6 +7,7 @@ import {
 import mongoose from "mongoose";
 import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
+import { notificationModel } from "src/models/notification/notification-schema";
 
 // Create or update pricing
 export const createUpdatePricing = async (req: Request, res: Response) => {
@@ -363,7 +364,7 @@ export const updateRewardsSettings = async (req: Request, res: Response) => {
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {
-    const notifications = await adminSettingModel.findOne().select("notifications");
+    const notifications = await notificationModel.findOne().select("notifications");
 
     if (!notifications) {
       return errorResponseHandler(

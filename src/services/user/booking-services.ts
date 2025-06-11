@@ -548,7 +548,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
             try {
               await notifyUser({
                 recipientId: playerId,
-                type: "PLAYER_JOINED",
+                type: "PLAYER_JOINED_GAME",
                 title: "New Player Joined",
                 message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
                 category: "GAME",
@@ -579,12 +579,11 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
         // Create notification for the booking owner
         await notifyUser({
           recipientId: bookingToUpdate.userId,
-          type: "PLAYER_JOINED",
+          type: "PLAYER_JOINED_GAME",
           title: "New Player Joined",
           priority: "HIGH",
-          message: `${
-            userData.name || newPlayer?.fullName || "A player"
-          } has joined your game.`,
+          message: `${userData.name || newPlayer?.fullName || "A player"
+            } has joined your game.`,
           category: "GAME",
           referenceId: bookingId,
           referenceType: "bookings",
