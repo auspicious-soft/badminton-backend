@@ -10,6 +10,7 @@ import { gameScoreModel } from "src/models/venue/game-score";
 import { getCurrentISTTime } from "../../utils";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
+import { courtModel } from "src/models/venue/court-schema";
 
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
@@ -494,31 +495,27 @@ export const uploadScore = async (req: Request, res: Response) => {
       );
       message = "Score updated successfully";
     } else {
+      const courtData = await courtModel.findById(checkExist.courtId);
+      restData.gameType = courtData?.games || "Padel"; // Default to Padel if not specified
+      restData.weight = checkExist.isCompetitive ? 0.75 : 0.50; // Default weight for the game
+      restData.player_A1 = checkExist.team1[0]?.playerId || null;
+      restData.player_A2 = checkExist.team1[1]?.playerId || null;
+      restData.player_B1 = checkExist.team2[0]?.playerId || null;
+      restData.player_B2 = checkExist.team2[1]?.playerId || null;
+      restData.matchType = checkExist.isCompetitive
+        ? "Competitive"
+        : "Friendly";
       // Create new score
       data = await gameScoreModel.create({ bookingId, ...restData });
     }
 
-    // Create notification for all players in the booking
-    const playerIds = new Set<string>();
-
-    // Collect player IDs from both teams
-    checkExist.team1?.forEach((player: any) => {
-      if (
-        player.playerId &&
-        player.playerId.toString() !== (req.user as any).id
-      ) {
-        playerIds.add(player.playerId.toString());
-      }
-    });
-
-    checkExist.team2?.forEach((player: any) => {
-      if (
-        player.playerId &&
-        player.playerId.toString() !== (req.user as any).id
-      ) {
-        playerIds.add(player.playerId.toString());
-      }
-    });
+    if (!data) {
+      return errorResponseHandler(
+        "Failed to upload score",
+        httpStatusCode.INTERNAL_SERVER_ERROR,
+        res
+      );
+    }
 
     return res.status(httpStatusCode.OK).json({
       success: true,
