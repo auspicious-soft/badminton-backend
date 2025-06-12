@@ -4,7 +4,7 @@ import {
   errorParser,
   errorResponseHandler,
 } from "src/lib/errors/error-response-handler";
-import mongoose from "mongoose";
+import mongoose, { PipelineStage } from "mongoose";
 import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { notificationModel } from "src/models/notification/notification-schema";
@@ -371,7 +371,7 @@ export const getNotifications = async (req: Request, res: Response) => {
 
     const matchFilter: any = {
       type: { $nin: ["PLAYER_JOINED_GAME"] },
-      priority:"HIGH",
+      priority: "HIGH",
       isDeleted: false,
     };
 
@@ -379,17 +379,27 @@ export const getNotifications = async (req: Request, res: Response) => {
     let totalNotifications = 0;
 
     // Build aggregation
-    const aggregationPipeline: any[] = [
+    const aggregationPipeline: PipelineStage[] = [
       { $match: matchFilter },
       {
         $lookup: {
-          from: "bookings", // collection name
-          localField: "referenceId",
+          from: "users",
+          localField: "recipientId",
           foreignField: "_id",
-          as: "bookingData",
+          as: "userData",
+          pipeline: [
+            {
+              $project: {
+                fullName: 1,
+                email: 1,
+                profilePic: 1,
+                _id: 0, // Exclude _id if not needed
+              },
+            },
+          ],
         },
       },
-      { $unwind: { path: "$bookingData", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$userData", preserveNullAndEmptyArrays: true } },
     ];
 
     if (venueId) {
