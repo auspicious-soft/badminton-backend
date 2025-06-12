@@ -47,6 +47,8 @@ const notificationSchema = new Schema(
         "PLAYER_LEFT_GAME",
         "PLAYER_JOINED_GAME",
 
+        "FREE_GAME_EARNED",
+
         // Order related
         "ORDER_PLACED",
         "ORDER_CONFIRMED",

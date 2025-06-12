@@ -11,6 +11,9 @@ import { getCurrentISTTime } from "../../utils";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { courtModel } from "src/models/venue/court-schema";
+import { adminSettingModel } from "src/models/admin/admin-settings";
+import { notificationModel } from "src/models/notification/notification-schema";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
@@ -497,7 +500,7 @@ export const uploadScore = async (req: Request, res: Response) => {
     } else {
       const courtData = await courtModel.findById(checkExist.courtId);
       restData.gameType = courtData?.games || "Padel"; // Default to Padel if not specified
-      restData.weight = checkExist.isCompetitive ? 0.75 : 0.50; // Default weight for the game
+      restData.weight = checkExist.isCompetitive ? 0.75 : 0.5; // Default weight for the game
       restData.player_A1 = checkExist.team1[0]?.playerId || null;
       restData.player_A2 = checkExist.team1[1]?.playerId || null;
       restData.player_B1 = checkExist.team2[0]?.playerId || null;
@@ -507,6 +510,77 @@ export const uploadScore = async (req: Request, res: Response) => {
         : "Friendly";
       // Create new score
       data = await gameScoreModel.create({ bookingId, ...restData });
+
+      const settings = await adminSettingModel
+        .findOne({ isActive: true })
+        .lean();
+
+      const freeGameAfter =
+        (settings?.loyaltyPoints?.limit || 2000) /
+        (settings?.loyaltyPoints?.perMatch || 200);
+
+      const milestone = Array.from(
+        { length: 30 },
+        (_, index) => (index + 1) * freeGameAfter
+      );
+
+      const { player_A1, player_A2, player_B1, player_B2 } = restData;
+
+      async function countGames(id: any) {
+        const count = await gameScoreModel.countDocuments({
+          $or: [
+            {
+              player_A1: id,
+            },
+            {
+              player_A2: id,
+            },
+            {
+              player_B1: id,
+            },
+            {
+              player_B2: id,
+            },
+          ],
+        });
+
+        if (milestone?.includes(count)) {
+          await additionalUserInfoModel.updateOne(
+            { userId: id },
+            { $inc: { freeGameCount: +1 } }
+          );
+
+          await notifyUser({
+            recipientId: id,
+            type: "FREE_GAME_EARNED",
+            title: "Congrats! You have earned a free game",
+            message: `You have earned a free game after successfully completing milestone of ${freeGameAfter} games`,
+            category: "SYSTEM",
+            notificationType: "BOTH",
+            referenceId: bookingId,
+            priority: "HIGH",
+            referenceType: "bookings",
+            metadata: {
+              bookingId: bookingId,
+              timestamp: new Date().toISOString(),
+            },
+          });
+        }
+      }
+
+      if (player_A1) {
+        await countGames(player_A1);
+      }
+
+      if (player_A2) {
+        await countGames(player_A2);
+      }
+      if (player_B1) {
+        await countGames(player_B1);
+      }
+      if (player_B2) {
+        await countGames(player_B2);
+      }
     }
 
     if (!data) {

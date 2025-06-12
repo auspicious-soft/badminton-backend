@@ -371,7 +371,7 @@ export const getNotifications = async (req: Request, res: Response) => {
 
     const matchFilter: any = {
       type: { $nin: ["PLAYER_JOINED_GAME"] },
-      isReadyByAdmin: false,
+      priority:"HIGH",
       isDeleted: false,
     };
 
