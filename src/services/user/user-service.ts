@@ -832,7 +832,7 @@ export const getUserServices = async (req: Request, res: Response) => {
   const additionalInfo = await additionalUserInfoModel
     .findOne({ userId: userId })
     .lean()
-    .select("playCoins loyaltyTier referrals");
+    .select("playCoins loyaltyTier referrals freeGameCount loyaltyPoints");
 
   // Get total matches played
   const totalMatches = await bookingModel.countDocuments({
@@ -858,7 +858,9 @@ export const getUserServices = async (req: Request, res: Response) => {
       totalMatches,
       totalFriends,
       playCoins: additionalInfo?.playCoins || 0,
+      freeGameCount: additionalInfo?.freeGameCount || 0,
       loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
+      loyaltyPoints: additionalInfo?.loyaltyPoints || 0,
       referrals: additionalInfo?.referrals || {
         code: "",
         expiryDate: new Date(),

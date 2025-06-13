@@ -510,6 +510,7 @@ export const uploadScore = async (req: Request, res: Response) => {
         : "Friendly";
       // Create new score
       data = await gameScoreModel.create({ bookingId, ...restData });
+      
 
       const settings = await adminSettingModel
         .findOne({ isActive: true })
@@ -525,29 +526,24 @@ export const uploadScore = async (req: Request, res: Response) => {
       );
 
       const { player_A1, player_A2, player_B1, player_B2 } = restData;
+      const inc = settings?.loyaltyPoints?.perMatch || 200;
 
-      async function countGames(id: any) {
-        const count = await gameScoreModel.countDocuments({
-          $or: [
-            {
-              player_A1: id,
-            },
-            {
-              player_A2: id,
-            },
-            {
-              player_B1: id,
-            },
-            {
-              player_B2: id,
-            },
-          ],
-        });
+      const countGames = async (id: any) => {
+        // Fixed: Corrected the updateOne syntax and added proper error handling
+        const points = await additionalUserInfoModel.findOneAndUpdate(
+          { userId: id },
+          { $inc: { loyaltyPoints: inc } },
+          { new: true, upsert: true }
+        );
 
-        if (milestone?.includes(count)) {
+        // Fixed: Check if points reached the limit after increment
+        if (points && points.loyaltyPoints >= (settings?.loyaltyPoints?.limit || 2000)) {
           await additionalUserInfoModel.updateOne(
             { userId: id },
-            { $inc: { freeGameCount: +1 } }
+            { 
+              $inc: { freeGameCount: 1 },
+              $set: { loyaltyPoints: 0 }
+            }
           );
 
           await notifyUser({
@@ -566,8 +562,9 @@ export const uploadScore = async (req: Request, res: Response) => {
             },
           });
         }
-      }
+      };
 
+      // Process loyalty points for all players
       if (player_A1) {
         await countGames(player_A1);
       }
@@ -575,9 +572,11 @@ export const uploadScore = async (req: Request, res: Response) => {
       if (player_A2) {
         await countGames(player_A2);
       }
+      
       if (player_B1) {
         await countGames(player_B1);
       }
+      
       if (player_B2) {
         await countGames(player_B2);
       }
@@ -596,6 +595,7 @@ export const uploadScore = async (req: Request, res: Response) => {
       message,
       data,
     });
+    
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res

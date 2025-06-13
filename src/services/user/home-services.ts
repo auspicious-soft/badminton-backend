@@ -9,6 +9,7 @@ import { courtModel } from "src/models/venue/court-schema";
 import { getCurrentISTTime, isDateTodayInIST } from "../../utils";
 import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
+import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   let nearbyVenues = [];
@@ -164,15 +165,31 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
   const banners = await adminSettingModel
     .findOne({ isActive: true })
-    .select("banners")
+    .select("banners loyaltyPoints")
     .lean();
+
+  const totalLevel =
+    (banners?.loyaltyPoints?.limit || 2000) /
+    (banners?.loyaltyPoints?.perMatch || 200);
+
+  const userLoyalty = await additionalUserInfoModel.findOne({
+    userId: userData.id,
+  });
+
+  const level =
+    (userLoyalty?.loyaltyPoints || 0)/(banners?.loyaltyPoints?.perMatch || 200)
 
   const data = {
     banners: banners?.banners || [],
     upcomingMatches: upcomingMatchData,
     venueNearby: nearbyVenues,
     playersRanking: [],
-    loyaltyPoints: { points: 0, level: 0, totalLevels: 5 },
+    loyaltyPoints: {
+      points: userLoyalty?.loyaltyPoints,
+      level: level,
+      totalLevels: totalLevel,
+      freeGames: userLoyalty?.freeGameCount || 0
+    },
   };
 
   return {

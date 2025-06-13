@@ -10,6 +10,7 @@ import { friendsModel } from "src/models/user/friends-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
+import { getCurrentISTTime } from "src/utils";
 import { notifyUser } from "src/utils/FCM/FCM";
 
 export const searchFriend = async (req: Request, res: Response) => {
@@ -794,14 +795,36 @@ export const getFriendsById = async (req: Request, res: Response) => {
       }
     }
 
+    const currentDate = new Date().setHours(0, 0, 0, 0); // Normalize to start of the day
+    const currentISTHour = getCurrentISTTime().getHours();
+    const endOfToday = new Date().setHours(23,59,59,999)
+
     // Get previous matches played by the user
     const previousMatches = (await bookingModel
       .find({
-        $or: [
-          { "team1.playerId": new mongoose.Types.ObjectId(id) },
-          { "team2.playerId": new mongoose.Types.ObjectId(id) },
+        $and: [
+          // Player condition - must be in either team1 or team2
+          {
+            $or: [
+              { "team1.playerId": new mongoose.Types.ObjectId(id) },
+              { "team2.playerId": new mongoose.Types.ObjectId(id) },
+            ],
+          },
+          // Date/time condition - booking must be completed
+          {
+            $or: [
+              {
+                // Case 1: Any booking from before today (fully completed)
+                bookingDate: { $lt: currentDate },
+              },
+              {
+                // Case 2: Today's booking, but time has passed
+                bookingDate: {$gte: currentDate, $lte: endOfToday},
+                bookingSlots: { $lt: currentISTHour },
+              },
+            ],
+          },
         ],
-        bookingDate: { $lt: new Date() },
       })
       .populate({
         path: "venueId",

@@ -703,7 +703,10 @@ export const userNotificationServices = async (req: Request, res: Response) => {
   };
 };
 
-export const readUserNotificationServices = async (req: Request, res: Response) => {
+export const readUserNotificationServices = async (
+  req: Request,
+  res: Response
+) => {
   const userData = req.user as any;
   const { notificationId } = req.body;
 
@@ -743,7 +746,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
   const { transactionId, method } = req.body;
   const userData = req.user as any;
 
-  if (["razorpay", "playcoins", "both"].includes(method) === false) {
+  if (["razorpay", "playcoins", "both", "free"].includes(method) === false) {
     return errorResponseHandler(
       "Invalid payment method",
       httpStatusCode.BAD_REQUEST,
@@ -1135,6 +1138,143 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           amount: transaction.amount,
           currency: transaction.currency,
           receipt: transaction._id.toString(),
+        },
+      };
+    } else if (method === "free") {
+      if (
+        !userInfo?.freeGameCount ||
+        (userInfo?.freeGameCount || 0) < bookingIds?.length
+      ) {
+        await session.abortTransaction();
+        return errorResponseHandler(
+          "Not enough free games available",
+          httpStatusCode.BAD_REQUEST,
+          res
+        );
+      }
+
+      // Deduct playcoins from user's balance
+      await additionalUserInfoModel.findOneAndUpdate(
+        { userId: userData.id },
+        { $inc: { freeGameCount: -bookingIds?.length } },
+        { session }
+      );
+
+      // Update transaction status
+      await transactionModel.findByIdAndUpdate(
+        transactionId,
+        {
+          status: "completed",
+          isWebhookVerified: true,
+          method: "freeGame",
+          playcoinsUsed: 0,
+          paymentDate: new Date(),
+        },
+        { session }
+      );
+
+      // Update all associated bookings
+      await bookingModel.updateMany(
+        { _id: { $in: bookingIds } },
+        { bookingPaymentStatus: true },
+        { session }
+      );
+
+      // Update player payment status in each booking
+      const bookings = await bookingModel.find(
+        { _id: { $in: bookingIds } },
+        null,
+        { session }
+      );
+
+      const paidForPlayerIds =
+        transaction.paidFor?.map((id) => id.toString()) || [];
+
+      for (const booking of bookings) {
+        // Update team1 players
+        booking.team1 = booking.team1.map((player: any) => {
+          if (
+            player.playerId &&
+            paidForPlayerIds.includes(player.playerId.toString())
+          ) {
+            player.paymentStatus = "Paid";
+          }
+          return player;
+        });
+
+        // Update team2 players
+        booking.team2 = booking.team2.map((player: any) => {
+          if (
+            player.playerId &&
+            paidForPlayerIds.includes(player.playerId.toString())
+          ) {
+            player.paymentStatus = "Paid";
+          }
+          return player;
+        });
+
+        await booking.save({ session });
+
+        const checkGroupExist = await chatModel.findOne({
+          bookingId: booking._id,
+        });
+
+        if (!checkGroupExist) {
+          const groupImage = await venueModel.findById(
+            booking.venueId,
+            "image"
+          );
+          await chatModel.create({
+            bookingId: booking._id,
+            groupImage: groupImage?.image || "",
+            chatType: "group",
+            groupName: `Match on ${booking.bookingDate.toLocaleDateString()}`,
+            participants: [
+              ...booking.team1.map((player: any) => player.playerId),
+              ...booking.team2.map((player: any) => player.playerId),
+            ],
+            groupAdmin: [booking.userId],
+            messages: [],
+            isActive: true,
+          });
+        }
+
+        const allPlayerIds = [
+          booking.userId,
+          ...booking.team1.map((player: any) => player.playerId),
+          ...booking.team2.map((player: any) => player.playerId),
+        ];
+        for (const playerId of allPlayerIds) {
+          if (playerId.toString() !== transaction.userId.toString()) {
+            await notifyUser({
+              recipientId: playerId,
+              type: "FREE_GAME_USED",
+              title: "Game Booked Successfully",
+              message: `Your free game has been successfully processed.`,
+              category: "PAYMENT",
+              notificationType: "BOTH",
+              referenceId: (booking as any)._id.toString(),
+              priority: "HIGH",
+              referenceType: "bookings",
+              metadata: {
+                bookingId: booking._id,
+                transactionId: transaction._id,
+                amount: 0,
+                timestamp: new Date().toISOString(),
+              },
+              session,
+            });
+          }
+        }
+      }
+
+      await session.commitTransaction();
+
+      return {
+        success: true,
+        message: "Booking successful using free game",
+        data: {
+          transaction: await transactionModel.findById(transactionId),
         },
       };
     }
