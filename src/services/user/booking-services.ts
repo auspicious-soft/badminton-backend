@@ -912,6 +912,25 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
               recipientId: playerId,
               type: "PAYMENT_SUCCESSFUL",
               title: "Game Booked Successfully",
+              message: `You are added to a new game.`,
+              category: "PAYMENT",
+              notificationType: "BOTH",
+              referenceId: (booking as any)._id.toString(),
+              priority: "MEDIUM",
+              referenceType: "bookings",
+              metadata: {
+                bookingId: booking._id,
+                transactionId: transaction._id,
+                amount: transaction.amount,
+                timestamp: new Date().toISOString(),
+              },
+              session,
+            });
+          } else {
+            await notifyUser({
+              recipientId: playerId,
+              type: "PAYMENT_SUCCESSFUL",
+              title: "Game Booked Successfully",
               message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
               category: "PAYMENT",
               notificationType: "BOTH",
@@ -1250,6 +1269,25 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
               recipientId: playerId,
               type: "FREE_GAME_USED",
               title: "Game Booked Successfully",
+              message: `You are added to a new game.`,
+              category: "PAYMENT",
+              notificationType: "BOTH",
+              referenceId: (booking as any)._id.toString(),
+              priority: "MEDIUM",
+              referenceType: "bookings",
+              metadata: {
+                bookingId: booking._id,
+                transactionId: transaction._id,
+                amount: 0,
+                timestamp: new Date().toISOString(),
+              },
+              session,
+            });
+          } else {
+            await notifyUser({
+              recipientId: playerId,
+              type: "FREE_GAME_USED",
+              title: "Game Booked Successfully",
               message: `Your free game has been successfully processed.`,
               category: "PAYMENT",
               notificationType: "BOTH",
@@ -1277,16 +1315,15 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           transaction: await transactionModel.findById(transactionId),
         },
       };
+    } else {
+      await session.abortTransaction();
+      return errorResponseHandler(
+        "Invalid payment method",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
     }
-
-    await session.abortTransaction();
-    return errorResponseHandler(
-      "Invalid payment method",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
   } catch (error) {
-    await session.abortTransaction();
     console.error("Error in payment booking service:", error);
     throw error;
   } finally {

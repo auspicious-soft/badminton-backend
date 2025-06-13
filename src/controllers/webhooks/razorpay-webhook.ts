@@ -349,11 +349,11 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                     recipientId: playerId,
                     type: "PAYMENT_SUCCESSFUL",
                     title: "Game Booked Successfully",
-                    message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                    message: `You are added to a new game.`,
                     category: "PAYMENT",
                     notificationType: "BOTH",
                     referenceId: (booking as any)._id.toString(),
-                    priority: "HIGH",
+                    priority: "MEDIUM",
                     referenceType: "bookings",
                     metadata: {
                       bookingId: booking._id,
@@ -365,6 +365,25 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   })
                 )
             );
+
+            await notifyUser({
+              recipientId: transaction.userId,
+              type: "PAYMENT_SUCCESSFUL",
+              title: "Game Booked Successfully",
+              message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+              category: "PAYMENT",
+              notificationType: "BOTH",
+              referenceId: (booking as any)._id.toString(),
+              priority: "HIGH",
+              referenceType: "bookings",
+              metadata: {
+                bookingId: booking._id,
+                transactionId: transaction._id,
+                amount: transaction.amount,
+                timestamp: new Date().toISOString(),
+              },
+              session,
+            });
           }
         }
 
@@ -654,20 +673,18 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
       // Update transaction with refund details
 
-      await transactionModel.create(
-        {
-          userId: transaction.userId,
-          orderId: transaction.orderId,
-          razorpayPaymentId: paymentId,
-          refundId: refundId,
-          method: transaction.method,
-          amount,
-          text: "Booking cancelled by creator",
-          status,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      );
+      await transactionModel.create({
+        userId: transaction.userId,
+        orderId: transaction.orderId,
+        razorpayPaymentId: paymentId,
+        refundId: refundId,
+        method: transaction.method,
+        amount,
+        text: "Booking cancelled by creator",
+        status,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
       // await transactionModel.findByIdAndUpdate(transaction._id, {
       //   refundId,
