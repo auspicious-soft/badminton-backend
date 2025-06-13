@@ -339,51 +339,30 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               ...booking.team2.map((player: any) => player.playerId),
             ];
             await Promise.all(
-              allPlayerIds
-                .filter(
-                  (playerId) =>
-                    playerId.toString() !== transaction.userId.toString()
-                )
-                .map((playerId) =>
-                  notifyUser({
-                    recipientId: playerId,
-                    type: "PAYMENT_SUCCESSFUL",
-                    title: "Game Booked Successfully",
-                    message: `You are added to a new game.`,
-                    category: "PAYMENT",
-                    notificationType: "BOTH",
-                    referenceId: (booking as any)._id.toString(),
-                    priority: "MEDIUM",
-                    referenceType: "bookings",
-                    metadata: {
-                      bookingId: booking._id,
-                      transactionId: transaction._id,
-                      amount: transaction.amount,
-                      timestamp: new Date().toISOString(),
-                    },
-                    session,
-                  })
-                )
+              allPlayerIds.map((playerId) =>
+                notifyUser({
+                  recipientId: playerId,
+                  type: "PAYMENT_SUCCESSFUL",
+                  title: "Game Booked Successfully",
+                  message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                  category: "PAYMENT",
+                  notificationType: "BOTH",
+                  referenceId: (booking as any)._id.toString(),
+                  priority:
+                    playerId.toString() == transaction.userId.toString()
+                      ? "HIGH"
+                      : "MEDIUM",
+                  referenceType: "bookings",
+                  metadata: {
+                    bookingId: booking._id,
+                    transactionId: transaction._id,
+                    amount: transaction.amount,
+                    timestamp: new Date().toISOString(),
+                  },
+                  session,
+                })
+              )
             );
-
-            await notifyUser({
-              recipientId: transaction.userId,
-              type: "PAYMENT_SUCCESSFUL",
-              title: "Game Booked Successfully",
-              message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-              category: "PAYMENT",
-              notificationType: "BOTH",
-              referenceId: (booking as any)._id.toString(),
-              priority: "HIGH",
-              referenceType: "bookings",
-              metadata: {
-                bookingId: booking._id,
-                transactionId: transaction._id,
-                amount: transaction.amount,
-                timestamp: new Date().toISOString(),
-              },
-              session,
-            });
           }
         }
 
@@ -515,7 +494,10 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                         notificationType: "BOTH",
                         referenceId: bookingId,
                         referenceType: "bookings",
-                        priority: "HIGH",
+                        priority:
+                          playerId == booking.userId.toString()
+                            ? "HIGH"
+                            : "MEDIUM",
                         metadata: {
                           bookingId,
                           newPlayerId: transaction.userId,
