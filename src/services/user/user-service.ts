@@ -153,9 +153,12 @@ export const socialLoginService = async (
 
 const createNewUser = async (userData: any, authType: string) => {
   // Set fullName from firstName and lastName
-  const fullName = `${userData.firstName || ""} ${
+  const capitalize = (str: string) =>
+    str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+
+  const fullName = `${capitalize(userData?.firstName || "")} ${capitalize(
     userData.lastName || ""
-  }`.trim();
+  )}`.trim();
 
   let newUser = new usersModel({
     email: userData.email,
@@ -252,9 +255,13 @@ export const signUpService = async (
 
   // Set fullName if firstName and/or lastName are provided
   if (!userData.fullName && (userData.firstName || userData.lastName)) {
-    userData.fullName = `${userData.firstName || ""} ${
-      userData.lastName || ""
-    }`.trim();
+    const first = userData.firstName || "";
+    const last = userData.lastName || "";
+
+    const capitalize = (str: string) =>
+      str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+
+    userData.fullName = `${capitalize(first)} ${capitalize(last)}`.trim();
   }
 
   const query = getSignUpQueryByAuthType(userData, authType);

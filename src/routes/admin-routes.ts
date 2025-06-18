@@ -38,8 +38,10 @@ import {
   getAdminSettings,
   getAllPricing,
   getNotifications,
+  getUsersForPush,
   readNotification,
   rewardsSettings,
+  sendPushToUsers,
   updateRewardsSettings,
 } from "src/controllers/admin/settings-controller";
 import {
@@ -117,6 +119,7 @@ router.route("/reward-settings/:type").get(rewardsSettings).put(updateRewardsSet
 //Orders
 router.route("/orders").get(getOrders).put(updateOrderStatus)
 router.route("/notifications").get(getNotifications).post(readNotification)
+router.route("/custome-notification").get(getUsersForPush).post(sendPushToUsers)
 
 
 export { router };

@@ -54,8 +54,22 @@ export const getMyMatches = async (req: Request, res: Response) => {
       const allBookings = await bookingModel
         .find({
           $or: [
-            { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
-            { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
+            {
+              team1: {
+                $elemMatch: {
+                  playerId: new mongoose.Types.ObjectId(userData.id),
+                  paymentStatus: "Paid",
+                },
+              },
+            },
+            {
+              team2: {
+                $elemMatch: {
+                  playerId: new mongoose.Types.ObjectId(userData.id),
+                  paymentStatus: "Paid",
+                },
+              },
+            },
           ],
           bookingPaymentStatus: true,
         })
@@ -182,8 +196,22 @@ export const getMyMatches = async (req: Request, res: Response) => {
       const todayBookings = await bookingModel
         .find({
           $or: [
-            { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
-            { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
+            {
+              team1: {
+                $elemMatch: {
+                  playerId: new mongoose.Types.ObjectId(userData.id),
+                  paymentStatus: "Paid",
+                },
+              },
+            },
+            {
+              team2: {
+                $elemMatch: {
+                  playerId: new mongoose.Types.ObjectId(userData.id),
+                  paymentStatus: "Paid",
+                },
+              },
+            },
           ],
           bookingDate: {
             $gte: todayStartIST,
@@ -359,8 +387,22 @@ export const getMatchesById = async (req: Request, res: Response) => {
       .findOne({
         _id: id,
         $or: [
-          { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
-          { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
+          {
+            team1: {
+              $elemMatch: {
+                playerId: new mongoose.Types.ObjectId(userData.id),
+                paymentStatus: "Paid",
+              },
+            },
+          },
+          {
+            team2: {
+              $elemMatch: {
+                playerId: new mongoose.Types.ObjectId(userData.id),
+                paymentStatus: "Paid",
+              },
+            },
+          },
         ],
       })
       .populate({
@@ -510,7 +552,6 @@ export const uploadScore = async (req: Request, res: Response) => {
         : "Friendly";
       // Create new score
       data = await gameScoreModel.create({ bookingId, ...restData });
-      
 
       const settings = await adminSettingModel
         .findOne({ isActive: true })
@@ -537,12 +578,15 @@ export const uploadScore = async (req: Request, res: Response) => {
         );
 
         // Fixed: Check if points reached the limit after increment
-        if (points && points.loyaltyPoints >= (settings?.loyaltyPoints?.limit || 2000)) {
+        if (
+          points &&
+          points.loyaltyPoints >= (settings?.loyaltyPoints?.limit || 2000)
+        ) {
           await additionalUserInfoModel.updateOne(
             { userId: id },
-            { 
+            {
               $inc: { freeGameCount: 1 },
-              $set: { loyaltyPoints: 0 }
+              $set: { loyaltyPoints: 0 },
             }
           );
 
@@ -572,11 +616,11 @@ export const uploadScore = async (req: Request, res: Response) => {
       if (player_A2) {
         await countGames(player_A2);
       }
-      
+
       if (player_B1) {
         await countGames(player_B1);
       }
-      
+
       if (player_B2) {
         await countGames(player_B2);
       }
@@ -595,7 +639,6 @@ export const uploadScore = async (req: Request, res: Response) => {
       message,
       data,
     });
-    
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res

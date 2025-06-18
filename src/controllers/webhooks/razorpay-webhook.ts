@@ -331,38 +331,40 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 messages: [],
                 isActive: true,
               });
+
+              const allPlayerIds = [
+                booking.userId,
+                ...booking.team1.map((player: any) => player.playerId),
+                ...booking.team2.map((player: any) => player.playerId),
+              ];
+
+              await Promise.all(
+                allPlayerIds.map((playerId) =>
+                  notifyUser({
+                    recipientId: playerId,
+                    type: "PAYMENT_SUCCESSFUL",
+                    title: "Game Booked Successfully",
+                    message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                    category: "PAYMENT",
+                    notificationType: "BOTH",
+                    referenceId: (booking as any)._id.toString(),
+                    priority:
+                      playerId.toString() == transaction.userId.toString()
+                        ? "HIGH"
+                        : "MEDIUM",
+                    referenceType: "bookings",
+                    metadata: {
+                      bookingId: booking._id,
+                      transactionId: transaction._id,
+                      amount: transaction.amount,
+                      timestamp: new Date().toISOString(),
+                    },
+                    session,
+                  })
+                )
+              );
             }
             // Send notifications to all players in the booking
-            const allPlayerIds = [
-              booking.userId,
-              ...booking.team1.map((player: any) => player.playerId),
-              ...booking.team2.map((player: any) => player.playerId),
-            ];
-            await Promise.all(
-              allPlayerIds.map((playerId) =>
-                notifyUser({
-                  recipientId: playerId,
-                  type: "PAYMENT_SUCCESSFUL",
-                  title: "Game Booked Successfully",
-                  message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-                  category: "PAYMENT",
-                  notificationType: "BOTH",
-                  referenceId: (booking as any)._id.toString(),
-                  priority:
-                    playerId.toString() == transaction.userId.toString()
-                      ? "HIGH"
-                      : "MEDIUM",
-                  referenceType: "bookings",
-                  metadata: {
-                    bookingId: booking._id,
-                    transactionId: transaction._id,
-                    amount: transaction.amount,
-                    timestamp: new Date().toISOString(),
-                  },
-                  session,
-                })
-              )
-            );
           }
         }
 
@@ -474,49 +476,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               }
 
               // Send notifications to all existing players about the new player joining
-              if (newPlayer) {
-                const teamName =
-                  requestedTeam === "team1" ? "Team 1" : "Team 2";
-                const positionName =
-                  requestedPosition.charAt(0).toUpperCase() +
-                  requestedPosition.slice(1);
-
-                // Send notifications to all existing players
-                await Promise.all(
-                  otherPlayerIds.map(async (playerId) => {
-                    try {
-                      await notifyUser({
-                        recipientId: playerId,
-                        type: "PLAYER_JOINED_GAME",
-                        title: "New Player Joined",
-                        message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
-                        category: "GAME",
-                        notificationType: "BOTH",
-                        referenceId: bookingId,
-                        referenceType: "bookings",
-                        priority:
-                          playerId == booking.userId.toString()
-                            ? "HIGH"
-                            : "MEDIUM",
-                        metadata: {
-                          bookingId,
-                          newPlayerId: transaction.userId,
-                          newPlayerName: newPlayer.fullName,
-                          newPlayerPosition: requestedPosition,
-                          newPlayerTeam: requestedTeam,
-                          timestamp: new Date().toISOString(),
-                        },
-                        session,
-                      });
-                    } catch (error) {
-                      console.error(
-                        `Failed to send notification to player ${playerId}:`,
-                        error
-                      );
-                    }
-                  })
-                );
-              }
 
               // Update chat group to include the new player
               const checkGroupExist = await chatModel.findOne({
@@ -534,6 +493,50 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   },
                   { session }
                 );
+
+                if (newPlayer) {
+                  const teamName =
+                    requestedTeam === "team1" ? "Team 1" : "Team 2";
+                  const positionName =
+                    requestedPosition.charAt(0).toUpperCase() +
+                    requestedPosition.slice(1);
+
+                  // Send notifications to all existing players
+                  await Promise.all(
+                    otherPlayerIds.map(async (playerId) => {
+                      try {
+                        await notifyUser({
+                          recipientId: playerId,
+                          type: "PLAYER_JOINED_GAME",
+                          title: "New Player Joined",
+                          message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
+                          category: "GAME",
+                          notificationType: "BOTH",
+                          referenceId: bookingId,
+                          referenceType: "bookings",
+                          priority:
+                            playerId == booking.userId.toString()
+                              ? "HIGH"
+                              : "MEDIUM",
+                          metadata: {
+                            bookingId,
+                            newPlayerId: transaction.userId,
+                            newPlayerName: newPlayer.fullName,
+                            newPlayerPosition: requestedPosition,
+                            newPlayerTeam: requestedTeam,
+                            timestamp: new Date().toISOString(),
+                          },
+                          session,
+                        });
+                      } catch (error) {
+                        console.error(
+                          `Failed to send notification to player ${playerId}:`,
+                          error
+                        );
+                      }
+                    })
+                  );
+                }
               }
             }
           }

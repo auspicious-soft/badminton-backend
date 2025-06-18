@@ -387,7 +387,7 @@ export const sendMessage = async (req: Request, res: Response) => {
     // Emit socket event to all participants
     chat.participants.forEach(async (participantId) => {
       const participantIdStr = participantId.toString();
-      if (participantIdStr !== userId) {
+      if (participantIdStr != userId) {
         sendToUser(participantIdStr, "new_message", {
           chatId: chat._id,
           message: {

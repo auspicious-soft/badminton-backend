@@ -24,7 +24,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
     // Define a reasonable maximum distance
     // 30 km in meters = 30,000 meters
-    const MAX_NEARBY_DISTANCE = 30000000; // 30 km in meters
+    const MAX_NEARBY_DISTANCE = 100000; // 100 km in meters
 
     const geoNearStage: any = {
       $geoNear: {
@@ -39,7 +39,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
     } else {
       // If not nearby, still use a reasonable maximum distance
       // 100 km in meters = 100,000 meters
-      geoNearStage.$geoNear.maxDistance = 100000000; // 100 km in meters
+      geoNearStage.$geoNear.maxDistance = 100000; // 100 km in meters
     }
 
     const pipeline: any[] = [
@@ -72,96 +72,77 @@ export const userHomeServices = async (req: Request, res: Response) => {
   }
 
   // Get current time in IST
-  const currentISTTime = getCurrentISTTime();
-  const currentDate = new Date(currentISTTime);
-  currentDate.setHours(0, 0, 0, 0); // Set to beginning of day in IST
-  console.log(
-    `Current IST time: ${currentISTTime.toISOString()}, Hour: ${currentISTTime.getHours()}, Minute: ${currentISTTime.getMinutes()}`
-  );
+  const nowIST = getCurrentISTTime();
+  const todayStartIST = new Date(nowIST);
+  todayStartIST.setHours(0, 0, 0, 0);
 
-  const upcomingMatchData = await bookingModel.aggregate([
-    {
-      $addFields: {
-        // Construct full booking datetime by combining bookingDate and bookingSlots
-        bookingDateTime: {
-          $dateFromParts: {
-            year: { $year: { date: "$bookingDate", timezone: "Asia/Kolkata" } },
-            month: {
-              $month: { date: "$bookingDate", timezone: "Asia/Kolkata" },
+  const todayEndIST = new Date(nowIST);
+  todayEndIST.setHours(23, 59, 59, 999);
+
+  console.log(`Hour: ${nowIST.getHours()}}`);
+
+  const todayMatches = await bookingModel
+    .find({
+      $or: [
+        {
+          team1: {
+            $elemMatch: {
+              playerId: new mongoose.Types.ObjectId(userData.id),
+              paymentStatus: "Paid",
             },
-            day: {
-              $dayOfMonth: { date: "$bookingDate", timezone: "Asia/Kolkata" },
-            },
-            hour: { $toInt: { $substr: ["$bookingSlots", 0, 2] } },
-            minute: { $toInt: { $substr: ["$bookingSlots", 3, 2] } },
-            timezone: "Asia/Kolkata",
           },
         },
-      },
-    },
-    {
-      $match: {
-        // Only include bookings where bookingDateTime is in the future
-        bookingDateTime: { $gt: currentISTTime },
-        $or: [
-          {
-            $and: [
-              { bookingType: "Self" },
-              {
-                $or: [
-                  {
-                    team1: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
-                        paymentStatus: "Paid",
-                      },
-                    },
-                  },
-                  {
-                    team2: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
-                        paymentStatus: "Paid",
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
+        {
+          team2: {
+            $elemMatch: {
+              playerId: new mongoose.Types.ObjectId(userData.id),
+              paymentStatus: "Paid",
+            },
           },
-          {
-            $and: [
-              { bookingType: { $in: ["Booking", "Complete"] } },
-              { bookingPaymentStatus: true },
-              {
-                $or: [
-                  {
-                    team1: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
-                      },
-                    },
-                  },
-                  {
-                    team2: {
-                      $elemMatch: {
-                        playerId: new mongoose.Types.ObjectId(userData.id),
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
+        },
+      ],
+      bookingDate: {
+        $gte: todayStartIST,
+        $lte: todayEndIST,
+      },
+    })
+    .lean();
+
+  const todayProcessed = [];
+
+  for (const booking of todayMatches) {
+    const slotHour = parseInt(booking.bookingSlots.split(":")[0], 10);
+    if (slotHour > nowIST.getHours()) {
+      todayProcessed.push(booking);
+    }
+  }
+  const futureMatches = await bookingModel
+    .find({
+      $or: [
+        {
+          team1: {
+            $elemMatch: {
+              playerId: new mongoose.Types.ObjectId(userData.id),
+              paymentStatus: "Paid",
+            },
           },
-        ],
+        },
+        {
+          team2: {
+            $elemMatch: {
+              playerId: new mongoose.Types.ObjectId(userData.id),
+              paymentStatus: "Paid",
+            },
+          },
+        },
+      ],
+      bookingDate: {
+        $gt: todayEndIST,
       },
-    },
-    {
-      $sort: {
-        bookingDateTime: 1,
-      },
-    },
-  ]);
+    })
+    .lean();
+
+  const upcomingMatchData = [...todayProcessed, ...futureMatches];
 
   const banners = await adminSettingModel
     .findOne({ isActive: true })
@@ -177,7 +158,8 @@ export const userHomeServices = async (req: Request, res: Response) => {
   });
 
   const level =
-    (userLoyalty?.loyaltyPoints || 0)/(banners?.loyaltyPoints?.perMatch || 200)
+    (userLoyalty?.loyaltyPoints || 0) /
+    (banners?.loyaltyPoints?.perMatch || 200);
 
   const data = {
     banners: banners?.banners || [],
@@ -188,7 +170,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
       points: userLoyalty?.loyaltyPoints,
       level: level,
       totalLevels: totalLevel,
-      freeGames: userLoyalty?.freeGameCount || 0
+      freeGames: userLoyalty?.freeGameCount || 0,
     },
   };
 
@@ -249,7 +231,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
     // Earth's radius is approximately 6371 km
     // 100 km in meters = 100,000 meters
     // This is a reasonable maximum distance for venue searches
-    const MAX_SEARCH_DISTANCE = 10000000; // 100 km in meters
+    const MAX_SEARCH_DISTANCE = 100000; // 100 km in meters
 
     const venues = await venueModel.aggregate([
       {

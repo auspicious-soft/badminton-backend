@@ -544,10 +544,11 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
             requestedPosition.slice(1);
 
           // Send notifications to all existing players
-          for (const playerId of otherPlayerIds) {
-            try {
+
+          await Promise.all([
+            otherPlayerIds?.map(async (data: any) => {
               await notifyUser({
-                recipientId: playerId,
+                recipientId: data,
                 type: "PLAYER_JOINED_GAME",
                 title: "New Player Joined",
                 message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
@@ -566,31 +567,36 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
                 },
                 session,
               });
-            } catch (error) {
-              console.error(
-                `Failed to send notification to player ${playerId}:`,
-                error
-              );
-              // Continue with other notifications even if one fails
-            }
-          }
+            }),
+          ]);
+          // for (const playerId of otherPlayerIds) {
+          //   try {
+
+          //   } catch (error) {
+          //     console.error(
+          //       `Failed to send notification to player ${playerId}:`,
+          //       error
+          //     );
+          //     // Continue with other notifications even if one fails
+          //   }
+          // }
         }
 
         // Create notification for the booking owner
-        await notifyUser({
-          recipientId: bookingToUpdate.userId,
-          type: "PLAYER_JOINED_GAME",
-          title: "New Player Joined",
-          priority: "HIGH",
-          message: `${
-            userData.name || newPlayer?.fullName || "A player"
-          } has joined your game.`,
-          category: "GAME",
-          referenceId: bookingId,
-          referenceType: "bookings",
-          notificationType: "BOTH",
-          session,
-        });
+        // await notifyUser({
+        //   recipientId: bookingToUpdate.userId,
+        //   type: "PLAYER_JOINED_GAME",
+        //   title: "New Player Joined",
+        //   priority: "HIGH",
+        //   message: `${
+        //     userData.name || newPlayer?.fullName || "A player"
+        //   } has joined your game.`,
+        //   category: "GAME",
+        //   referenceId: bookingId,
+        //   referenceType: "bookings",
+        //   notificationType: "BOTH",
+        //   session,
+        // });
       }
     }
 

@@ -8,6 +8,8 @@ import mongoose, { PipelineStage } from "mongoose";
 import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { notificationModel } from "src/models/notification/notification-schema";
+import { usersModel } from "src/models/user/user-schema";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 // Create or update pricing
 export const createUpdatePricing = async (req: Request, res: Response) => {
@@ -480,6 +482,69 @@ export const readNotification = async (req: Request, res: Response) => {
           ? "All unread notifications marked as ready by admin"
           : "Notification marked as ready by admin",
       updatedCount: updateResult.modifiedCount,
+    });
+  } catch (error: any) {
+    const { code, message } = error;
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const sendPushToUsers = async (req: Request, res: Response) => {
+  try {
+    const { title, text, specificUsers } = req.body;
+
+    if (specificUsers?.length && specificUsers?.length > 0) {
+      await Promise.all([
+        specificUsers.map((items: any) => {
+          notifyUser({
+            recipientId: items,
+            title: title,
+            message: text,
+            type: "CUSTOM",
+            category: "CUSTOM",
+          });
+        }),
+      ]);
+    } else {
+      const users = await usersModel
+        .find({ isBlocked: false })
+        .select("firstName");
+
+      await Promise.all([
+        users.map((items: any) => {
+          notifyUser({
+            recipientId: items._id,
+            title: title,
+            message: text,
+            type: "CUSTOM",
+            category: "CUSTOM",
+          });
+        }),
+      ]);
+    }
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Users notified successfully",
+    });
+  } catch (error: any) {
+    const { code, message } = error;
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const getUsersForPush = async (req: Request, res: Response) => {
+  try {
+    const users = await usersModel
+      .find({ isBlocked: false })
+      .select("fullName profilePic");
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Users notified successfully",
+      data: users,
     });
   } catch (error: any) {
     const { code, message } = error;
