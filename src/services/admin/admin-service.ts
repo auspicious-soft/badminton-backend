@@ -84,6 +84,7 @@ export const loginService = async (payload: any, res: Response) => {
     if (venue) {
       userObject.venueId = venue._id;
       userObject.venueName = venue.name;
+      userObject.location = venue.location
     }
 
     const existingAttendance = await attendanceModel.findOne({
