@@ -200,27 +200,30 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               { session }
             );
 
-            await additionalUserInfoModel.updateOne(
-              { userId: transaction?.userId },
-              { $inc: { playCoins: +notes?.playcoinsReceived } },
-              { session }
-            );
-            transaction?.userId && notifyUser({
-              recipientId: transaction?.userId,
-              type: "PAYMENT_SUCCESSFUL",
-              title: "Package purchased successfully",
-              message: `You have received ${transaction?.playcoinsReceived} playcoins.`,
-              category: "PAYMENT",
-              notificationType: "BOTH",
-              priority:"HIGH",
-              referenceType: "transactions",
-              metadata: {
-                transactionId: transaction._id,
-                amount: transaction.amount,
-                timestamp: new Date().toISOString(),
-              },
-              session,
-            });
+            if (transaction?.playcoinsReceived) {
+              await additionalUserInfoModel.updateOne(
+                { userId: transaction?.userId },
+                { $inc: { playCoins: +transaction?.playcoinsReceived } },
+                { session }
+              );
+            }
+            transaction?.userId &&
+              notifyUser({
+                recipientId: transaction?.userId,
+                type: "PAYMENT_SUCCESSFUL",
+                title: "Package purchased successfully",
+                message: `You have received ${transaction?.playcoinsReceived} playcoins.`,
+                category: "PAYMENT",
+                notificationType: "BOTH",
+                priority: "HIGH",
+                referenceType: "transactions",
+                metadata: {
+                  transactionId: transaction._id,
+                  amount: transaction.amount,
+                  timestamp: new Date().toISOString(),
+                },
+                session,
+              });
           }
         } catch (err) {
           await session.abortTransaction();
