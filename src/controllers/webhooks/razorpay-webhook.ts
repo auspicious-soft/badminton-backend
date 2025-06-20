@@ -182,12 +182,16 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       }
 
       if (notes?.finalAmount && notes?.playcoinsReceived) {
-        // Start a session for transaction consistency
         const transactionId = notes.transactionId;
         const session = await mongoose.startSession();
+
         try {
-          const transaction = await transactionModel.findById(transactionId);
           session.startTransaction();
+
+          const transaction = await transactionModel
+            .findById(transactionId)
+            .session(session);
+
           if (!transaction?.isWebhookVerified) {
             await transactionModel.updateOne(
               { _id: transactionId },
@@ -201,18 +205,20 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             );
 
             if (transaction?.playcoinsReceived) {
-              await additionalUserInfoModel.updateOne(
+              const updateResult = await additionalUserInfoModel.updateOne(
                 { userId: transaction?.userId },
                 { $inc: { playCoins: +transaction?.playcoinsReceived } },
                 { session }
               );
+              console.log("User update result:", updateResult);
             }
-            transaction?.userId &&
-              notifyUser({
-                recipientId: transaction?.userId,
+
+            if (transaction?.userId) {
+              await notifyUser({
+                recipientId: transaction.userId,
                 type: "PAYMENT_SUCCESSFUL",
                 title: "Package purchased successfully",
-                message: `You have received ${transaction?.playcoinsReceived} playcoins.`,
+                message: `You have received ${transaction.playcoinsReceived} playcoins.`,
                 category: "PAYMENT",
                 notificationType: "BOTH",
                 priority: "HIGH",
@@ -224,9 +230,15 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 },
                 session,
               });
+            }
           }
+
+          await session.commitTransaction();
         } catch (err) {
+          console.error("Transaction error:", err);
           await session.abortTransaction();
+        } finally {
+          session.endSession();
         }
       }
 
