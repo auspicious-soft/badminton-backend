@@ -230,7 +230,7 @@ export const sendRequest = async (req: Request, res: Response) => {
             friendId: userData.id,
           },
           notificationType: "BOTH", // Send both push and in-app notifications
-          referenceId: (request as any)._id,
+          referenceId: userData.id,
           referenceType: "users",
         });
       } catch (notificationError) {
