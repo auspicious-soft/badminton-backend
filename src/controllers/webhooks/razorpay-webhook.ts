@@ -181,6 +181,52 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         }
       }
 
+      if (notes?.finalAmount && notes?.playcoinsReceived) {
+        // Start a session for transaction consistency
+        const transactionId = notes.transactionId;
+        const session = await mongoose.startSession();
+        try {
+          const transaction = await transactionModel.findById(transactionId);
+          session.startTransaction();
+          if (!transaction?.isWebhookVerified) {
+            await transactionModel.updateOne(
+              { _id: transactionId },
+              {
+                $set: {
+                  isWebhookVerified: true,
+                  status,
+                },
+              },
+              { session }
+            );
+
+            await additionalUserInfoModel.updateOne(
+              { userId: transaction?.userId },
+              { $inc: { playCoins: +notes?.playcoinsReceived } },
+              { session }
+            );
+            transaction?.userId && notifyUser({
+              recipientId: transaction?.userId,
+              type: "PAYMENT_SUCCESSFUL",
+              title: "Package purchased successfully",
+              message: `You have received ${transaction?.playcoinsReceived} playcoins.`,
+              category: "PAYMENT",
+              notificationType: "BOTH",
+              priority:"HIGH",
+              referenceType: "transactions",
+              metadata: {
+                transactionId: transaction._id,
+                amount: transaction.amount,
+                timestamp: new Date().toISOString(),
+              },
+              session,
+            });
+          }
+        } catch (err) {
+          await session.abortTransaction();
+        }
+      }
+
       // Check if this transaction has already been processed
       const existingTransaction = await transactionModel.findOne({
         razorpayOrderId: orderId,
