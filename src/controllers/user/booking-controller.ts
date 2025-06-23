@@ -407,7 +407,7 @@ export const getMatchesById = async (req: Request, res: Response) => {
       })
       .populate({
         path: "venueId",
-        select: "name city state address",
+        select: "name city state address image",
       })
       .populate({
         path: "courtId",
