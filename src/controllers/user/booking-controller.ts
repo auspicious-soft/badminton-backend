@@ -492,7 +492,8 @@ export const getMatchesById = async (req: Request, res: Response) => {
       message: "Booking retrieved successfully",
       data: {
         ...processedBooking,
-        rentedItems: { rentedBalls, rendedRackets },
+        balls: rentedBalls,
+        rackets: rendedRackets,
       },
     });
   } catch (error: any) {
