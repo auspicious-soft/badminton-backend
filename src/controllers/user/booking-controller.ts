@@ -475,10 +475,25 @@ export const getMatchesById = async (req: Request, res: Response) => {
       score,
     };
 
+    let rentedBalls = 0;
+    let rendedRackets = 0;
+
+    [...team1WithPlayerData, ...team2WithPlayerData]?.map((data: any) => {
+      if (data && data?.balls) {
+        rentedBalls = rentedBalls + data.balls;
+      }
+      if (data && data?.rackets) {
+        rendedRackets = rendedRackets + data.rackets;
+      }
+    });
+
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Booking retrieved successfully",
-      data: processedBooking,
+      data: {
+        ...processedBooking,
+        rentedItems: { rentedBalls, rendedRackets },
+      },
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
