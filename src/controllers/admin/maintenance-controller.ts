@@ -71,6 +71,7 @@ export const createMaintenanceBooking = async (req: Request, res: Response) => {
       },
       bookingPaymentStatus: true,
       isMaintenance: false, // Only check for regular bookings
+      bookingType: {$ne:"Cancelled"}
     });
 
     if (existingBookings.length > 0) {

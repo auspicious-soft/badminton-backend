@@ -115,6 +115,7 @@ export const validateBookingRequest = async (
       bookingPaymentStatus: true,
       bookingDate: bookingDateObj,
       bookingSlots: { $in: bookingSlots },
+      bookingType: {$ne:"Cancelled"}
       // bookingPaymentStatus: true,
     });
 

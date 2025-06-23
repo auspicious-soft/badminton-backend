@@ -72,6 +72,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
             },
           ],
           bookingPaymentStatus: true,
+          bookingType: {$ne:"Cancelled"}
         })
         .populate({
           path: "venueId",
@@ -217,6 +218,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
             $gte: todayStartIST,
             $lte: todayEndIST,
           },
+          bookingType: {$ne:"Cancelled"}
         })
         .populate("venueId", "name city state address")
         .populate("courtId", "games")
@@ -243,6 +245,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
             { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
           ],
           bookingDate: { $lt: todayStartIST }, // strictly before today
+          bookingType: {$ne:"Cancelled"}
         })
         .populate("venueId", "name city state address")
         .populate("courtId", "games")

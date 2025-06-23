@@ -19,7 +19,6 @@ import { Parser } from "json2csv";
 import { checkOTPAuth } from "src/middleware/check-auth";
 import { gameScoreModel } from "src/models/venue/game-score";
 
-
 const router = Router();
 
 //adminAuth routes
@@ -97,7 +96,13 @@ router.get("/test-route", async (req, res) => {
         updatedAt: { $gte: startDate, $lt: endDate },
         gameType: "Padel",
       })
-      .populate("bookingId player_A1 player_A2 player_B1 player_B2")
+      .populate([
+        { path: "bookingId", populate: { path: "venueId" } }, // Nested population
+        { path: "player_A1" },
+        { path: "player_A2" },
+        { path: "player_B1" },
+        { path: "player_B2" },
+      ])
       .lean();
 
     const data: any = [];
@@ -107,6 +112,8 @@ router.get("/test-route", async (req, res) => {
         FixtureID: item?.bookingId?._id || item._id,
         Date: item?.bookingId?.bookingDate?.toISOString()?.split("T")[0],
         Player_A1: item?.player_A1?.fullName?.toUpperCase() || "N/A",
+        Club_A1: item?.bookingId?.venueId?.name,
+        Region_A1: item?.bookingId?.venueId?.city,
         ID_A1: item?.player_A1?._id || 0,
         Lat_A1: item?.player_A1?.location?.coordinates[1] || 0,
         Lng_A1: item?.player_A1?.location?.coordinates[0] || 0,
@@ -114,6 +121,8 @@ router.get("/test-route", async (req, res) => {
         Country_A1: "IND",
         PlayerCountry_A1: "IND",
         Player_A2: item?.player_A2?.fullName?.toUpperCase() || "N/A",
+        Club_A2: item?.bookingId?.venueId?.name,
+        Region_A2: item?.bookingId?.venueId?.city,
         ID_A2: item?.player_A2?._id || 0,
         Lat_A2: item?.player_A2?.location?.coordinates[1] || 0,
         Lng_A2: item?.player_A2?.location?.coordinates[0] || 0,
@@ -121,6 +130,8 @@ router.get("/test-route", async (req, res) => {
         Country_A2: "IND",
         PlayerCountry_A2: "IND",
         Player_B1: item?.player_B1?.fullName?.toUpperCase() || "N/A",
+        Club_B1: item?.bookingId?.venueId?.name,
+        Region_B1: item?.bookingId?.venueId?.city,
         ID_B1: item?.player_B1?._id || 0,
         Lat_B1: item?.player_B1?.location?.coordinates[1] || 0,
         Lng_B1: item?.player_B1?.location?.coordinates[0] || 0,
@@ -128,15 +139,19 @@ router.get("/test-route", async (req, res) => {
         Country_B1: "IND",
         PlayerCountry_B1: "IND",
         Player_B2: item?.player_B2?.fullName?.toUpperCase() || "N/A",
+        Club_B2: item?.bookingId?.venueId?.name,
+        Region_B2: item?.bookingId?.venueId?.city,
         ID_B2: item?.player_B2?._id || 0,
         Lat_B2: item?.player_B2?.location?.coordinates[1] || 0,
         Lng_B2: item?.player_B2?.location?.coordinates[0] || 0,
         Privacy_B2: false,
         Country_B2: "IND",
         PlayerCountry_B2: "IND",
-        Result: `${item?.set1?.team1 || 0}-${item?.set1?.team2 || 0}, ${item?.set2?.team1 || 0}-${
-          item?.set2?.team2 || 0
-        }, ${item?.set3?.team1 || 0}-${item?.set3?.team2 || 0}`,
+        Result: `${item?.set1?.team1 || 0}-${item?.set1?.team2 || 0}, ${
+          item?.set2?.team1 || 0
+        }-${item?.set2?.team2 || 0}, ${item?.set3?.team1 || 0}-${
+          item?.set3?.team2 || 0
+        }`,
         MatchType: item.matchType || "Friendly",
         Sport: "padel",
         Weight: item?.weight || 1,
@@ -149,6 +164,8 @@ router.get("/test-route", async (req, res) => {
       "FixtureID",
       "Date",
       "Player_A1",
+      "Club_A1",
+      "Region_A1",
       "ID_A1",
       "Privacy_A1",
       "Country_A1",
@@ -157,6 +174,8 @@ router.get("/test-route", async (req, res) => {
       "Lng_A1",
 
       "Player_A2",
+      "Club_A2",
+      "Region_A2",
       "ID_A2",
       "Privacy_A2",
       "Country_A2",
@@ -165,6 +184,8 @@ router.get("/test-route", async (req, res) => {
       "Lng_A2",
 
       "Player_B1",
+      "Club_B1",
+      "Region_B1",
       "ID_B1",
       "Privacy_B1",
       "Country_B1",
@@ -173,6 +194,8 @@ router.get("/test-route", async (req, res) => {
       "Lng_B1",
 
       "Player_B2",
+      "Club_B2",
+      "Region_B2",
       "ID_B2",
       "Privacy_B2",
       "Country_B2",

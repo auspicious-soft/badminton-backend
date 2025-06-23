@@ -1357,6 +1357,7 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
       courtId: booking.courtId,
       bookingDate: bookingDate || booking.bookingDate,
       bookingSlots: bookingSlots,
+      bookingType: {$ne:"Cancelled"},
       _id: { $ne: bookingId }, // Exclude current booking
     });
 

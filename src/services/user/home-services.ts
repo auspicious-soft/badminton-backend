@@ -105,6 +105,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
         $gte: todayStartIST,
         $lte: todayEndIST,
       },
+      bookingType: {$ne:"Cancelled"}
     })
     .lean();
 
@@ -531,6 +532,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       const allBookings = await bookingModel
         .find({
           venueId: venueId,
+          bookingType: {$ne:"Cancelled"},
           bookingDate: {
             $gte: requestDate,
             $lte: endOfDay,
