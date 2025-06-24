@@ -87,7 +87,7 @@ router.get("/get-users/:id", getUsersById);
 router.get("/get-matches", getMatches);
 router.get("/get-cities", getCities);
 
-router.get("/cancel-match", cancelMatch)
+router.post("/cancel-match", cancelMatch)
 
 //Products routes
 router.route("/products").post(createProduct).get(getProducts);

@@ -1669,25 +1669,13 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  console.log({
-    userId: userData.id,
-    bookingId,
-    amount: userTransaction.playcoinsUsed,
-    playcoinsUsed: userTransaction.playcoinsUsed,
-    method: userTransaction?.method,
-    status: "refunded",
-    isWebhookVerified: true,
-    razorpayRefundId: refund?.id || null,
-    transactionDate: new Date(),
-  });
-
   await transactionModel.create(
     [
       {
         userId: userData.id,
         bookingId,
         text: "Booking cancelled by creator",
-        amount: userTransaction.playcoinsUsed,
+        amount: userTransaction.amount,
         playcoinsUsed: userTransaction.playcoinsUsed,
         method: userTransaction?.method,
         status: "refunded",

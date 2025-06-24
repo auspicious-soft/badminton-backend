@@ -27,6 +27,9 @@ import { getCurrentISTTime } from "../../utils";
 import { request } from "http";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { match } from "assert";
+import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
+import razorpayInstance from "src/config/razorpay";
+import { notifyUser } from "src/utils/FCM/FCM";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -84,7 +87,7 @@ export const loginService = async (payload: any, res: Response) => {
     if (venue) {
       userObject.venueId = venue._id;
       userObject.venueName = venue.name;
-      userObject.location = venue.location
+      userObject.location = venue.location;
     }
 
     const existingAttendance = await attendanceModel.findOne({
@@ -1185,20 +1188,140 @@ export const getCitiesService = async (payload: any, res: Response) => {
   }
 };
 export const cancelMatchServices = async (payload: any, res: Response) => {
-  try {
-    const cities = await venueModel.distinct("city");
-    return {
-      success: true,
-      message: "Cities retrieved successfully",
-      data: cities,
-    };
-  } catch (error) {
+  const { percentage, reason, id } = payload.body;
+
+  if (!percentage || !reason || !id) {
     return errorResponseHandler(
-      "Error retrieving cities: " + (error as Error).message,
-      httpStatusCode.INTERNAL_SERVER_ERROR,
+      "Invalid Payload, percentage, reason and id is required",
+      httpStatusCode.BAD_REQUEST,
       res
     );
   }
+  if (percentage < 10 || percentage > 100) {
+    return errorResponseHandler(
+      "Percentage should be between 10 to 100",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  const checkExist = await bookingModel.findById(id).lean();
+
+  if (!checkExist || checkExist?.bookingType == "Cancelled") {
+    return errorResponseHandler(
+      "Booking does not exist or already cancelled",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  const transactionIds: any = [];
+
+  [...checkExist?.team1, ...checkExist?.team2].forEach((element) => {
+    let id = element?.transactionId?.toString();
+    if (!transactionIds?.includes(id)) {
+      transactionIds.push(id);
+    }
+  });
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  Promise.all(
+    transactionIds?.map(async (ids: any) => {
+      try {
+        const userTransaction = await transactionModel.findById(ids).lean();
+
+        if (userTransaction) {
+          if (userTransaction?.playcoinsUsed > 0) {
+            let refactorCoin = Math.floor(
+              (userTransaction?.playcoinsUsed * percentage) / 100
+            );
+            await additionalUserInfoModel.findOneAndUpdate(
+              { userId: userTransaction.userId },
+              { $inc: { playCoins: refactorCoin } },
+              { session }
+            );
+          }
+
+          // Refund via Razorpay if applicable
+          let refund = null;
+          const actualRefundAmount =
+            userTransaction.amount - userTransaction.playcoinsUsed;
+          if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
+            refund = await razorpayInstance.payments.refund(
+              userTransaction.razorpayPaymentId,
+              {
+                amount: Math.floor(
+                  ((actualRefundAmount * percentage) / 100) * 100
+                ),
+                notes: {
+                  bookingId: checkExist._id.toString(),
+                  userId: userTransaction.userId.toString(),
+                  reason: "Booking creator cancelled booking",
+                  CancelByAdmin: "true"
+                },
+              }
+            );
+          }
+          await transactionModel.create(
+            [
+              {
+                userId: userTransaction.userId,
+                bookingId: checkExist._id,
+                text: `Booking cancelled by the Admin`,
+                amount: Math.floor((userTransaction.amount * percentage) / 100),
+                playcoinsUsed: Math.floor(
+                  (userTransaction.playcoinsUsed * percentage) / 100
+                ),
+                method: userTransaction?.method,
+                status: "refunded",
+                isWebhookVerified: true,
+                razorpayRefundId: refund?.id || null,
+                transactionDate: new Date(),
+              },
+            ],
+            { session }
+          );
+
+          await notifyUser({
+            recipientId: userTransaction.userId,
+            type: "BOOKING_CANCELLED",
+            title: "Booking Cancelled",
+            message: `The booking scheduled for ${checkExist?.bookingDate.toLocaleDateString()} at ${
+              checkExist?.bookingSlots
+            } has been cancelled by the Admin with ${percentage}% refund due to ${reason}.`,
+            category: "BOOKING",
+            priority: "HIGH",
+            referenceId: checkExist?._id
+              ? new mongoose.Types.ObjectId(checkExist._id.toString())
+              : id,
+            referenceType: "bookings",
+            notificationType: "BOTH", // Send both in-app and push notification
+            session,
+          });
+        }
+      } catch (err) {
+        console.error(`Error updating transaction ${id}:`, err);
+      }
+    })
+  );
+
+  await bookingModel.findByIdAndUpdate(
+    checkExist._id,
+    {
+      cancellationReason: "Admin cancelled booking",
+      bookingType: "Cancelled",
+    },
+    { session }
+  );
+
+  await session.commitTransaction();
+
+  return {
+    success: true,
+    message: "Booking cancelled successfully",
+  };
 };
 
 export const dashboardServices = async (payload: any, res: Response) => {

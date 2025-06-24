@@ -692,6 +692,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
         eventType
       )
     ) {
+      const notes = event.payload.payment.entity.notes || {};
+
       const refundId = event.payload.refund.entity.id;
       const paymentId = event.payload.refund.entity.payment_id;
       const amount = event.payload.refund.entity.amount / 100; // Convert from paise to rupees
@@ -717,18 +719,20 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
       // Update transaction with refund details
 
-      await transactionModel.create({
-        userId: transaction.userId,
-        orderId: transaction.orderId,
-        razorpayPaymentId: paymentId,
-        refundId: refundId,
-        method: transaction.method,
-        amount,
-        text: "Booking cancelled by creator",
-        status,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      if (notes.CancelByAdmin !== "true") {
+        await transactionModel.create({
+          userId: transaction.userId,
+          orderId: transaction.orderId,
+          razorpayPaymentId: paymentId,
+          refundId: refundId,
+          method: transaction.method,
+          amount,
+          text: "Booking cancelled by creator",
+          status,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
 
       // await transactionModel.findByIdAndUpdate(transaction._id, {
       //   refundId,
@@ -763,7 +767,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               priority: "HIGH",
               notificationType: "BOTH",
               title: "Refund Completed",
-              message: `Your refund of ₹${amount} for booking has been processed successfully.`,
+              message: `Your refund has been completed successfully.`,
               category: "PAYMENT",
               session,
             });
