@@ -16,11 +16,11 @@ export interface BookingDocument extends Document {
   bookingPaymentStatus: boolean;
   bookingDate: Date;
   bookingSlots: string;
-  expectedPayment: number; // New field for total expected payment
+  expectedPayment: number;
   cancellationReason?: string;
-  isMaintenance?: boolean; // Field to indicate maintenance booking
-  maintenanceReason?: string; // Reason for maintenance
-  createdBy?: mongoose.Types.ObjectId; // Admin/employee who created the maintenance
+  isMaintenance?: boolean;
+  maintenanceReason?: string;
+  createdBy?: mongoose.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -31,6 +31,7 @@ const bookingSchema = new Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "users",
       required: true,
+      index: true, // 🔍 Index on userId
     },
     gameType: {
       type: String,
@@ -55,6 +56,7 @@ const bookingSchema = new Schema(
         playerId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "users",
+          index: true, // 🔍 Index nested
         },
         playerType: {
           type: String,
@@ -69,6 +71,7 @@ const bookingSchema = new Schema(
           type: String,
           enum: ["Pending", "Paid", "Cancelled", "Refunded"],
           default: "Pending",
+          index: true,
         },
         transactionId: {
           type: mongoose.Schema.Types.ObjectId,
@@ -94,7 +97,8 @@ const bookingSchema = new Schema(
         playerId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "users",
-          defult: null,
+          default: null,
+          index: true, // 🔍 Index nested
         },
         playerType: {
           type: String,
@@ -103,12 +107,13 @@ const bookingSchema = new Schema(
         },
         playerPayment: {
           type: Number,
-          defult: 0,
+          default: 0,
         },
         paymentStatus: {
           type: String,
           enum: ["Pending", "Paid", "Cancelled", "Refunded"],
           default: "Pending",
+          index: true,
         },
         transactionId: {
           type: mongoose.Schema.Types.ObjectId,
@@ -133,17 +138,20 @@ const bookingSchema = new Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "venues",
       required: true,
+      index: true,
     },
     courtId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "courts",
       required: true,
+      index: true,
     },
     bookingType: {
       type: String,
       enum: ["Booking", "Complete", "Cancelled"],
       default: "Booking",
       required: true,
+      index: true,
     },
     bookingAmount: {
       type: Number,
@@ -153,13 +161,24 @@ const bookingSchema = new Schema(
       type: Boolean,
       default: false,
     },
-    bookingDate: { type: Date, required: true },
-    bookingSlots: { type: String, enum: VENUE_TIME_SLOTS, required: true },
+    bookingDate: {
+      type: Date,
+      required: true,
+      index: true,
+    },
+    bookingSlots: {
+      type: String,
+      enum: VENUE_TIME_SLOTS,
+      required: true,
+    },
     expectedPayment: {
       type: Number,
       default: 0,
     },
-    cancellationReason: { type: String, default: null },
+    cancellationReason: {
+      type: String,
+      default: null,
+    },
     isMaintenance: {
       type: Boolean,
       default: false,
@@ -175,6 +194,11 @@ const bookingSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// 🔁 Compound Indexes for optimized filtering
+bookingSchema.index({ "team1.playerId": 1, "team1.paymentStatus": 1 });
+bookingSchema.index({ "team2.playerId": 1, "team2.paymentStatus": 1 });
+bookingSchema.index({ userId: 1, bookingDate: 1 });
 
 export const bookingModel = mongoose.model<BookingDocument>(
   "bookings",
