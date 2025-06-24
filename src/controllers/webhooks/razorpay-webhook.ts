@@ -389,7 +389,11 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   messages: [],
                   isActive: true,
                 });
+              }
 
+              // Send notifications to all players in the booking
+
+              if (eventType === "payment.captured") {
                 const allPlayerIds = [
                   booking.userId,
                   ...booking.team1.map((player: any) => player.playerId),
@@ -397,32 +401,32 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 ];
 
                 await Promise.all(
-                  allPlayerIds.map((playerId) =>
-                    notifyUser({
-                      recipientId: playerId,
-                      type: "PAYMENT_SUCCESSFUL",
-                      title: "Game Booked Successfully",
-                      message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-                      category: "PAYMENT",
-                      notificationType: "BOTH",
-                      referenceId: (booking as any)._id.toString(),
-                      priority:
-                        playerId.toString() == transaction.userId.toString()
-                          ? "HIGH"
-                          : "MEDIUM",
-                      referenceType: "bookings",
-                      metadata: {
-                        bookingId: booking._id,
-                        transactionId: transaction._id,
-                        amount: transaction.amount,
-                        timestamp: new Date().toISOString(),
-                      },
-                      session,
-                    })
+                  allPlayerIds?.map(
+                    async (playerId) =>
+                      await notifyUser({
+                        recipientId: playerId,
+                        type: "PAYMENT_SUCCESSFUL",
+                        title: "Game Booked Successfully",
+                        message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                        category: "PAYMENT",
+                        notificationType: "BOTH",
+                        referenceId: (booking as any)._id.toString(),
+                        priority:
+                          playerId.toString() == transaction.userId.toString()
+                            ? "HIGH"
+                            : "MEDIUM",
+                        referenceType: "bookings",
+                        metadata: {
+                          bookingId: booking._id,
+                          transactionId: transaction._id,
+                          amount: transaction.amount,
+                          timestamp: new Date().toISOString(),
+                        },
+                        session,
+                      })
                   )
                 );
               }
-              // Send notifications to all players in the booking
             }
           }
 
