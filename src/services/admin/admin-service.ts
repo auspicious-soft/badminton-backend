@@ -1030,16 +1030,19 @@ export const getMatchesService = async (payload: any, res: Response) => {
       if (type === "upcoming") {
         matchQuery.bookingDate = { $gte: currentDate };
         matchQuery.bookingSlots = { $gte: currentISTHour };
+        matchQuery.cancellationReason = null ;
       } else if (type === "completed") {
         matchQuery.$or = [
           {
             // Case 1: Any booking from before today (fully completed)
             bookingDate: { $lt: currentDate },
+            cancellationReason : null
           },
           {
             // Case 2: Today's booking, but time has passed
             bookingDate: currentDate,
             bookingSlots: { $lt: currentISTHour },
+            cancellationReason : null
           },
         ];
       }
