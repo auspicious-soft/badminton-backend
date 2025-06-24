@@ -719,7 +719,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
       // Update transaction with refund details
 
-      if (notes.CancelByAdmin !== "true") {
+      if (notes?.CancelByAdmin !== "true") {
         await transactionModel.create({
           userId: transaction.userId,
           orderId: transaction.orderId,

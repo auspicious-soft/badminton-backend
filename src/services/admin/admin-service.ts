@@ -1227,83 +1227,88 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  Promise.all(
+  await Promise.all(
     transactionIds?.map(async (ids: any) => {
-      try {
-        const userTransaction = await transactionModel.findById(ids).lean();
+      return async () => {
+        try {
+          const userTransaction = await transactionModel.findById(ids).lean();
 
-        if (userTransaction) {
-          if (userTransaction?.playcoinsUsed > 0) {
-            let refactorCoin = Math.floor(
-              (userTransaction?.playcoinsUsed * percentage) / 100
-            );
-            await additionalUserInfoModel.findOneAndUpdate(
-              { userId: userTransaction.userId },
-              { $inc: { playCoins: refactorCoin } },
+          if (userTransaction) {
+            if (userTransaction?.playcoinsUsed > 0) {
+              let refactorCoin = Math.floor(
+                (userTransaction?.playcoinsUsed * percentage) / 100
+              );
+              await additionalUserInfoModel.findOneAndUpdate(
+                { userId: userTransaction.userId },
+                { $inc: { playCoins: refactorCoin } },
+                { session }
+              );
+            }
+
+            // Refund via Razorpay if applicable
+            let refund = null;
+            const actualRefundAmount =
+              userTransaction.amount - userTransaction.playcoinsUsed;
+            if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
+              refund = await razorpayInstance.payments.refund(
+                userTransaction.razorpayPaymentId,
+                {
+                  amount: Math.floor(
+                    ((actualRefundAmount * percentage) / 100) * 100
+                  ),
+                  notes: {
+                    bookingId: checkExist._id.toString(),
+                    userId: userTransaction.userId.toString(),
+                    reason: "Booking creator cancelled booking",
+                    CancelByAdmin: "true",
+                  },
+                }
+              );
+            }
+            console.log("xxxxx", userTransaction?.userId);
+            await transactionModel.create(
+              [
+                {
+                  userId: userTransaction?.userId,
+                  bookingId: checkExist._id,
+                  text: `Booking cancelled by the Admin`,
+                  amount: Math.floor(
+                    (userTransaction.amount * percentage) / 100
+                  ),
+                  playcoinsUsed: Math.floor(
+                    (userTransaction.playcoinsUsed * percentage) / 100
+                  ),
+                  method: userTransaction?.method,
+                  status: "refunded",
+                  isWebhookVerified: true,
+                  razorpayRefundId: refund?.id || null,
+                  transactionDate: new Date(),
+                },
+              ],
               { session }
             );
-          }
 
-          // Refund via Razorpay if applicable
-          let refund = null;
-          const actualRefundAmount =
-            userTransaction.amount - userTransaction.playcoinsUsed;
-          if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
-            refund = await razorpayInstance.payments.refund(
-              userTransaction.razorpayPaymentId,
-              {
-                amount: Math.floor(
-                  ((actualRefundAmount * percentage) / 100) * 100
-                ),
-                notes: {
-                  bookingId: checkExist._id.toString(),
-                  userId: userTransaction.userId.toString(),
-                  reason: "Booking creator cancelled booking",
-                  CancelByAdmin: "true"
-                },
-              }
-            );
+            await notifyUser({
+              recipientId: userTransaction.userId,
+              type: "BOOKING_CANCELLED",
+              title: "Booking Cancelled",
+              message: `The booking scheduled for ${checkExist?.bookingDate.toLocaleDateString()} at ${
+                checkExist?.bookingSlots
+              } has been cancelled by the Admin with ${percentage}% refund due to ${reason}.`,
+              category: "BOOKING",
+              priority: "HIGH",
+              referenceId: checkExist?._id
+                ? new mongoose.Types.ObjectId(checkExist._id.toString())
+                : id,
+              referenceType: "bookings",
+              notificationType: "BOTH", // Send both in-app and push notification
+              session,
+            });
           }
-          await transactionModel.create(
-            [
-              {
-                userId: userTransaction.userId,
-                bookingId: checkExist._id,
-                text: `Booking cancelled by the Admin`,
-                amount: Math.floor((userTransaction.amount * percentage) / 100),
-                playcoinsUsed: Math.floor(
-                  (userTransaction.playcoinsUsed * percentage) / 100
-                ),
-                method: userTransaction?.method,
-                status: "refunded",
-                isWebhookVerified: true,
-                razorpayRefundId: refund?.id || null,
-                transactionDate: new Date(),
-              },
-            ],
-            { session }
-          );
-
-          await notifyUser({
-            recipientId: userTransaction.userId,
-            type: "BOOKING_CANCELLED",
-            title: "Booking Cancelled",
-            message: `The booking scheduled for ${checkExist?.bookingDate.toLocaleDateString()} at ${
-              checkExist?.bookingSlots
-            } has been cancelled by the Admin with ${percentage}% refund due to ${reason}.`,
-            category: "BOOKING",
-            priority: "HIGH",
-            referenceId: checkExist?._id
-              ? new mongoose.Types.ObjectId(checkExist._id.toString())
-              : id,
-            referenceType: "bookings",
-            notificationType: "BOTH", // Send both in-app and push notification
-            session,
-          });
+        } catch (err) {
+          console.error(`Error updating transaction ${id}:`, err);
         }
-      } catch (err) {
-        console.error(`Error updating transaction ${id}:`, err);
-      }
+      };
     })
   );
 
