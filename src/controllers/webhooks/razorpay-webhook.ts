@@ -72,23 +72,22 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
       if (existingTransaction) {
         console.log(`Transaction ${paymentId} already processed, skipping`);
-
-        await notifyUser({
-          recipientId: (existingTransaction as any).userId,
-          type: "PAYMENT_ALREADY_PROCESSED",
-          title: "Payment Already Processed",
-          message: `Your payment of ₹${amount} for order this has already been processed.`,
-          category: "PAYMENT",
-          referenceId: (existingTransaction as any)._id.toString(),
-          priority: "MEDIUM",
-          notificationType: "PUSH",
-          referenceType: "transactions",
-          metadata: {
-            orderId,
-            paymentId,
-            amount,
-          },
-        });
+        // await notifyUser({
+        //   recipientId: (existingTransaction as any).userId,
+        //   type: "PAYMENT_ALREADY_PROCESSED",
+        //   title: "Payment Already Processed",
+        //   message: `Your payment of ₹${amount} for order this has already been processed.`,
+        //   category: "PAYMENT",
+        //   referenceId: (existingTransaction as any)._id.toString(),
+        //   priority: "MEDIUM",
+        //   notificationType: "PUSH",
+        //   referenceType: "transactions",
+        //   metadata: {
+        //     orderId,
+        //     paymentId,
+        //     amount,
+        //   },
+        // });
         return res.status(httpStatusCode.OK).json({
           success: true,
           message: "Payment already processed",
@@ -389,13 +388,10 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                   messages: [],
                   isActive: true,
                 });
-              }
 
-              // Send notifications to all players in the booking
+                // Send notifications to all players in the booking
 
-              if (eventType === "payment.captured") {
                 const allPlayerIds = [
-                  booking.userId,
                   ...booking.team1.map((player: any) => player.playerId),
                   ...booking.team2.map((player: any) => player.playerId),
                 ];
