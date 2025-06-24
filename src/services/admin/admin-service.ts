@@ -1184,6 +1184,22 @@ export const getCitiesService = async (payload: any, res: Response) => {
     );
   }
 };
+export const cancelMatchServices = async (payload: any, res: Response) => {
+  try {
+    const cities = await venueModel.distinct("city");
+    return {
+      success: true,
+      message: "Cities retrieved successfully",
+      data: cities,
+    };
+  } catch (error) {
+    return errorResponseHandler(
+      "Error retrieving cities: " + (error as Error).message,
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+};
 
 export const dashboardServices = async (payload: any, res: Response) => {
   try {

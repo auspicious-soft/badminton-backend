@@ -198,7 +198,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               {
                 $set: {
                   isWebhookVerified: true,
-                  status,
+                  status: "received",
                 },
               },
               { session }

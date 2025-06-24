@@ -100,6 +100,7 @@ export const buyPackages = async (req: Request, res: Response) => {
 
     const transaction = await transactionModel.create({
       userId: userData.id,
+      text:"Wallet Recharge",
       amount: finalAmount,
       currency: "INR",
       status: "created",
