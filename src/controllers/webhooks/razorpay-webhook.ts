@@ -193,8 +193,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             .session(session);
 
           if (!transaction?.isWebhookVerified) {
-            await transactionModel.updateOne(
-              { _id: transactionId },
+            await transactionModel.findByIdAndUpdate(
+              transactionId,
               {
                 $set: {
                   isWebhookVerified: true,
