@@ -431,10 +431,34 @@ export const getEmployeeByIdService = async (payload: any, res: Response) => {
 
 export const getAdminDetailsService = async (payload: any, res: Response) => {
   console.log("payload: ", payload.currentUser);
-  const results = await adminModel.findById(payload.currentUser.id).lean();
+  if (payload.currentUser.role == "admin") {
+    const results = await adminModel.findById(payload.currentUser.id).lean();
+    return {
+      success: true,
+      data: results,
+    };
+  }
+
+  if (payload.currentUser.role == "employee") {
+    const results = await employeesModel
+      .findById(payload.currentUser.id)
+      .select("-password -otp -token")
+      .lean();
+    if (!results) {
+      return errorResponseHandler(
+        "Employee not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+    return {
+      success: true,
+      data: results,
+    };
+  }
   return {
-    success: true,
-    data: results,
+    success: false,
+    data: {},
   };
 };
 

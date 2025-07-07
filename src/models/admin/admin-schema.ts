@@ -45,6 +45,7 @@ const adminSchema = new mongoose.Schema({
     },
     profilePic: {
       type: String,
+      default:null
     },
 
     address: { type: String },
