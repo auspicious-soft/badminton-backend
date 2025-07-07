@@ -670,6 +670,17 @@ export const getVenueService = async (payload: any, res: Response) => {
   const limitNumber = parseInt(limit) || 10;
   const offset = (pageNumber - 1) * limitNumber;
 
+  const isValidSearch = (str: string) => /^[a-zA-Z0-9\s]+$/.test(str);
+
+  if (search && !isValidSearch(search)) {
+    // You can also throw an error instead of returning
+    return errorResponseHandler(
+      "Only letters and numbers are allowed.",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
   const searchQuery = search
     ? {
         $or: [
@@ -777,6 +788,16 @@ export const getUsersService = async (payload: any, res: Response) => {
   const pageNumber = parseInt(page) || 1;
   const limitNumber = parseInt(limit) || 10;
   const offset = (pageNumber - 1) * limitNumber;
+
+  const isValidSearch = (str: string) => /^[a-zA-Z0-9\s@]+$/.test(str);
+
+  if (search && !isValidSearch(search)) {
+    return errorResponseHandler(
+      "Only letters and numbers are allowed.",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
 
   // Build search query
   const searchQuery = search
@@ -1030,19 +1051,19 @@ export const getMatchesService = async (payload: any, res: Response) => {
       if (type === "upcoming") {
         matchQuery.bookingDate = { $gte: currentDate };
         matchQuery.bookingSlots = { $gte: currentISTHour };
-        matchQuery.cancellationReason = null ;
+        matchQuery.cancellationReason = null;
       } else if (type === "completed") {
         matchQuery.$or = [
           {
             // Case 1: Any booking from before today (fully completed)
             bookingDate: { $lt: currentDate },
-            cancellationReason : null
+            cancellationReason: null,
           },
           {
             // Case 2: Today's booking, but time has passed
             bookingDate: currentDate,
             bookingSlots: { $lt: currentISTHour },
-            cancellationReason : null
+            cancellationReason: null,
           },
         ];
       }

@@ -70,7 +70,7 @@ export const createMaintenanceBooking = async (req: Request, res: Response) => {
         $in: Array.isArray(bookingSlots) ? bookingSlots : [bookingSlots],
       },
       bookingPaymentStatus: true,
-      isMaintenance: false, // Only check for regular bookings
+      // isMaintenance: false, // Only check for regular bookings
       bookingType: {$ne:"Cancelled"}
     });
 
