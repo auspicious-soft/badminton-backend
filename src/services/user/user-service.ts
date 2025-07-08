@@ -132,13 +132,15 @@ export const socialLoginService = async (
 
   const { email, given_name, family_name, picture } = decodedToken;
 
+  console.log(email?.split("@")[0])
+
   // Create fullName from given_name and family_name
-  const fullName = `${given_name || ""} ${family_name || ""}`.trim();
+  const fullName = `${given_name || email?.split("@")[0] || ""} ${family_name || ""}`.trim();
 
   const result = await loginUserService(
     {
       email,
-      firstName: given_name,
+      firstName: given_name || fullName,
       lastName: family_name,
       fullName: fullName, // Add fullName
       profilePic: picture,
