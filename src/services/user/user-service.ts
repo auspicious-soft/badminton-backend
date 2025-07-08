@@ -37,6 +37,8 @@ import { Readable } from "stream";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
+import { chatModel } from "src/models/chat/chat-schema";
+import { notificationModel } from "src/models/notification/notification-schema";
 
 configDotenv();
 export interface UserPayload {
@@ -713,12 +715,12 @@ export const verifyOTPService = async (
         });
         await notifyUser({
           recipientId: referredPerson.userId,
-          type: "Referral",
+          type: "REFERRAL_SUCCESSFUL",
           title: "Referral Bonus Received",
           message: `You have received ${
             bonusAmount?.referral?.bonusAmount || 50
           } coins for referring a friend!`,
-          category: "Referral",
+          category: "FRIEND",
           priority: "HIGH",
           referenceType: "User",
           metadata: { referralCode: user?.referralUsed },
@@ -744,27 +746,32 @@ export const verifyOTPService = async (
   }
 
   if (phoneOtp) {
-    let user = await usersModel.findOne({
+    const user = await usersModel.findOne({
       _id: userData.id,
       "otp.phoneCode": phoneOtp,
       "otp.expiresAt": { $gt: new Date() },
     });
 
     if (!user) {
-      throw new Error("Invalid or expired Phone OTP");
-    }
-    user.phoneVerified = true;
-    if (user.otp) {
-      user.otp.phoneCode = "";
-      user.otp.expiresAt = new Date(0);
-    }
+      errorResponseHandler(
+        "Invalid or expired Phone OTP",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    } else {
+      user.phoneVerified = true;
+      if (user.otp) {
+        user.otp.phoneCode = "";
+        user.otp.expiresAt = new Date(0);
+      }
 
-    user.token = generateUserToken(user as any, true);
-    await user.save();
-    return {
-      data: sanitizeUser(user),
-      message: "Phone number verified successfully",
-    };
+      user.token = generateUserToken(user as any, true);
+      await user.save();
+      return {
+        data: sanitizeUser(user),
+        message: "Phone number verified successfully",
+      };
+    }
   }
 };
 
@@ -857,6 +864,34 @@ export const getUserServices = async (req: Request, res: Response) => {
     ],
   });
 
+  const messageCount = await chatModel
+    .find({
+      participants: { $in: [userId] },
+    })
+    .lean();
+
+  let totalMessage = 0;
+
+  if (messageCount && messageCount.length > 0) {
+    messageCount.forEach((chat: any) => {
+      if (chat?.messages && chat?.messages?.length > 0) {
+        let lastIndx = chat.messages.length - 1;
+        if (
+          !chat?.messages[lastIndx].readBy.some((id: mongoose.Types.ObjectId) =>
+            id.equals(userId)
+          )
+        ) {
+          totalMessage += 1;
+        }
+      }
+    });
+  }
+
+  const unreadNotifications = await notificationModel.find({
+    recipientId: userId,
+    isRead: false,
+  }).countDocuments();
+
   return {
     success: true,
     message: "User retrieved successfully",
@@ -868,6 +903,8 @@ export const getUserServices = async (req: Request, res: Response) => {
       freeGameCount: additionalInfo?.freeGameCount || 0,
       loyaltyTier: additionalInfo?.loyaltyTier || "Bronze",
       loyaltyPoints: additionalInfo?.loyaltyPoints || 0,
+      unreadChats: totalMessage || 0,
+      unreadNotifications: unreadNotifications || 0,
       referrals: additionalInfo?.referrals || {
         code: "",
         expiryDate: new Date(),

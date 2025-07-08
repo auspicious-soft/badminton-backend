@@ -376,7 +376,7 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
                 friendId: userData.id,
               },
               notificationType: "BOTH", // Send both push and in-app notifications
-              referenceId: (updatedRequest as any)._id,
+              referenceId: userData.id,
               referenceType: "users",
             });
           } catch (notificationError) {
