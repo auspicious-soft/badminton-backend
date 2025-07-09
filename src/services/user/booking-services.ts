@@ -858,6 +858,9 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       const paidForPlayerIds =
         transaction.paidFor?.map((id) => id.toString()) || [];
 
+      let allPlayerIds: any[] = [];
+      let bookingId: any
+
       for (const booking of bookings) {
         // Update team1 players
         booking.team1 = booking.team1.map((player: any) => {
@@ -907,35 +910,38 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           });
         }
 
-        const allPlayerIds = [
+        allPlayerIds = [
           booking.userId,
           ...booking.team1.map((player: any) => player.playerId),
           ...booking.team2.map((player: any) => player.playerId),
         ];
-        for (const playerId of allPlayerIds) {
-          if (playerId.toString() !== transaction.userId.toString()) {
-            await notifyUser({
-              recipientId: playerId,
-              type: "PAYMENT_SUCCESSFUL",
-              title: "Game Booked Successfully",
-              message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-              category: "PAYMENT",
-              notificationType: "BOTH",
-              referenceId: (booking as any)._id.toString(),
-              priority:
-                playerId.toString() == transaction.userId.toString()
-                  ? "HIGH"
-                  : "MEDIUM",
-              referenceType: "bookings",
-              metadata: {
-                bookingId: booking._id,
-                transactionId: transaction._id,
-                amount: transaction.amount,
-                timestamp: new Date().toISOString(),
-              },
-              session,
-            });
-          }
+
+        bookingId = booking._id;
+      }
+
+      for (const playerId of allPlayerIds) {
+        if (playerId.toString() !== transaction.userId.toString()) {
+          await notifyUser({
+            recipientId: playerId,
+            type: "PAYMENT_SUCCESSFUL",
+            title: "Game Booked Successfully",
+            message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+            category: "PAYMENT",
+            notificationType: "BOTH",
+            referenceId: bookingId.toString(),
+            priority:
+              playerId.toString() == transaction.userId.toString()
+                ? "HIGH"
+                : "MEDIUM",
+            referenceType: "bookings",
+            metadata: {
+              bookingId: bookingId,
+              transactionId: transaction._id,
+              amount: transaction.amount,
+              timestamp: new Date().toISOString(),
+            },
+            session,
+          });
         }
       }
 
@@ -1357,7 +1363,7 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
       courtId: booking.courtId,
       bookingDate: bookingDate || booking.bookingDate,
       bookingSlots: bookingSlots,
-      bookingType: {$ne:"Cancelled"},
+      bookingType: { $ne: "Cancelled" },
       _id: { $ne: bookingId }, // Exclude current booking
     });
 

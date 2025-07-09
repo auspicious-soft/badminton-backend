@@ -339,6 +339,9 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             const paidForPlayerIds =
               transaction?.paidFor?.map((id: any) => id.toString()) || [];
 
+            let allPlayerIds: any[] = [];
+            let bookingId: any;
+
             for (const booking of bookings) {
               // Update team1 players
               booking.team1 = booking.team1.map((player: any) => {
@@ -391,39 +394,40 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
                 // Send notifications to all players in the booking
 
-                const allPlayerIds = [
+                allPlayerIds = [
                   ...booking.team1.map((player: any) => player.playerId),
                   ...booking.team2.map((player: any) => player.playerId),
                 ];
-
-                await Promise.all(
-                  allPlayerIds?.map(
-                    async (playerId) =>
-                      await notifyUser({
-                        recipientId: playerId,
-                        type: "PAYMENT_SUCCESSFUL",
-                        title: "Game Booked Successfully",
-                        message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
-                        category: "PAYMENT",
-                        notificationType: "BOTH",
-                        referenceId: (booking as any)._id.toString(),
-                        priority:
-                          playerId.toString() == transaction.userId.toString()
-                            ? "HIGH"
-                            : "MEDIUM",
-                        referenceType: "bookings",
-                        metadata: {
-                          bookingId: booking._id,
-                          transactionId: transaction._id,
-                          amount: transaction.amount,
-                          timestamp: new Date().toISOString(),
-                        },
-                        session,
-                      })
-                  )
-                );
+                bookingId = booking._id;
               }
             }
+
+            await Promise.all(
+              allPlayerIds?.map(
+                async (playerId) =>
+                  await notifyUser({
+                    recipientId: playerId,
+                    type: "PAYMENT_SUCCESSFUL",
+                    title: "Game Booked Successfully",
+                    message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+                    category: "PAYMENT",
+                    notificationType: "BOTH",
+                    referenceId: bookingId.toString(),
+                    priority:
+                      playerId.toString() == transaction.userId.toString()
+                        ? "HIGH"
+                        : "MEDIUM",
+                    referenceType: "bookings",
+                    metadata: {
+                      bookingId: bookingId,
+                      transactionId: transaction._id,
+                      amount: transaction.amount,
+                      timestamp: new Date().toISOString(),
+                    },
+                    session,
+                  })
+              )
+            );
           }
 
           // Check if this is a join request by looking at the transaction notes
