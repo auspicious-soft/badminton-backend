@@ -334,8 +334,8 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
   const dayType = isWeekend ? "weekend" : "weekday";
 
   // Get the price for the booking slot
-  let slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
-  slotPrice = Number(slotPrice || 0) / 4;
+  // let slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
+  let slotPrice = Number(booking?.expectedPayment || 0) / 4;
   if (!slotPrice) {
     return errorResponseHandler(
       `Price configuration not found for slot ${bookingSlot}`,
