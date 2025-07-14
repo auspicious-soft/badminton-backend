@@ -175,13 +175,11 @@ import { additionalUserInfoModel } from "src/models/user/additional-info-schema"
 
 export const userHomeServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  let { nearBy = true, lng: lngQuery = null, lat: latQuery = null } = req.query;
+  const { nearBy = true, lng: lngQuery = null, lat: latQuery = null } = req.query;
 
-  let lng: number | null = null;
-  let lat: number | null = null;
-  let nearbyVenues: any[] = [];
+  const lng = lngQuery ? Number(lngQuery) : null;
+  const lat = latQuery ? Number(latQuery) : null;
 
-  // Get current IST time and date boundaries
   const nowIST = getCurrentISTTime();
   const todayStartIST = new Date(nowIST);
   todayStartIST.setHours(0, 0, 0, 0);
@@ -189,47 +187,33 @@ export const userHomeServices = async (req: Request, res: Response) => {
   const todayEndIST = new Date(nowIST);
   todayEndIST.setHours(23, 59, 59, 999);
 
-  console.log(`Hour: ${nowIST.getHours()}}`);
-
-  // Prepare geo aggregation if lat/lng provided
-  if (lngQuery && latQuery) {
-    lng = Number(lngQuery);
-    lat = Number(latQuery);
-
-    const pipeline: any[] = [
-      {
-        $geoNear: {
-          near: { type: "Point", coordinates: [lng, lat] },
-          distanceField: "distance",
-          spherical: true,
-          maxDistance: 100000,
-        },
+  // Build geo query pipeline
+  const geoPipeline: mongoose.PipelineStage[] = lng && lat ? [
+    {
+      $geoNear: {
+        near: { type: "Point", coordinates: [lng, lat] },
+        distanceField: "distance",
+        spherical: true,
+        maxDistance: 20000, // 20km max distance
+        query: { isActive: true },
       },
-      { $match: { isActive: true } },
-      { $limit: 20 }, // Limit for performance
-      {
-        $project: {
-          name: 1,
-          city: 1,
-          state: 1,
-          image: 1,
-          weather: 1,
-          distance: {
-            $round: [{ $divide: ["$distance", 1000] }, 1],
-          },
-        },
+    },
+    {
+      $limit: 20
+    },
+    {
+      $project: {
+        name: 1,
+        city: 1,
+        state: 1,
+        image: 1,
+        weather: 1,
+        distance: { $round: [{ $divide: ["$distance", 1000] }, 1] }, // Convert to km
       },
-    ];
+    },
+  ] : [];
 
-    nearbyVenues = await venueModel.aggregate(pipeline);
-  } else {
-    nearbyVenues = await venueModel
-      .find({ isActive: true })
-      .select("name city state image weather")
-      .lean();
-  }
-
-  // Build match query once for both today + future
+  // Match bookings for user (team1 or team2) that are upcoming and not cancelled
   const matchQuery = {
     $or: [
       {
@@ -253,19 +237,21 @@ export const userHomeServices = async (req: Request, res: Response) => {
     bookingType: { $ne: "Cancelled" },
   };
 
-  // Run multiple DB queries in parallel
-  const [allMatches, banners, userLoyalty] = await Promise.all([
+  // Fetch data in parallel
+  const nearbyVenuesPromise = lng && lat
+    ? venueModel.aggregate(geoPipeline)
+    : venueModel.find({ isActive: true }).select("name city state image weather").lean();
+
+  const [nearbyVenues, allMatches, banners, userLoyalty] = await Promise.all([
+    nearbyVenuesPromise,
     bookingModel.find(matchQuery).lean(),
-    adminSettingModel
-      .findOne({ isActive: true })
-      .select("banners loyaltyPoints")
-      .lean(),
+    adminSettingModel.findOne({ isActive: true }).select("banners loyaltyPoints").lean(),
     additionalUserInfoModel.findOne({ userId: userData.id }).lean(),
   ]);
 
-  // Split today's and future matches
-  const todayProcessed = [];
-  const futureMatches = [];
+  // Separate today's and future matches
+  const todayProcessed: any[] = [];
+  const futureMatches: any[] = [];
 
   for (const booking of allMatches) {
     const bookingDate = new Date(booking.bookingDate);
@@ -284,22 +270,20 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
   const upcomingMatchData = [...todayProcessed, ...futureMatches];
 
-  const totalLevel =
-    (banners?.loyaltyPoints?.limit || 2000) /
-    (banners?.loyaltyPoints?.perMatch || 200);
+  const perMatch = banners?.loyaltyPoints?.perMatch || 200;
+  const limit = banners?.loyaltyPoints?.limit || 2000;
 
-  const level =
-    (userLoyalty?.loyaltyPoints || 0) /
-    (banners?.loyaltyPoints?.perMatch || 200);
+  const level = (userLoyalty?.loyaltyPoints || 0) / perMatch;
+  const totalLevel = limit / perMatch;
 
   const data = {
     banners: banners?.banners || [],
     upcomingMatches: upcomingMatchData,
     venueNearby: nearbyVenues,
-    playersRanking: [],
+    playersRanking: [], // Can be fetched in parallel too if added later
     loyaltyPoints: {
-      points: userLoyalty?.loyaltyPoints,
-      level: level,
+      points: userLoyalty?.loyaltyPoints || 0,
+      level,
       totalLevels: totalLevel,
       freeGames: userLoyalty?.freeGameCount || 0,
     },
@@ -311,6 +295,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
     data,
   };
 };
+
 
 export const getVenuesServices = async (req: Request, res: Response) => {
   try {
@@ -325,45 +310,22 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       );
     }
 
-    // Convert coordinates to numbers
     const lngNum = Number(lng);
     const latNum = Number(lat);
-
-    // Parse the input date
     const requestDate = new Date(date as string);
-    requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
-
-    // End of the requested day
+    requestDate.setHours(0, 0, 0, 0);
     const endOfDay = new Date(requestDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Get current time in IST
     const istTime = getCurrentISTTime();
-
-    // Check if the requested date is today in IST
     const isRequestedDateToday = isDateTodayInIST(requestDate);
-
-    // Get current hour in IST
     const currentHour = istTime.getHours();
 
-    console.log(
-      `Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`
-    );
-    console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
-
-    // Step 1: Get venues based on location
+    // Build geo query
     const geoQuery: any = { isActive: true };
+    if (game !== "all") geoQuery.gamesAvailable = { $in: [game] };
 
-    // Only filter venues by game if game is specified
-    if (game !== "all") {
-      geoQuery.gamesAvailable = { $in: [game] };
-    }
-
-    // Earth's radius is approximately 6371 km
-    // 100 km in meters = 100,000 meters
-    // This is a reasonable maximum distance for venue searches
-    const MAX_SEARCH_DISTANCE = 100000; // 100 km in meters
-
+    const MAX_SEARCH_DISTANCE = 100000; // 100 km
     const venues = await venueModel.aggregate([
       {
         $geoNear: {
@@ -399,85 +361,41 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       };
     }
 
-    // Step 2: Get all courts for these venues
-    const venueIds = venues.map((venue: any) => venue._id);
-    console.log(`Venue IDs: ${venueIds.length}`, venueIds);
+    const venueIds = venues.map((v) => v._id);
 
-    // Base query to get active courts for the venues
-    let courtsQuery: any = {
+    // Prepare court query
+    const courtsQuery: any = {
       venueId: { $in: venueIds },
       isActive: true,
     };
+    if (game !== "all") courtsQuery.games = game;
 
-    // Filter courts by game type if specified
-    if (game !== "all") {
-      courtsQuery.games = game;
-    }
+    // Parallel fetch: courts and bookings
+    const [courts, bookings] = await Promise.all([
+      courtModel.find(courtsQuery).select("_id name venueId games hourlyRate image").lean(),
+      bookingModel.find({
+        venueId: { $in: venueIds },
+        bookingDate: { $gte: requestDate, $lte: endOfDay },
+      }).lean(),
+    ]);
 
-    const courts = await courtModel
-      .find(courtsQuery)
-      .select("_id name venueId games hourlyRate image")
-      .lean();
-
-    // Group courts by venue ID
+    // Group courts by venue
     const courtsByVenue: Record<string, any[]> = {};
-    courts.forEach((court: any) => {
+    courts.forEach((court) => {
       const venueId = court.venueId.toString();
-      if (!courtsByVenue[venueId]) {
-        courtsByVenue[venueId] = [];
-      }
+      if (!courtsByVenue[venueId]) courtsByVenue[venueId] = [];
       courtsByVenue[venueId].push(court);
     });
 
-    // Log which venues have courts after game filtering
-    venueIds.forEach((id) => {
-      const venueIdStr = id.toString();
-      console.log(
-        `Venue ${venueIdStr} has ${
-          courtsByVenue[venueIdStr]?.length || 0
-        } courts after game filtering`
-      );
-    });
-
-    // Step 3: Get all bookings for the specific date
-    const bookings = await bookingModel
-      .find({
-        venueId: { $in: venueIds },
-        bookingDate: {
-          $gte: requestDate,
-          $lte: endOfDay,
-        },
-      })
-      .lean();
-
-    // Create a map of booked slots by venue and court
+    // Map of booked slots
     const bookedSlots: Record<string, Record<string, string[]>> = {};
-
     bookings.forEach((booking: any) => {
-      // Handle different ObjectId formats
-      const venueId =
-        typeof booking.venueId === "object" && booking.venueId !== null
-          ? booking.venueId.toString
-            ? booking.venueId.toString()
-            : String(booking.venueId)
-          : booking.venueId;
+      const venueId = booking.venueId.toString();
+      const courtId = booking.courtId.toString();
 
-      const courtId =
-        typeof booking.courtId === "object" && booking.courtId !== null
-          ? booking.courtId.toString
-            ? booking.courtId.toString()
-            : String(booking.courtId)
-          : booking.courtId;
+      if (!bookedSlots[venueId]) bookedSlots[venueId] = {};
+      if (!bookedSlots[venueId][courtId]) bookedSlots[venueId][courtId] = [];
 
-      if (!bookedSlots[venueId]) {
-        bookedSlots[venueId] = {};
-      }
-
-      if (!bookedSlots[venueId][courtId]) {
-        bookedSlots[venueId][courtId] = [];
-      }
-
-      // Handle both array and string cases for bookingSlots
       if (Array.isArray(booking.bookingSlots)) {
         bookedSlots[venueId][courtId].push(...booking.bookingSlots);
       } else {
@@ -485,8 +403,8 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       }
     });
 
-    // Format the date for display
-    const dateString = requestDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    // Prepare response
+    const dateString = requestDate.toLocaleDateString("en-CA");
     const formattedDate = new Intl.DateTimeFormat("en-US", {
       weekday: "long",
       year: "numeric",
@@ -494,42 +412,25 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       day: "numeric",
     }).format(requestDate);
 
-    // Format the result - include ALL venues, but only include courts that match the game filter
     const result = venues.map((venue: any) => {
       const venueId = venue._id.toString();
       const venueCourts = courtsByVenue[venueId] || [];
-
-      // Include empty courts array if no courts found for this venue with the selected game
       const venueTimeslots = venue.timeslots || VENUE_TIME_SLOTS;
 
-      // Add availability to each court (if any)
-      // Add availability to each court (if any)
       const courtsWithAvailability = venueCourts.map((court: any) => {
         const courtId = court._id.toString();
-        const courtBookedSlots = bookedSlots[venueId]?.[courtId] || [];
+        const booked = bookedSlots[venueId]?.[courtId] || [];
 
-        // Filter available slots
         const availableSlots = venueTimeslots.filter((slot: string) => {
-          // Skip booked slots
-          if (courtBookedSlots.includes(slot)) {
-            return false;
-          }
-
-          // For today only, filter out past time slots
+          if (booked.includes(slot)) return false;
           if (isRequestedDateToday) {
             const slotHour = parseInt(slot.split(":")[0], 10);
-            if (slotHour <= currentHour) {
-              return false;
-            }
+            if (slotHour <= currentHour) return false;
           }
-
           return true;
         });
 
-        return {
-          ...court,
-          availableSlots,
-        };
+        return { ...court, availableSlots };
       });
 
       return {
@@ -551,13 +452,6 @@ export const getVenuesServices = async (req: Request, res: Response) => {
       };
     });
 
-    console.log(`Returning ${result.length} venues in the final result`);
-    console.log(
-      `Venues with filtered courts: ${
-        result.filter((v) => v.hasFilteredCourts).length
-      }`
-    );
-
     return {
       success: true,
       message: "Venues retrieved successfully",
@@ -573,6 +467,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
   }
 };
 
+
 export const getCourtsServices = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
@@ -586,7 +481,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       );
     }
 
-    // Find the venue
+    // Step 1: Fetch venue
     const venueData = await venueModel
       .findById(venueId)
       .select("-employees")
@@ -600,8 +495,8 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       );
     }
 
-    // Get courts for this venue, filtered by game if specified
-    let courtsQuery: any = {
+    // Step 2: Fetch courts
+    const courtsQuery: any = {
       venueId: venueId,
       isActive: true,
     };
@@ -615,207 +510,123 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       .select("_id name venueId games hourlyRate image")
       .lean();
 
-    console.log(
-      `Found ${courts.length} courts for venue ${venueId} with game filter: ${
-        game || "all"
-      }`
-    );
+    // Step 3: If no date provided, return early
+    if (!date) {
+      return {
+        success: true,
+        message: "Courts retrieved successfully",
+        data: {
+          ...venueData,
+          courts,
+        },
+      };
+    }
 
-    // If date is provided, get availability for that date
-    if (date) {
-      // Parse the input date
-      const requestDate = new Date(date as string);
-      requestDate.setHours(0, 0, 0, 0); // Set to beginning of day
+    // Step 4: Date-specific processing
+    const requestDate = new Date(date as string);
+    requestDate.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(requestDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
-      // End of the requested day
-      const endOfDay = new Date(requestDate);
-      endOfDay.setHours(23, 59, 59, 999);
+    const istTime = getCurrentISTTime();
+    const isRequestedDateToday = isDateTodayInIST(requestDate);
+    const currentHour = istTime.getHours();
 
-      // Get current time in IST
-      const istTime = getCurrentISTTime();
+    const dayOfWeek = requestDate.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const dayType = isWeekend ? "weekend" : "weekday";
 
-      // Check if the requested date is today in IST
-      const isRequestedDateToday = isDateTodayInIST(requestDate);
-
-      // Get current hour in IST
-      const currentHour = istTime.getHours();
-
-      console.log(
-        `Current IST time: ${istTime.toISOString()}, Hour: ${currentHour}`
-      );
-      console.log(`Is requested date today in IST: ${isRequestedDateToday}`);
-
-      // Determine if it's a weekend (0 = Sunday, 6 = Saturday)
-      const dayOfWeek = requestDate.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const dayType = isWeekend ? "weekend" : "weekday";
-
-      // Get dynamic pricing for this day type
-      const pricing = await priceModel
-        .findOne({
-          dayType,
-          isActive: true,
-        })
-        .lean();
-
-      // Get all bookings for this venue on the specified date
-      const allBookings = await bookingModel
+    // Fetch pricing and bookings in parallel
+    const [pricing, allBookings] = await Promise.all([
+      priceModel.findOne({ dayType, isActive: true }).lean(),
+      bookingModel
         .find({
-          venueId: venueId,
+          venueId,
           bookingType: { $ne: "Cancelled" },
-          bookingDate: {
-            $gte: requestDate,
-            $lte: endOfDay,
-          },
+          bookingDate: { $gte: requestDate, $lte: endOfDay },
         })
-        .lean();
+        .lean(),
+    ]);
 
-      // Separate confirmed and pending bookings
-      const confirmedBookings = allBookings.filter(
-        (booking) => booking.bookingPaymentStatus === true
-      );
-      const pendingBookings = allBookings.filter(
-        (booking) => booking.bookingPaymentStatus !== true
-      );
+    const confirmedSlots: Record<string, string[]> = {};
+    const pendingSlots: Record<string, string[]> = {};
 
-      console.log(
-        `Found ${confirmedBookings.length} confirmed and ${pendingBookings.length} pending bookings for venue ${venueId} on ${date}`
-      );
+    for (const booking of allBookings) {
+      const courtId = booking.courtId?.toString?.() ?? String(booking.courtId);
+      const target = booking.bookingPaymentStatus ? confirmedSlots : pendingSlots;
 
-      // Create maps for both confirmed and pending slots
-      const confirmedSlots: Record<string, string[]> = {};
-      const pendingSlots: Record<string, string[]> = {};
+      if (!target[courtId]) {
+        target[courtId] = [];
+      }
 
-      // Process confirmed bookings
-      confirmedBookings.forEach((booking: any) => {
-        const courtId =
-          typeof booking.courtId === "object" && booking.courtId !== null
-            ? booking.courtId.toString
-              ? booking.courtId.toString()
-              : String(booking.courtId)
-            : booking.courtId;
+      const slots = Array.isArray(booking.bookingSlots)
+        ? booking.bookingSlots
+        : [booking.bookingSlots];
 
-        if (!confirmedSlots[courtId]) {
-          confirmedSlots[courtId] = [];
-        }
+      target[courtId].push(...slots);
+    }
 
-        // Handle both array and string cases for bookingSlots
-        if (Array.isArray(booking.bookingSlots)) {
-          confirmedSlots[courtId].push(...booking.bookingSlots);
-        } else {
-          confirmedSlots[courtId].push(booking.bookingSlots);
-        }
-      });
+    const dateString = requestDate.toLocaleDateString("en-CA");
+    const formattedDate = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(requestDate);
 
-      // Process pending bookings
-      pendingBookings.forEach((booking: any) => {
-        const courtId =
-          typeof booking.courtId === "object" && booking.courtId !== null
-            ? booking.courtId.toString
-              ? booking.courtId.toString()
-              : String(booking.courtId)
-            : booking.courtId;
+    const courtsWithAvailability = courts.map((court) => {
+      const courtId = court._id.toString();
+      const confirmed = confirmedSlots[courtId] || [];
+      const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
+      const baseRate = court.hourlyRate || 1200;
 
-        if (!pendingSlots[courtId]) {
-          pendingSlots[courtId] = [];
-        }
+      const availableSlots = venueTimeslots.map((slot: string) => {
+        const slotHour = parseInt(slot.split(":")[0], 10);
+        const isPast = isRequestedDateToday && slotHour <= currentHour;
+        const isBooked = confirmed.includes(slot);
+        const isAvailable = !isBooked && !isPast;
 
-        // Handle both array and string cases for bookingSlots
-        if (Array.isArray(booking.bookingSlots)) {
-          pendingSlots[courtId].push(...booking.bookingSlots);
-        } else {
-          pendingSlots[courtId].push(booking.bookingSlots);
-        }
-      });
+        let price = baseRate;
+        let isDiscounted = false;
+        let isPremium = false;
 
-      // Format the date for display
-      const dateString = requestDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
-      const formattedDate = new Intl.DateTimeFormat("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }).format(requestDate);
-
-      // Add availability to each court
-      const courtsWithAvailability = courts.map((court: any) => {
-        const courtId = court._id.toString();
-        // Use confirmedSlots and pendingSlots instead of undefined bookedSlots
-        const courtConfirmedSlots = confirmedSlots[courtId] || [];
-        const courtPendingSlots = pendingSlots[courtId] || [];
-        const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
-        const baseHourlyRate = court.hourlyRate || 1200; // Default hourly rate if not specified
-
-        // Include all slots with availability status
-        const allSlots = venueTimeslots.map((slot: string) => {
-          // Check slot status - only consider confirmed bookings
-          const isConfirmedBooked = courtConfirmedSlots.includes(slot) || false;
-
-          // Check if slot is in the past (for today only)
-          let isPastSlot = false;
-          if (isRequestedDateToday) {
-            const slotHour = parseInt(slot.split(":")[0], 10);
-            isPastSlot = slotHour <= currentHour;
+        if (pricing?.slotPricing?.length) {
+          const match = pricing.slotPricing.find((s: any) => s.slot === slot);
+          if (match) {
+            price = match.price;
+            isDiscounted = price < baseRate;
+            isPremium = price > baseRate;
           }
-
-          // Determine if slot is available - ignore pending bookings
-          const isAvailable = !isConfirmedBooked && !isPastSlot;
-
-          // Find dynamic price for this slot if pricing exists
-          let price = baseHourlyRate;
-          if (pricing && pricing.slotPricing) {
-            const slotPricing = pricing.slotPricing.find(
-              (item: any) => item.slot === slot
-            );
-            if (slotPricing) {
-              price = slotPricing.price;
-            }
-          }
-
-          return {
-            time: slot,
-            price: price,
-            isDiscounted: price < baseHourlyRate,
-            isPremium: price > baseHourlyRate,
-            isAvailable: isAvailable,
-            isConfirmedBooked: isConfirmedBooked,
-            isPastSlot: isPastSlot,
-          };
-        });
+        }
 
         return {
-          ...court,
-          availableSlots: allSlots,
+          time: slot,
+          price,
+          isDiscounted,
+          isPremium,
+          isAvailable,
+          isConfirmedBooked: isBooked,
+          isPastSlot: isPast,
         };
       });
 
-      // Add date information to the venue data
-      const venueWithAvailability = {
+      return {
+        ...court,
+        availableSlots,
+      };
+    });
+
+    return {
+      success: true,
+      message: "Courts retrieved successfully",
+      data: {
         ...venueData,
         courts: courtsWithAvailability,
         date: dateString,
-        formattedDate: formattedDate,
-        dayType: dayType,
-      };
-
-      return {
-        success: true,
-        message: "Courts retrieved successfully",
-        data: venueWithAvailability,
-      };
-    } else {
-      // If no date provided, just return the venue with its courts
-      const venueWithCourts = {
-        ...venueData,
-        courts: courts,
-      };
-
-      return {
-        success: true,
-        message: "Courts retrieved successfully",
-        data: venueWithCourts,
-      };
-    }
+        formattedDate,
+        dayType,
+      },
+    };
   } catch (error) {
     console.error("Error in getCourtsServices:", error);
     return errorResponseHandler(
@@ -825,6 +636,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
     );
   }
 };
+
 
 // export const getOpenMatchesServices = async (req: Request, res: Response) => {
 //   const userData = req.user as any;
@@ -1204,29 +1016,20 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const istTime = getCurrentISTTime();
   const currentHour = istTime.getHours();
 
-  let dateQuery: any;
-  let requestDate: Date;
-  let endOfDay: Date;
-  let isRequestedDateToday: boolean;
+  let requestDate = date ? new Date(date as string) : new Date(istTime);
+  requestDate.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(requestDate);
+  endOfDay.setHours(23, 59, 59, 999);
 
-  if (date) {
-    requestDate = new Date(date as string);
-    requestDate.setHours(0, 0, 0, 0);
-    endOfDay = new Date(requestDate);
-    endOfDay.setHours(23, 59, 59, 999);
-    dateQuery = { $gte: requestDate, $lte: endOfDay };
-    isRequestedDateToday = isDateTodayInIST(requestDate);
-  } else {
-    requestDate = new Date(istTime);
-    requestDate.setHours(0, 0, 0, 0);
-    dateQuery = { $gte: requestDate };
-    isRequestedDateToday = true;
-  }
+  const isRequestedDateToday = isDateTodayInIST(requestDate);
+  const dateQuery = date
+    ? { $gte: requestDate, $lte: endOfDay }
+    : { $gte: requestDate };
 
   try {
     const userObjectId = new mongoose.Types.ObjectId(userData.id);
 
-    // Main Booking Query
+    // 1. Fetch bookings first
     const bookings = await bookingModel
       .find({
         askToJoin: true,
@@ -1244,35 +1047,35 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         message: "No open matches found",
         data: [],
         meta: {
-          date: date
-            ? new Date(date as string).toLocaleDateString("en-CA")
-            : "all",
+          date: date ? requestDate.toLocaleDateString("en-CA") : "all",
           isSpecificDate: !!date,
           isToday: isRequestedDateToday,
         },
       };
     }
 
-    const venueIds = [...new Set(bookings.map((b) => b.venueId.toString()))];
-    const courtIds = [...new Set(bookings.map((b) => b.courtId.toString()))];
+    const venueIds = [...new Set(bookings.map(b => b.venueId.toString()))];
+    const courtIds = [...new Set(bookings.map(b => b.courtId.toString()))];
 
-    const courtsQuery: any = { _id: { $in: courtIds }, isActive: true };
-    if (game !== "all") courtsQuery.games = game;
-
+    // 2. Parallel fetch for venues, courts, and users
     const [venues, courts, users] = await Promise.all([
       venueModel
         .find({ _id: { $in: venueIds }, isActive: true })
         .select("_id name city state address image weather location")
         .lean(),
       courtModel
-        .find(courtsQuery)
+        .find({
+          _id: { $in: courtIds },
+          isActive: true,
+          ...(game !== "all" && { games: game }),
+        })
         .select("_id name venueId games hourlyRate image")
         .lean(),
       usersModel
         .find({
           _id: {
             $in: Array.from(
-              bookings.flatMap((b) => [
+              bookings.flatMap(b => [
                 ...b.team1.map((p: any) => p.playerId),
                 ...b.team2.map((p: any) => p.playerId),
               ])
@@ -1283,87 +1086,79 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         .lean(),
     ]);
 
-    const venuesMap = Object.fromEntries(
-      venues.map((v) => [v._id.toString(), v])
-    );
-    const courtsMap = Object.fromEntries(
-      courts.map((c) => [c._id.toString(), c])
-    );
-    const usersMap = Object.fromEntries(
-      users.map((u) => [
+    // 3. Build Maps
+    const venuesMap = new Map(venues.map(v => [v._id.toString(), v]));
+    const courtsMap = new Map(courts.map(c => [c._id.toString(), c]));
+    const usersMap = new Map(
+      users.map(u => [
         u._id.toString(),
         { _id: u._id, name: u.fullName, image: u.profilePic },
       ])
     );
 
+    // 4. Process bookings
     const processedBookings = bookings
-      .filter((booking) => {
-        const court = courtsMap[booking.courtId.toString()];
-        if (!court) return false;
-
-        const bookingDate = new Date(booking.bookingDate);
-        const isBookingToday = isDateTodayInIST(bookingDate);
-
-        if (isBookingToday) {
-          const slots = Array.isArray(booking.bookingSlots)
-            ? booking.bookingSlots
-            : [booking.bookingSlots];
-          return slots.some(
-            (slot) => parseInt(slot.split(":")[0]) > currentHour
-          );
-        }
-
-        return true;
-      })
-      .map((booking) => {
-        const venue = venuesMap[booking.venueId.toString()];
-        const court = courtsMap[booking.courtId.toString()];
+      .map(booking => {
+        const venue = venuesMap.get(booking.venueId.toString());
+        const court = courtsMap.get(booking.courtId.toString());
         if (!venue || !court) return null;
 
-        let distance: number | null = null;
-        if (venue.location?.coordinates?.length === 2) {
-          const [venueLng, venueLat] = venue.location.coordinates;
-          const R = 6371;
-          const dLat = ((venueLat - latNum) * Math.PI) / 180;
-          const dLon = ((venueLng - lngNum) * Math.PI) / 180;
-          const a =
-            Math.sin(dLat / 2) ** 2 +
-            Math.cos((latNum * Math.PI) / 180) *
-              Math.cos((venueLat * Math.PI) / 180) *
-              Math.sin(dLon / 2) ** 2;
-          distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          if (distance > 15000) return null;
-        }
-
-        const isToday = isDateTodayInIST(new Date(booking.bookingDate));
-        let filteredSlots: string[] = Array.isArray(booking.bookingSlots)
+        // Filter past slots if today
+        let filteredSlots = Array.isArray(booking.bookingSlots)
           ? booking.bookingSlots
           : [booking.bookingSlots];
 
-        if (isToday) {
-          filteredSlots = filteredSlots.filter(
-            (slot) => parseInt(slot.split(":")[0]) > currentHour
-          );
+        if (isRequestedDateToday || isDateTodayInIST(booking.bookingDate)) {
+          filteredSlots = filteredSlots.filter(slot => {
+            const hour = parseInt(slot.split(":")[0], 10);
+            return hour > currentHour;
+          });
+          if (!filteredSlots.length) return null;
+        }
+
+        // Calculate distance if location exists
+        let distanceKm: number | null = null;
+        if (
+          venue.location?.coordinates?.length === 2 &&
+          typeof latNum === "number" &&
+          typeof lngNum === "number"
+        ) {
+          const [venueLng, venueLat] = venue.location.coordinates;
+          const toRad = (deg: number) => (deg * Math.PI) / 180;
+          const R = 6371;
+          const dLat = toRad(venueLat - latNum);
+          const dLon = toRad(venueLng - lngNum);
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(latNum)) *
+              Math.cos(toRad(venueLat)) *
+              Math.sin(dLon / 2) ** 2;
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          distanceKm = R * c;
+          if (distanceKm > 15000) return null;
         }
 
         const formatTeam = (team: any[]) =>
-          team.map((player) => ({
+          team.map(player => ({
             playerType: player.playerType,
-            player: player.playerId
-              ? usersMap[player.playerId.toString()] || null
-              : null,
+            player:
+              player.playerId && usersMap.has(player.playerId.toString())
+                ? usersMap.get(player.playerId.toString())
+                : null,
           }));
 
         const bookingDate = new Date(booking.bookingDate);
+        const formattedDate = new Intl.DateTimeFormat("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }).format(bookingDate);
+
         return {
           _id: booking._id,
           bookingDate,
-          formattedDate: new Intl.DateTimeFormat("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }).format(bookingDate),
+          formattedDate,
           bookingSlots: filteredSlots,
           askToJoin: booking.askToJoin,
           isCompetitive: booking.isCompetitive,
@@ -1380,21 +1175,26 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
             weather: venue.weather,
           },
           court,
-          distance: distance !== null ? Math.round(distance * 10) / 10 : null,
+          distance: distanceKm !== null
+            ? Math.round(distanceKm * 10) / 10
+            : null,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean) as any[];
 
+    // 5. Sorting
     processedBookings.sort((a, b) => {
-      if (!a || !b) return 0;
       const timeDiff =
-        new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime();
+        new Date(a.bookingDate).getTime() -
+        new Date(b.bookingDate).getTime();
       if (timeDiff !== 0) return timeDiff;
-      if (a?.distance === null) return 1;
-      if (b?.distance === null) return -1;
+
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
+
       return distance === "ASC"
-        ? (a?.distance || 0) - (b?.distance || 0)
-        : (b?.distance || 0) - (a?.distance || 0);
+        ? a.distance - b.distance
+        : b.distance - a.distance;
     });
 
     return {
@@ -1404,9 +1204,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       meta: {
         totalMatches: processedBookings.length,
         isSpecificDate: !!date,
-        date: date
-          ? new Date(date as string).toLocaleDateString("en-CA")
-          : "all",
+        date: requestDate.toLocaleDateString("en-CA"),
         isToday: isRequestedDateToday,
       },
     };
@@ -1419,6 +1217,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     );
   }
 };
+
 
 export const getOpenMatchesByIdServices = async (
   req: Request,
