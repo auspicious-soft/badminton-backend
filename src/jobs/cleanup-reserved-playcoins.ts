@@ -41,11 +41,9 @@ export const cleanupReservedPlaycoins = async () => {
         { session }
       );
       
-      console.log(`Released ${transaction.playcoinsUsed} reserved playcoins for transaction ${transaction._id}`);
     }
     
     await session.commitTransaction();
-    console.log(`Cleaned up ${abandonedTransactions.length} abandoned transactions with reserved playcoins`);
   } catch (error) {
     await session.abortTransaction();
     console.error("Error cleaning up reserved playcoins:", error);

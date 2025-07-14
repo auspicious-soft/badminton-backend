@@ -88,14 +88,9 @@ export const validateBookingRequest = async (
     if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
       const currentHour = currentDate.getHours();
       const currentMinute = currentDate.getMinutes();
-      
-      console.log(`Current IST time: ${currentDate.toISOString()}, Hour: ${currentHour}, Minute: ${currentMinute}`);
-      
       // Check each booking slot
       for (const slot of bookingSlots) {
         const [slotHour, slotMinute] = slot.split(':').map(num => parseInt(num, 10));
-        
-        console.log(`Checking slot: ${slot}, Hour: ${slotHour}, Minute: ${slotMinute}`);
         
         // If slot time is earlier than or equal to current time, reject the booking
         if (slotHour < currentHour || (slotHour === currentHour && slotMinute <= currentMinute)) {

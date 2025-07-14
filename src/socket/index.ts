@@ -53,8 +53,6 @@ export const initializeSocketEvents = (ioServer: Server) => {
       const user = socket.data.user;
       const userId = user.id;
 
-      console.log(`User connected: ${userId} (Socket ID: ${socket.id})`);
-
       // Store user connection
       connectedUsers.set(userId, socket);
 
@@ -81,7 +79,6 @@ export const initializeSocketEvents = (ioServer: Server) => {
 
       // Handle user disconnection
       socket.on("disconnect", () => {
-        console.log(`User disconnected: ${userId} (Socket ID: ${socket.id})`);
         connectedUsers.delete(userId);
 
         // Broadcast user's offline status

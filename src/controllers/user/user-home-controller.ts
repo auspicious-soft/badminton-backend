@@ -9,7 +9,6 @@ import { getAppInfoServices, getUserServices, updateUserServices } from "src/ser
 
 export const userHome = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await userHomeServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -22,7 +21,6 @@ export const userHome = async (req: Request, res: Response) => {
 
 export const getUser = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getUserServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -34,7 +32,6 @@ export const getUser = async (req: Request, res: Response) => {
 };
 export const updateUser = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await updateUserServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -46,7 +43,6 @@ export const updateUser = async (req: Request, res: Response) => {
 };
 export const getVenues = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getVenuesServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -58,7 +54,6 @@ export const getVenues = async (req: Request, res: Response) => {
 };
 export const getCourts = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getCourtsServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -71,7 +66,6 @@ export const getCourts = async (req: Request, res: Response) => {
 
 export const bookCourt = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await bookCourtServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -83,7 +77,6 @@ export const bookCourt = async (req: Request, res: Response) => {
 };
 export const modifyBooking = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await modifyBookingServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -95,7 +88,6 @@ export const modifyBooking = async (req: Request, res: Response) => {
 };
 export const bookingPayment = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await paymentBookingServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -107,7 +99,6 @@ export const bookingPayment = async (req: Request, res: Response) => {
 };
 export const getDynamicPrice = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getDynamicPriceServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -120,7 +111,6 @@ export const getDynamicPrice = async (req: Request, res: Response) => {
 
 export const cancelBooking = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await cancelBookingServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -133,7 +123,6 @@ export const cancelBooking = async (req: Request, res: Response) => {
 
 export const joinOpenCourt = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await joinOpenBookingServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -145,7 +134,6 @@ export const joinOpenCourt = async (req: Request, res: Response) => {
 };
 export const getOpenMatches = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getOpenMatchesServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -157,7 +145,6 @@ export const getOpenMatches = async (req: Request, res: Response) => {
 };
 export const getOpenMatchesById = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getOpenMatchesByIdServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -169,7 +156,6 @@ export const getOpenMatchesById = async (req: Request, res: Response) => {
 };
 export const userNotifications = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await userNotificationServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -181,7 +167,6 @@ export const userNotifications = async (req: Request, res: Response) => {
 };
 export const readUserNotifications = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await readUserNotificationServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
@@ -194,7 +179,6 @@ export const readUserNotifications = async (req: Request, res: Response) => {
 
 export const getAppInfo = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const response = await getAppInfoServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {

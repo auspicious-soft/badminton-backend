@@ -71,7 +71,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
       });
 
       if (existingTransaction) {
-        console.log(`Transaction ${paymentId} already processed, skipping`);
         // await notifyUser({
         //   recipientId: (existingTransaction as any).userId,
         //   type: "PAYMENT_ALREADY_PROCESSED",
@@ -198,10 +197,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
 
           await session.commitTransaction();
 
-          console.log(
-            `Merchandise order ${merchandiseOrderId} payment processed successfully`
-          );
-
           // Continue with the rest of the webhook processing
         } catch (error) {
           await session.abortTransaction();
@@ -239,7 +234,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 { $inc: { playCoins: +transaction?.playcoinsReceived } },
                 { session }
               );
-              console.log("User update result:", updateResult);
+
             }
 
             if (transaction?.userId) {
@@ -619,9 +614,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             (error as Error).message &&
             (error as Error).message.includes("Write conflict")
           ) {
-            console.log(
-              "Write conflict detected, returning success to prevent retries"
-            );
             return res.status(httpStatusCode.OK).json({
               success: true,
               message: "Payment acknowledged (write conflict detected)",

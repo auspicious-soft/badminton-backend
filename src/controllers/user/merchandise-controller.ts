@@ -13,7 +13,6 @@ import razorpayInstance from "src/config/razorpay";
 
 export const getMerchandise = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
 
     const { type = "all" } = req.query;
 
@@ -53,7 +52,6 @@ export const getMerchandise = async (req: Request, res: Response) => {
 
 export const getMerchandiseById = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const { id } = req.params;
     if (!id) {
       return errorResponseHandler(
@@ -89,7 +87,6 @@ export const getMerchandiseById = async (req: Request, res: Response) => {
 
 export const addToCart = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { id } = req.body;
 
@@ -158,7 +155,6 @@ export const addToCart = async (req: Request, res: Response) => {
 
 export const getCart = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const cartItems = await cartModel
       .find({ userId: userData.id })
@@ -181,7 +177,6 @@ export const getCart = async (req: Request, res: Response) => {
 
 export const editCart = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { cartId, quantity } = req.body;
     if (!cartId) {
@@ -243,7 +238,6 @@ export const editCart = async (req: Request, res: Response) => {
 
 export const deleteCartItem = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { cartId } = req.body;
     if (!cartId) {
@@ -286,7 +280,6 @@ export const deleteCartItem = async (req: Request, res: Response) => {
 
 export const orderProduct = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { items, address, lat, lng } = req.body;
 
@@ -739,7 +732,6 @@ export const getOrderById = async (req: Request, res: Response) => {
 
 export const rateProduct = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { productId, rating, description } = req.body;
 

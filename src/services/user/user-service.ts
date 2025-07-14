@@ -132,10 +132,10 @@ export const socialLoginService = async (
 
   const { email, given_name, family_name, picture } = decodedToken;
 
-  console.log(email?.split("@")[0])
-
   // Create fullName from given_name and family_name
-  const fullName = `${given_name || email?.split("@")[0] || ""} ${family_name || ""}`.trim();
+  const fullName = `${given_name || email?.split("@")[0] || ""} ${
+    family_name || ""
+  }`.trim();
 
   const result = await loginUserService(
     {
@@ -647,7 +647,6 @@ export const generateAndSendOTP = async (
 
   if (user) {
     // No need to call save if findOneAndUpdate handles the commit
-    console.log("OTP successfully generated and saved for user: ", user);
   }
 
   // Send OTP via the respective method
@@ -889,10 +888,12 @@ export const getUserServices = async (req: Request, res: Response) => {
     });
   }
 
-  const unreadNotifications = await notificationModel.find({
-    recipientId: userId,
-    isRead: false,
-  }).countDocuments();
+  const unreadNotifications = await notificationModel
+    .find({
+      recipientId: userId,
+      isRead: false,
+    })
+    .countDocuments();
 
   return {
     success: true,

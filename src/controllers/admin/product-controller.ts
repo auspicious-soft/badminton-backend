@@ -16,7 +16,6 @@ import path from "path";
 export const createProduct = async (req: Request, res: Response) => {
   try {
     const payload = req?.body;
-    console.log("payload: ", payload);
     if (!payload) {
       return errorResponseHandler(
         "Payload is missing",

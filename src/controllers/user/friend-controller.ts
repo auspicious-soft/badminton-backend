@@ -15,7 +15,6 @@ import { notifyUser } from "src/utils/FCM/FCM";
 
 export const searchFriend = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { search, page = "1", limit = "10" } = req.query;
 
@@ -105,7 +104,6 @@ export const searchFriend = async (req: Request, res: Response) => {
 };
 export const sendRequest = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { friendId } = req.body;
 
@@ -260,7 +258,6 @@ export const sendRequest = async (req: Request, res: Response) => {
 
 export const acceptFriendRequest = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { requestId, status } = req.body;
 
@@ -414,7 +411,6 @@ export const acceptFriendRequest = async (req: Request, res: Response) => {
 };
 export const blockUser = async (req: Request, res: Response) => {
   try {
-    console.log("req.body: ", req.user);
     const userData = req.user as any;
     const { userId } = req.body;
 

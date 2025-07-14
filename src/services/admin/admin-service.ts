@@ -46,7 +46,6 @@ export const loginService = async (payload: any, res: Response) => {
   let user: any = null;
 
   if (isEmail) {
-    console.log("isEmail: ", isEmail);
     const checkAdmin = await adminModel
       .findOne({ email: email })
       .select("+password");
@@ -54,7 +53,6 @@ export const loginService = async (payload: any, res: Response) => {
       .findOne({ email: email })
       .select("+password");
     user = checkAdmin || checkEmployee;
-    console.log("user: ", user);
   }
 
   if (!user)
@@ -168,7 +166,7 @@ export const forgotPasswordService = async (email: string, res: Response) => {
       res
     );
   const passwordResetToken = await generatePasswordResetToken(email, null);
-  console.log("passwordResetToken: ", passwordResetToken);
+
   if (passwordResetToken !== null) {
     await sendPasswordResetEmail(email, passwordResetToken.token, "eng");
     return { success: true, message: "Password reset email sent with otp" };
@@ -215,7 +213,6 @@ export const newPassswordAfterOTPVerifiedService = async (
 };
 
 export const createEmployeeService = async (payload: any, res: Response) => {
-  console.log("Create Employee", payload);
   const emailExists = await employeesModel.findOne({ email: payload.email });
   if (emailExists)
     return errorResponseHandler(
@@ -430,7 +427,6 @@ export const getEmployeeByIdService = async (payload: any, res: Response) => {
 };
 
 export const getAdminDetailsService = async (payload: any, res: Response) => {
-  console.log("payload: ", payload.currentUser);
   if (payload.currentUser.role == "admin") {
     const results = await adminModel.findById(payload.currentUser.id).lean();
     return {
@@ -556,8 +552,6 @@ export const updateAdminDetailsServices = async (
 // ******************** Handle Venue **************************
 
 export const createVenueService = async (payload: any, res: Response) => {
-  console.log("venue-data", payload.employees);
-
   const missingFields = [];
 
   if (!payload.employees.length) missingFields.push("employees");
@@ -738,7 +732,6 @@ export const getVenueService = async (payload: any, res: Response) => {
 
 export const getVenueByIdService = async (payload: any, res: Response) => {
   const { id, search } = payload;
-  console.log("venueId: ", id);
 
   if (!id) {
     return errorResponseHandler(
@@ -805,7 +798,6 @@ export const getUsersService = async (payload: any, res: Response) => {
       : "asc";
 
   // Log sorting parameters for debugging
-  console.log("Sorting Parameters:", { sortBy, order });
 
   // Pagination and search parameters
   const { page, limit, search } = payload.query;
@@ -861,7 +853,6 @@ export const getUsersService = async (payload: any, res: Response) => {
     ];
 
     // Log pipeline for debugging
-    console.log("Aggregation Pipeline:", JSON.stringify(pipeline, null, 2));
 
     // Execute aggregation with collation for case-insensitive sorting
     const users = await usersModel
@@ -1045,7 +1036,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
     // Get current time in IST
     const currentDate = new Date().setHours(0, 0, 0, 0); // Normalize to start of the day
     const currentISTHour = getCurrentISTTime().getHours();
-    // console.log(`Current IST time: ${currentDate.toISOString()}`);
+    //
 
     let matchQuery: any = {};
     matchQuery.bookingPaymentStatus = true;
@@ -1313,7 +1304,7 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
                 }
               );
             }
-            console.log("xxxxx", userTransaction?.userId);
+
             await transactionModel.create(
               [
                 {

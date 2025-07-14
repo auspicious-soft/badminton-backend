@@ -693,6 +693,7 @@ export const getMyTransactions = async (req: Request, res: Response) => {
     const transactions = await transactionModel
       .find({
         userId: userData.id,
+        isWebhookVerified: true
       })
       .select(
         "amount method status playcoinsUsed createdAt notes razorpayAmount text"
