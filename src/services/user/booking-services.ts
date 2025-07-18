@@ -1642,41 +1642,41 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
   const diffMs = bookingDateTime.getTime() - currentUTC.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
 
-  if (diffHours < 6) {
+  if (diffHours < 4) {
     await session.abortTransaction();
     return errorResponseHandler(
-      "Bookings can only be cancelled at least 6 hours before the scheduled time",
+      "Bookings can only be cancelled at least 4 hours before the scheduled time",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  // Refund playcoins if used
-  if (userTransaction.playcoinsUsed > 0) {
+  // Refund only in playcoins
+  if (userTransaction.amount > 0) {
     await additionalUserInfoModel.findOneAndUpdate(
       { userId: userData.id },
-      { $inc: { playCoins: userTransaction.playcoinsUsed } },
+      { $inc: { playCoins: userTransaction.amount } },
       { session }
     );
   }
 
   // Refund via Razorpay if applicable
-  let refund = null;
-  const actualRefundAmount =
-    userTransaction.amount - userTransaction.playcoinsUsed;
-  if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
-    refund = await razorpayInstance.payments.refund(
-      userTransaction.razorpayPaymentId,
-      {
-        amount: Math.round(actualRefundAmount * 100),
-        notes: {
-          bookingId,
-          userId: userData.id.toString(),
-          reason: "Booking creator cancelled booking",
-        },
-      }
-    );
-  }
+  // let refund = null;
+  // const actualRefundAmount =
+  //   userTransaction.amount - userTransaction.playcoinsUsed;
+  // if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
+  //   refund = await razorpayInstance.payments.refund(
+  //     userTransaction.razorpayPaymentId,
+  //     {
+  //       amount: Math.round(actualRefundAmount * 100),
+  //       notes: {
+  //         bookingId,
+  //         userId: userData.id.toString(),
+  //         reason: "Booking creator cancelled booking",
+  //       },
+  //     }
+  //   );
+  // }
 
   await transactionModel.create(
     [
@@ -1685,11 +1685,11 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
         bookingId,
         text: "Booking cancelled by creator",
         amount: userTransaction.amount,
-        playcoinsUsed: userTransaction.playcoinsUsed,
+        playcoinsUsed: userTransaction.amount,
         method: userTransaction?.method,
         status: "refunded",
         isWebhookVerified: true,
-        razorpayRefundId: refund?.id || null,
+        razorpayRefundId: null,
         transactionDate: new Date(),
       },
     ],
@@ -1746,9 +1746,9 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     message: "Booking cancelled successfully",
     data: {
       bookingId,
-      refundId: refund?.id,
-      refundAmount: actualRefundAmount,
-      playcoinsRefunded: userTransaction.playcoinsUsed,
+      refundId: null,
+      refundAmount: 0,
+      playcoinsRefunded: userTransaction.amount,
     },
   };
 };

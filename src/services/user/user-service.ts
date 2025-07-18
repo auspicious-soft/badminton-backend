@@ -361,19 +361,27 @@ export const forgotPasswordUserService = async (
   payload: any,
   res: Response
 ) => {
-  const { email } = payload;
+  const { email, phoneNumber } = payload;
 
   if (email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email && !emailRegex.test(email)) {
+    if (email && !emailRegex.test(email) && email.length != 10) {
       return errorResponseHandler(
         "Invalid email format",
         httpStatusCode.BAD_REQUEST,
         res
       );
     }
+  } else if (email.length != 10) {
+    return errorResponseHandler(
+      "Invalid phone number",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
-  const user = await usersModel.findOne({ email }).select("+password");
+  const user = await usersModel
+    .findOne({ $or: [{ email }, { phoneNumber: email }] })
+    .select("+password");
   if (!user)
     return errorResponseHandler(
       "User not found",
@@ -400,13 +408,24 @@ export const forgotPasswordUserService = async (
   }
 
   // Send OTP via SMS if phone number is provided
-  // if (phoneNumber && passwordResetToken) {
-  //   await generateTwilioVerificationOTP(
-  //     phoneNumber,
-  //     passwordResetToken.token,
-  //     passwordResetToken.expires
-  //   );
-  // }
+  if (email.length == 10 && passwordResetToken) {
+    // await generateTwilioVerificationOTP(
+    //   phoneNumber,
+    //   passwordResetToken.token,
+    //   passwordResetToken.expires
+    // );
+
+    try {
+      await fetch(
+        `https://2factor.in/API/V1/${process.env.Two_Factor_Key}/SMS/+91${email}/${passwordResetToken.token}/Rest Password`,
+        {
+          method: "GET",
+        }
+      );
+    } catch (e) {
+      throw new Error("Error sending OTP");
+    }
+  }
 
   let verification = false;
   let token = generateUserToken(user as any, verification);
@@ -652,7 +671,17 @@ export const generateAndSendOTP = async (
   // Send OTP via the respective method
   if (phoneNumber) {
     // await generateOtpWithTwilio(phoneNumber, otpPhone);
-    await generateTwilioVerificationOTP(phoneNumber, otpPhone, expiresAt);
+    try {
+      await fetch(
+        `https://2factor.in/API/V1/${process.env.Two_Factor_Key}/SMS/+91${phoneNumber}/${otpPhone}/REGISTER`,
+        {
+          method: "GET",
+        }
+      );
+    } catch (e) {
+      throw new Error("Error sending OTP");
+    }
+    // await generateTwilioVerificationOTP(phoneNumber, otpPhone, expiresAt);
   }
   if (email) {
     await sendEmailVerificationMail(email, otpEmail, "eng");
