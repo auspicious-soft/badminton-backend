@@ -65,7 +65,7 @@ const usersSchema = new mongoose.Schema(
     authType: {
       type: String,
       enum: ["Email-Phone", "Facebook", "Apple", "Google"],
-      default: "Phone",
+      default: "Email-Phone",
     },
     countryCode: {
       type: String,

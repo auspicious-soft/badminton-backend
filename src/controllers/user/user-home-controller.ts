@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
 import { errorParser } from "../../lib/errors/error-response-handler";
-import {getCourtsServices, getOpenMatchesByIdServices, getOpenMatchesServices, getVenuesServices, userHomeServices } from "src/services/user/home-services";
+import {createGuestServices, getCourtsServices, getOpenMatchesByIdServices, getOpenMatchesServices, getVenuesServices, userHomeServices } from "src/services/user/home-services";
 import { bookCourtServices, cancelBookingServices, getDynamicPriceServices, joinOpenBookingServices, modifyBookingServices, paymentBookingServices, readUserNotificationServices, userNotificationServices } from "src/services/user/booking-services";
 import { getAppInfoServices, getUserServices, updateUserServices } from "src/services/user/user-service";
 
@@ -55,6 +55,20 @@ export const getVenues = async (req: Request, res: Response) => {
 export const getCourts = async (req: Request, res: Response) => {
   try {
     const response = await getCourtsServices(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const createGuest = async (req: Request, res: Response) => {
+  try {
+    if(!req.body.fullName){
+      throw new Error("Fullname is required")
+    }
+    const response = await createGuestServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);

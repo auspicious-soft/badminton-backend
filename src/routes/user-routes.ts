@@ -29,6 +29,7 @@ import {
   bookCourt,
   bookingPayment,
   cancelBooking,
+  createGuest,
   getAppInfo,
   getCourts,
   getDynamicPrice,
@@ -56,6 +57,7 @@ router.get("/user-home-screen", userHome);
 router.get("/get-venues", getVenues);
 router.get("/get-courts", getCourts);
 router.get("/get-booking-data-byId", getCourts);
+router.post("/create-guest", createGuest)
 router.post("/book-court", validateBookingRequest, bookCourt);
 router.put("/modify-booking/:id", modifyBooking);
 router.post("/booking-payment", bookingPayment);

@@ -39,6 +39,7 @@ import { transactionModel } from "src/models/admin/transaction-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { chatModel } from "src/models/chat/chat-schema";
 import { notificationModel } from "src/models/notification/notification-schema";
+import axios from "axios";
 
 configDotenv();
 export interface UserPayload {
@@ -126,9 +127,20 @@ export const socialLoginService = async (
   authType: any,
   res: Response
 ) => {
-  const { idToken, location, fcmToken } = userData;
+  const { idToken, location, fcmToken, accessToken } = userData;
 
-  const decodedToken = jwt.decode(idToken) as any;
+  const data = accessToken
+    ? await axios.get("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+    : null
+  const decodedToken = data? data.data : jwt.decode(idToken) as any;
+
+  if (!decodedToken) {
+    throw new Error("Something went wrong");
+  }
 
   const { email, given_name, family_name, picture } = decodedToken;
 
