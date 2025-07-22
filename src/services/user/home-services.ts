@@ -214,6 +214,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
               city: 1,
               state: 1,
               image: 1,
+              location:1,
               weather: 1,
               distance: { $round: [{ $divide: ["$distance", 1000] }, 1] }, // Convert to km
             },
@@ -251,7 +252,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
       ? venueModel.aggregate(geoPipeline)
       : venueModel
           .find({ isActive: true })
-          .select("name city state image weather")
+          .select("name city state image weather location")
           .lean();
 
   const [nearbyVenues, allMatches, banners, userLoyalty] = await Promise.all([
@@ -361,6 +362,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
           gamesAvailable: 1,
           timeslots: 1,
           weather: 1,
+          location:1,
           distance: { $round: [{ $divide: ["$distance", 1000] }, 1] },
         },
       },
@@ -464,6 +466,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
         weather: venue.weather,
         venueInfo: venue.venueInfo,
         distance: venue.distance,
+        location: venue.location,
         date: dateString,
         formattedDate: formattedDate,
         courts: courtsWithAvailability,

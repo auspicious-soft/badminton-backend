@@ -1315,17 +1315,9 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
 export const modifyBookingServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
   const bookingId = req.params.id;
-  const {
-    team1,
-    team2,
-    bookingSlots,
-    askToJoin,
-    isCompetitive,
-    skillRequired,
-    bookingDate,
-  } = req.body;
+  const { team1, team2 } = req.body;
 
-  const booking = await bookingModel.findById(bookingId).lean();
+  const booking = await bookingModel.findById(bookingId);
 
   if (!booking) {
     return errorResponseHandler(
@@ -1335,194 +1327,59 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  if (!booking.bookingPaymentStatus) {
-    return errorResponseHandler(
-      "Payment not completed for this booking",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
-
   if (booking.userId.toString() !== userData.id.toString()) {
     return errorResponseHandler(
-      "You are not authorized to modify this booking",
+      "Only the booking creator can modify this booking",
       httpStatusCode.UNAUTHORIZED,
       res
     );
   }
 
-  if (booking.bookingDate < new Date()) {
+  if (booking.askToJoin === true) {
     return errorResponseHandler(
-      "You cannot modify a booking that has already started or passed",
+      "Public games cannot be modified",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  // Check if booking slot is already taken by another booking
-  if (bookingSlots && bookingSlots !== booking.bookingSlots) {
-    const existingBooking = await bookingModel.findOne({
-      venueId: booking.venueId,
-      courtId: booking.courtId,
-      bookingDate: bookingDate || booking.bookingDate,
-      bookingSlots: bookingSlots,
-      bookingType: { $ne: "Cancelled" },
-      _id: { $ne: bookingId }, // Exclude current booking
-    });
+  const [slotHour, slotMinute] = booking.bookingSlots.split(":").map(Number);
+  const bookingDateTime = new Date(booking.bookingDate);
+  bookingDateTime.setUTCHours(slotHour - 5, slotMinute - 30, 0, 0); // Convert IST to UTC
 
-    if (existingBooking) {
-      return errorResponseHandler(
-        `Booking slot ${bookingSlots} is already taken`,
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-  }
+  const currentUTC = new Date();
 
-  // Get all existing player IDs from the original booking
-  interface PlayerInfo {
-    playerPayment: number;
-    paymentStatus: string;
-    transactionId: mongoose.Types.ObjectId;
-    paidBy: string;
-  }
-
-  interface Player {
-    playerId?: mongoose.Types.ObjectId;
-    playerPayment?: number;
-    paymentStatus?: string;
-    transactionId?: mongoose.Types.ObjectId;
-    paidBy?: string;
-    playerType?: string;
-  }
-
-  const existingPlayerIds: string[] = [
-    ...(booking.team1 || [])
-      .map((player: Player) => player.playerId?.toString())
-      .filter(Boolean),
-    ...(booking.team2 || [])
-      .map((player: Player) => player.playerId?.toString())
-      .filter(Boolean),
-  ];
-
-  // Create a map of existing players with their payment info
-  const existingPlayersMap: { [key: string]: PlayerInfo } = {};
-  [...(booking.team1 || []), ...(booking.team2 || [])].forEach((player) => {
-    if (player.playerId) {
-      existingPlayersMap[player.playerId.toString()] = {
-        playerPayment: player.playerPayment,
-        paymentStatus: player.paymentStatus,
-        transactionId: player.transactionId,
-        paidBy: player.paidBy,
-      };
-    }
-  });
-
-  // Check if any new players are being added
-  interface Player {
-    playerId?: mongoose.Types.ObjectId;
-    playerType?: string;
-  }
-
-  const newTeam1PlayerIds: string[] = (team1 || [])
-    .map((player: Player) => player.playerId?.toString())
-    .filter(Boolean);
-  const newTeam2PlayerIds: string[] = (team2 || [])
-    .map((player: Player) => player.playerId?.toString())
-    .filter(Boolean);
-  const allNewPlayerIds = [...newTeam1PlayerIds, ...newTeam2PlayerIds];
-
-  // Check if any new players are being added
-  const newPlayers = allNewPlayerIds.filter(
-    (id) => !existingPlayerIds.includes(id)
-  );
-  if (newPlayers.length > 0) {
+  if (bookingDateTime < currentUTC) {
     return errorResponseHandler(
-      "Cannot add new players to an existing booking. Only existing players can be shuffled.",
+      "Cannot cancel a booking that has already passed",
       httpStatusCode.BAD_REQUEST,
       res
     );
   }
 
-  // Process teams to ensure players are in correct teams based on playerType
-  // and preserve payment information
-  interface Player {
-    playerId?: mongoose.Types.ObjectId;
-    playerType?: string;
-    [key: string]: any;
+  const diffMs = bookingDateTime.getTime() - currentUTC.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+
+  if (diffHours < 4) {
+    return errorResponseHandler(
+      "Bookings can only be cancelled at least 4 hours before the scheduled time",
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
   }
 
-  interface ExistingPlayerInfo {
-    playerPayment: number;
-    paymentStatus: string;
-    transactionId: mongoose.Types.ObjectId;
-    paidBy: string;
-  }
+  // ✅ Direct assignment without loops
+  if (team1?.[0]?.playerId) booking.team1[0].playerId = team1[0].playerId;
+  if (team1?.[1]?.playerId) booking.team1[1].playerId = team1[1].playerId;
+  if (team2?.[0]?.playerId) booking.team2[0].playerId = team2[0].playerId;
+  if (team2?.[1]?.playerId) booking.team2[1].playerId = team2[1].playerId;
 
-  let processedTeam1: Player[] = (team1 || []).map((player: Player) => {
-    if (player.playerId) {
-      const existingInfo: ExistingPlayerInfo =
-        existingPlayersMap[player.playerId.toString()];
-      return {
-        ...player,
-        playerPayment: existingInfo.playerPayment,
-        paymentStatus: existingInfo.paymentStatus,
-        transactionId: existingInfo.transactionId,
-        paidBy: existingInfo.paidBy,
-      };
-    }
-    return player;
-  });
-
-  let processedTeam2: Player[] = (team2 || []).map((player: Player) => {
-    if (player.playerId) {
-      const existingInfo: ExistingPlayerInfo =
-        existingPlayersMap[player.playerId.toString()];
-      return {
-        ...player,
-        playerPayment: existingInfo.playerPayment,
-        paymentStatus: existingInfo.paymentStatus,
-        transactionId: existingInfo.transactionId,
-        paidBy: existingInfo.paidBy,
-      };
-    }
-    return player;
-  });
-
-  // Move players to correct teams based on playerType
-  const allPlayers = [...processedTeam1, ...processedTeam2];
-  processedTeam1 = [];
-  processedTeam2 = [];
-
-  allPlayers.forEach((player) => {
-    if (player.playerType === "player1" || player.playerType === "player2") {
-      processedTeam1.push(player);
-    } else if (
-      player.playerType === "player3" ||
-      player.playerType === "player4"
-    ) {
-      processedTeam2.push(player);
-    }
-  });
-
-  const updatedBooking = await bookingModel.findByIdAndUpdate(
-    bookingId,
-    {
-      team1: processedTeam1,
-      team2: processedTeam2,
-      bookingSlots,
-      bookingDate: bookingDate || booking.bookingDate,
-      askToJoin,
-      isCompetitive,
-      skillRequired,
-    },
-    { new: true }
-  );
+  await booking.save(); // ✅ Save the updated document
 
   return {
     success: true,
     message: "Booking updated successfully",
-    data: updatedBooking,
+    data: {},
   };
 };
 
@@ -1655,7 +1512,7 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
   if (userTransaction.amount > 0) {
     await additionalUserInfoModel.findOneAndUpdate(
       { userId: userData.id },
-      { $inc: { playCoins: userTransaction.amount } },
+      { $inc: { playCoins: booking.bookingAmount } },
       { session }
     );
   }
@@ -1684,8 +1541,8 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
         userId: userData.id,
         bookingId,
         text: "Booking cancelled by creator",
-        amount: userTransaction.amount,
-        playcoinsUsed: userTransaction.amount,
+        amount: booking.bookingAmount,
+        playcoinsUsed: booking.bookingAmount,
         method: userTransaction?.method,
         status: "refunded",
         isWebhookVerified: true,
