@@ -1351,7 +1351,7 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
 
   if (bookingDateTime < currentUTC) {
     return errorResponseHandler(
-      "Cannot cancel a booking that has already passed",
+      "Cannot modify a booking that has already passed",
       httpStatusCode.BAD_REQUEST,
       res
     );
@@ -1362,7 +1362,7 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
 
   if (diffHours < 4) {
     return errorResponseHandler(
-      "Bookings can only be cancelled at least 4 hours before the scheduled time",
+      "Bookings can only be modified at least 4 hours before the scheduled time",
       httpStatusCode.BAD_REQUEST,
       res
     );
