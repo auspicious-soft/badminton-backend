@@ -1317,7 +1317,7 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
   const bookingId = req.params.id;
   const { team1, team2 } = req.body;
 
-  const booking = await bookingModel.findById(bookingId);
+  const booking = await bookingModel.findById(bookingId).lean();
 
   if (!booking) {
     return errorResponseHandler(
@@ -1369,12 +1369,64 @@ export const modifyBookingServices = async (req: Request, res: Response) => {
   }
 
   // ✅ Direct assignment without loops
-  if (team1?.[0]?.playerId) booking.team1[0].playerId = team1[0].playerId;
-  if (team1?.[1]?.playerId) booking.team1[1].playerId = team1[1].playerId;
-  if (team2?.[0]?.playerId) booking.team2[0].playerId = team2[0].playerId;
-  if (team2?.[1]?.playerId) booking.team2[1].playerId = team2[1].playerId;
+  // Update team1
+  const updatedTeam1 = [];
+  if (team1?.[0]?.playerId) {
+    booking.team1[0].playerId = team1[0].playerId;
+    updatedTeam1.push(booking.team1[0]);
+  }
+  if (team1?.[1]?.playerId) {
+    if (booking.team1[1]) {
+      booking.team1[1].playerId = team1[1].playerId;
+      updatedTeam1.push(booking.team1[1]);
+    } else {
+      updatedTeam1.push({
+        ...team1?.[1],
+        playerType: "player2",
+        playerPayment: team1[0].playerPayment,
+        paidBy: "User",
+        paymentStatus: "Paid",
+      });
+    }
+  }
+  booking.team1 = updatedTeam1;
 
-  await booking.save(); // ✅ Save the updated document
+  // Update team2
+  const updatedTeam2 = [];
+  if (team2?.[0]?.playerId) {
+    if (booking.team2[0]) {
+      booking.team2[0].playerId = team2[0].playerId;
+      updatedTeam2.push(booking.team2[0]);
+    } else {
+      updatedTeam2.push({
+        ...team2?.[0],
+        playerType: "player3",
+        playerPayment: team1[0].playerPayment,
+        paidBy: "User",
+        paymentStatus: "Paid",
+      });
+    }
+  }
+  if (team2?.[1]?.playerId) {
+    if (booking.team2[1]) {
+      booking.team2[1].playerId = team2[1].playerId;
+      updatedTeam2.push(booking.team2[1]);
+    } else {
+      updatedTeam2.push({
+        ...team2?.[1],
+        playerType: "player4",
+        playerPayment: team1[0].playerPayment,
+        paidBy: "User",
+        paymentStatus: "Paid",
+      });
+    }
+  }
+  booking.team2 = updatedTeam2;
+
+  await bookingModel.findByIdAndUpdate(bookingId, {
+    team1: updatedTeam1,
+    team2: updatedTeam2,
+  });
 
   return {
     success: true,
