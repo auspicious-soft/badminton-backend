@@ -135,8 +135,8 @@ export const socialLoginService = async (
           Authorization: `Bearer ${accessToken}`,
         },
       })
-    : null
-  const decodedToken = data? data.data : jwt.decode(idToken) as any;
+    : null;
+  const decodedToken = data ? data.data : (jwt.decode(idToken) as any);
 
   if (!decodedToken) {
     throw new Error("Something went wrong");
@@ -936,6 +936,8 @@ export const getUserServices = async (req: Request, res: Response) => {
     })
     .countDocuments();
 
+  const rewardCoins = await adminSettingModel.findOne({ isActive: true });
+
   return {
     success: true,
     message: "User retrieved successfully",
@@ -949,13 +951,19 @@ export const getUserServices = async (req: Request, res: Response) => {
       loyaltyPoints: additionalInfo?.loyaltyPoints || 0,
       unreadChats: totalMessage || 0,
       unreadNotifications: unreadNotifications || 0,
-      referrals: additionalInfo?.referrals || {
-        code: "",
-        expiryDate: new Date(),
-        usageCount: 0,
-        maxUsage: 15,
-        isActive: true,
-      },
+      referrals: additionalInfo?.referrals
+        ? {
+            ...additionalInfo?.referrals,
+            rewardCoins: rewardCoins?.referral?.bonusAmount,
+          }
+        : {
+            code: "",
+            expiryDate: new Date(),
+            usageCount: 0,
+            maxUsage: 15,
+            rewardCoins: rewardCoins?.referral?.bonusAmount,
+            isActive: true,
+          },
     },
   };
 };
