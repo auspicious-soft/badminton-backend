@@ -1036,6 +1036,8 @@ export const getMatchesService = async (payload: any, res: Response) => {
     // Get current time in IST
     const currentDate = new Date().setHours(0, 0, 0, 0); // Normalize to start of the day
     const currentISTHour = getCurrentISTTime().getHours();
+    const nowIST = getCurrentISTTime();
+    const currentISTTimeString = nowIST.toTimeString().slice(0, 5); // "HH:mm"
     //
 
     let matchQuery: any = {};
@@ -1062,11 +1064,28 @@ export const getMatchesService = async (payload: any, res: Response) => {
         };
       }
     } else {
-      // If no date is provided, use the type filter
+      const nowIST = getCurrentISTTime();
+      const todayStartIST = new Date(nowIST);
+      todayStartIST.setHours(0, 0, 0, 0);
+      const todayEndIST = new Date(nowIST);
+      todayEndIST.setHours(23, 59, 59, 999);
       if (type === "upcoming") {
-        matchQuery.bookingDate = { $gte: currentDate };
-        matchQuery.bookingSlots = { $gte: currentISTHour };
-        matchQuery.cancellationReason = null;
+        matchQuery.$or = [
+          {
+            // Case 2: Today's booking, but time has passed
+            bookingDate: {
+              $gte: todayStartIST,
+              $lte: todayEndIST,
+            },
+            bookingSlots: { $gte: currentISTTimeString },
+            cancellationReason: null,
+          },
+          {
+            // Case 1: Any booking from before today (fully completed)
+            bookingDate: { $gt: todayEndIST  },
+            cancellationReason: null,
+          },
+        ];
       } else if (type === "completed") {
         matchQuery.$or = [
           {
@@ -1076,8 +1095,11 @@ export const getMatchesService = async (payload: any, res: Response) => {
           },
           {
             // Case 2: Today's booking, but time has passed
-            bookingDate: currentDate,
-            bookingSlots: { $lt: currentISTHour },
+            bookingDate: {
+              $gte: todayStartIST,
+              $lte: todayEndIST,
+            },
+            bookingSlots: { $lt: currentISTTimeString },
             cancellationReason: null,
           },
         ];
