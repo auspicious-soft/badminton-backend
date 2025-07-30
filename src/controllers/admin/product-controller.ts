@@ -920,19 +920,33 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
     const fontPath = path.resolve("src/assets/fonts");
     try {
       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-      doc.registerFont("Roboto-Medium", path.join(fontPath, "Roboto-Medium.ttf"));
-      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+      doc.registerFont(
+        "Roboto-Medium",
+        path.join(fontPath, "Roboto-Medium.ttf")
+      );
+      doc.registerFont(
+        "Roboto-Regular",
+        path.join(fontPath, "Roboto-Regular.ttf")
+      );
     } catch (error) {
       console.error("Error registering fonts:", error);
       doc.font("Helvetica-Bold");
     }
 
-    const getPlayerDetails = async (playerId: string): Promise<{ name: string }> => {
+    const getPlayerDetails = async (
+      playerId: string
+    ): Promise<{ name: string }> => {
       try {
-        const user = await usersModel.findById(playerId).select("fullName").exec();
+        const user = await usersModel
+          .findById(playerId)
+          .select("fullName")
+          .exec();
         return { name: user?.fullName || "Unknown Player" };
       } catch (error) {
-        console.error(`Error fetching player details for ID ${playerId}:`, error);
+        console.error(
+          `Error fetching player details for ID ${playerId}:`,
+          error
+        );
         return { name: "Unknown Player" };
       }
     };
@@ -968,12 +982,21 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
     doc.moveDown(0.5);
     doc.font("Roboto-Regular").fontSize(12).fillColor("#0e2642");
     doc.text(`Booking ID: ${booking._id.toString()}`);
-    doc.text(`Game Type: ${booking.gameType} ${booking.askToJoin ? "(Ask to Join)" : ""}`);
+    doc.text(
+      `Game Type: ${booking.gameType} ${
+        booking.askToJoin ? "(Ask to Join)" : ""
+      }`
+    );
     doc.text(`Competitive: ${booking.isCompetitive ? "Yes" : "No"}`);
     doc.text(`Skill Level Required: ${booking.skillRequired}/10`);
-    doc.text(`Date: ${new Date(booking.bookingDate).toLocaleDateString("en-US", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric"
-    })}`);
+    doc.text(
+      `Date: ${new Date(booking.bookingDate).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })}`
+    );
     doc.text(`Time Slot: ${booking.bookingSlots}`);
     doc.moveDown(1.5);
 
@@ -985,11 +1008,23 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
     doc.moveDown(0.5);
     doc.font("Roboto-Regular").fontSize(12).fillColor("#0e2642");
     doc.text(`Venue: ${booking.venueId.name}`);
-    doc.text(`Address: ${booking.venueId.address}, ${booking.venueId.city}, ${booking.venueId.state}`);
+    doc.text(
+      `Address: ${booking.venueId.address}, ${booking.venueId.city}, ${booking.venueId.state}`
+    );
     doc.text(`Court: ${booking.courtId.name}`);
     doc.moveDown(1.5);
 
     let currentY = doc.y;
+    let team1Player1Name = "Player 1";
+
+    const getFirstTeam1PlayerName = async () => {
+      if (booking.team1 && booking.team1[0]) {
+        const firstPlayer = await getPlayerDetails(
+          booking.team1[0].playerId.toString()
+        );
+        team1Player1Name = firstPlayer.name;
+      }
+    };
 
     // Draw Table Header
     const drawTableHeader = (y: number) => {
@@ -1016,7 +1051,7 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
       playerDetails: { name: string },
       teamLabel: string
     ) => {
-      const paidBy = player.paidBy === "Self" ? "Self" : "Gurraj Sabharwal (Player 1)";
+      const paidBy = player.paidBy === "Self" ? "Self" : team1Player1Name;
       doc
         .font("Roboto-Regular")
         .fontSize(10)
@@ -1050,58 +1085,78 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
       currentY += 15;
     };
 
-    renderPlayersTable().then(() => {
-      doc
-        .font("Roboto-Bold")
-        .fontSize(14)
-        .fillColor("#0e2642")
-        .text("Payment Summary", 40, currentY, { underline: true });
-      currentY += 20;
+    getFirstTeam1PlayerName()
+      .then(() => {
+        renderPlayersTable()
+          .then(() => {
+            doc
+              .font("Roboto-Bold")
+              .fontSize(14)
+              .fillColor("#0e2642")
+              .text("Payment Summary", 40, currentY, { underline: true });
+            currentY += 20;
 
-      doc
-        .font("Roboto-Bold")
-        .fontSize(11)
-        .fillColor("#0e2642")
-        .text("Description", 40, currentY, { width: 260 })
-        .text("Amount", 300, currentY, { width: 140 });
-      doc
-        .moveTo(40, currentY + 15)
-        .lineTo(440, currentY + 15)
-        .stroke();
-      currentY += 20;
+            doc
+              .font("Roboto-Bold")
+              .fontSize(11)
+              .fillColor("#0e2642")
+              .text("Description", 40, currentY, { width: 260 })
+              .text("Amount", 300, currentY, { width: 140 });
+            doc
+              .moveTo(40, currentY + 15)
+              .lineTo(440, currentY + 15)
+              .stroke();
+            currentY += 20;
 
-      doc
-        .font("Roboto-Regular")
-        .fontSize(10)
-        .fillColor("#0e2642")
-        .text("Booking Amount", 40, currentY, { width: 260 })
-        .text(`₹${booking.bookingAmount}`, 300, currentY, { width: 140 });
-      currentY += 20;
+            doc
+              .font("Roboto-Regular")
+              .fontSize(10)
+              .fillColor("#0e2642")
+              .text("Booking Amount", 40, currentY, { width: 260 })
+              .text(`₹${booking.bookingAmount}`, 300, currentY, { width: 140 });
+            currentY += 20;
 
-      doc
-        .text("Total Player Payments", 40, currentY, { width: 260 })
-        .text(`₹${booking.expectedPayment}`, 300, currentY, { width: 140 });
-      currentY += 20;
+            doc
+              .text("Total Player Payments", 40, currentY, { width: 260 })
+              .text(`₹${booking.expectedPayment}`, 300, currentY, {
+                width: 140,
+              });
+            currentY += 20;
 
-      doc
-        .text("Payment Status", 40, currentY, { width: 260 })
-        .text(booking.bookingPaymentStatus ? "Paid" : "Pending", 300, currentY, { width: 140 });
-      currentY += 30;
+            doc
+              .text("Payment Status", 40, currentY, { width: 260 })
+              .text(
+                booking.bookingPaymentStatus ? "Paid" : "Pending",
+                300,
+                currentY,
+                { width: 140 }
+              );
+            currentY += 30;
 
-      doc
-        .font("Roboto-Regular")
-        .fontSize(10)
-        .fillColor("#808080")
-        .text("Thank you for booking with us!", 40, currentY, { align: "center" });
-      currentY += 20;
+            doc
+              .font("Roboto-Regular")
+              .fontSize(10)
+              .fillColor("#808080")
+              .text("Thank you for booking with us!", 40, currentY, {
+                align: "center",
+              });
+            currentY += 20;
 
-      doc.text(`Generated on: ${new Date().toLocaleString("en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "Asia/Kolkata",
-      })}`, 40, currentY, { align: "center" });
+            doc.text(
+              `Generated on: ${new Date().toLocaleString("en-US", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "Asia/Kolkata",
+              })}`,
+              40,
+              currentY,
+              { align: "center" }
+            );
 
-      doc.end();
-    }).catch((err) => reject(err));
+            doc.end();
+          })
+          .catch((err) => reject(err));
+      })
+      .catch((err) => reject(err));
   });
 };
