@@ -20,6 +20,7 @@
     "@types/connect": "^3.4.38",
     "@types/cookie": "^0.6.0",
     "@types/cors": "^2.8.17",
+    "@types/get-stream": "^3.0.1",
     "@types/json2csv": "^5.0.7",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^22.12.0",

@@ -10,8 +10,10 @@ import mongoose from "mongoose";
 import { inventoryModel } from "src/models/admin/inventory-schema";
 import { orderModel } from "src/models/admin/order-schema";
 import { usersModel } from "src/models/user/user-schema";
-import PDFDocument from "pdfkit";
+import PDFDocument from "pdfkit"; // Correct import
+import { PassThrough } from "stream";
 import path from "path";
+import fs from "fs";
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
@@ -904,306 +906,202 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
   }
 };
 
-//Download order receipt in pdf my both user and admin using orderId
+export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40 });
+    const stream = new PassThrough();
+    const chunks: Buffer[] = [];
 
-export const downloadOrderReceipt = async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
+    doc.pipe(stream);
+    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", (err) => reject(err));
 
-    if (!orderId) {
-      return errorResponseHandler(
-        "Order ID is required",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
+    const fontPath = path.resolve("src/assets/fonts");
+    try {
+      doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+      doc.registerFont("Roboto-Medium", path.join(fontPath, "Roboto-Medium.ttf"));
+      doc.registerFont("Roboto-Regular", path.join(fontPath, "Roboto-Regular.ttf"));
+    } catch (error) {
+      console.error("Error registering fonts:", error);
+      doc.font("Helvetica-Bold");
     }
 
-    const order = await orderModel
-      .findById(orderId)
-      .populate("userId", "fullName email phoneNumber profilePic")
-      .populate("venueId", "name address")
-      .populate("items.productId", "productName primaryImage");
+    const getPlayerDetails = async (playerId: string): Promise<{ name: string }> => {
+      try {
+        const user = await usersModel.findById(playerId).select("fullName").exec();
+        return { name: user?.fullName || "Unknown Player" };
+      } catch (error) {
+        console.error(`Error fetching player details for ID ${playerId}:`, error);
+        return { name: "Unknown Player" };
+      }
+    };
 
-    if (!order) {
-      return errorResponseHandler(
-        "Order not found",
-        httpStatusCode.NOT_FOUND,
-        res
-      );
+    try {
+      const logoPath = path.resolve("src/assets/fonts/appLogo.png");
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 40, 30, { width: 100, height: 50 });
+      } else {
+        throw new Error("Logo file not found");
+      }
+    } catch (error) {
+      console.error("Error loading logo image:", error);
+      doc.rect(40, 30, 100, 50).fillAndStroke("#E5E5E5", "#0e2642");
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .fillColor("#0e2642")
+        .text("Logo Not Found", 60, 50, { align: "center" });
     }
 
-    // Create PDF document with smaller margins
-    const doc = new PDFDocument({
-      size: "A4",
-      margin: 30, // Further reduced margins
-      info: {
-        Title: `Order Receipt #${order._id}`,
-        Author: "Your Company Name",
-      },
-      autoFirstPage: true, // Ensure single page
-    });
-
-    // Set response headers for PDF download
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=order-receipt-${order._id}.pdf`
-    );
-
-    // Pipe the PDF document to the response
-    doc.pipe(res);
-
-    // Register custom fonts from assets folder
-    const fontPath = path.join(process.cwd(), "src", "assets", "fonts");
-    doc.registerFont("Regular", path.join(fontPath, "Roboto-Regular.ttf"));
-    doc.registerFont("Bold", path.join(fontPath, "Roboto-Bold.ttf"));
-    doc.registerFont("Medium", path.join(fontPath, "Roboto-Medium.ttf"));
-
-    // Fonts and Colors
-    const primaryColor = "#1E3A8A"; // Deep blue
-    const accentColor = "#3B82F6"; // Light blue
-
-    // Rupee Symbol (using Unicode)
-    const rupeeSymbol = "₹"; // Unicode for ₹
-
-    // Header Section
-    // Company Logo (Uncomment and provide path if available)
-    // doc.image(path.join(process.cwd(), 'src', 'assets', 'logo.png'), 30, 20, { width: 80, height: 30 });
+    doc
+      .font("Roboto-Bold")
+      .fontSize(20)
+      .text("Booking Receipt", 300, 50, { align: "center" });
+    doc.moveDown(2);
 
     doc
-      .fontSize(16)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text("Order Receipt", 30, 30, { align: "center" });
-    doc
-      .fontSize(8)
-      .font("Regular")
-      .fillColor("#4B5563")
-      .text(`Receipt #${order._id}`, 30, 50, { align: "center" });
-    doc
-      .moveTo(30, 60)
-      .lineTo(565, 60)
-      .lineWidth(1)
-      .strokeColor(accentColor)
-      .stroke();
+      .font("Roboto-Bold")
+      .fontSize(14)
+      .fillColor("#0e2642")
+      .text("Booking Summary", 40, doc.y, { underline: true });
     doc.moveDown(0.5);
-
-    // Two-column layout for Order and Customer Info
-    const leftColumnX = 30;
-    const rightColumnX = 300;
-    const sectionY = doc.y;
-
-    // Order Information (Left Column)
-    doc
-      .fontSize(10)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text("Order Details", leftColumnX, sectionY);
-    doc
-      .fontSize(8)
-      .font("Regular")
-      .fillColor("#4B5563")
-      .text(`Order ID: ${order._id}`, leftColumnX, sectionY + 15)
-      .text(
-        `Date: ${
-          order.createdAt
-            ? new Date(order.createdAt).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })
-            : "N/A"
-        }`,
-        leftColumnX,
-        sectionY + 27
-      )
-      .text(`Status: ${order.orderStatus}`, leftColumnX, sectionY + 39)
-      .text(`Payment: ${order.paymentStatus}`, leftColumnX, sectionY + 51);
-
-    // Customer Information (Right Column)
-    const userData = order.userId as any;
-    doc
-      .fontSize(10)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text("Customer Details", rightColumnX, sectionY);
-    doc
-      .fontSize(8)
-      .font("Regular")
-      .fillColor("#4B5563")
-      .text(
-        `Name: ${userData?.fullName || "Unknown"}`,
-        rightColumnX,
-        sectionY + 15
-      )
-      .text(
-        `Email: ${userData?.email || "Unknown"}`,
-        rightColumnX,
-        sectionY + 27
-      )
-      .text(
-        `Phone: ${userData?.phoneNumber || "Unknown"}`,
-        rightColumnX,
-        sectionY + 39
-      );
-
-    // Address
-    if (order.address) {
-      doc.text(
-        `Address: ${order.address.street || ""}, ${order.address.city || ""}, ${
-          order.address.state || ""
-        } ${order.address.pinCode || ""}`,
-        rightColumnX,
-        sectionY + 51,
-        { width: 250, lineBreak: true }
-      );
-    }
-
-    // Venue Information
-    const venueData = order.venueId as any;
-    doc.moveDown(1);
-    const venueY = doc.y;
-    doc
-      .fontSize(10)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text("Venue Details", leftColumnX, venueY);
-    doc
-      .fontSize(8)
-      .font("Regular")
-      .fillColor("#4B5563")
-      .text(`Name: ${venueData?.name || "Unknown"}`, leftColumnX, venueY + 15)
-      .text(
-        `Address: ${venueData?.address || "Unknown"}`,
-        leftColumnX,
-        venueY + 27,
-        {
-          width: 250,
-        }
-      );
-    doc.moveDown(1);
-
-    // Items Table
-    doc
-      .fontSize(10)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text("Items Purchased", leftColumnX, doc.y);
-    doc.moveDown(0.3);
-
-    // Table headers
-    const tableTop = doc.y;
-    const itemX = 30;
-    const descriptionX = 60;
-    const quantityX = 290;
-    const priceX = 350;
-    const totalX = 450;
+    doc.font("Roboto-Regular").fontSize(12).fillColor("#0e2642");
+    doc.text(`Booking ID: ${booking._id.toString()}`);
+    doc.text(`Game Type: ${booking.gameType} ${booking.askToJoin ? "(Ask to Join)" : ""}`);
+    doc.text(`Competitive: ${booking.isCompetitive ? "Yes" : "No"}`);
+    doc.text(`Skill Level Required: ${booking.skillRequired}/10`);
+    doc.text(`Date: ${new Date(booking.bookingDate).toLocaleDateString("en-US", {
+      weekday: "long", year: "numeric", month: "long", day: "numeric"
+    })}`);
+    doc.text(`Time Slot: ${booking.bookingSlots}`);
+    doc.moveDown(1.5);
 
     doc
-      .fontSize(8)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text("No.", itemX, tableTop)
-      .text("Item", descriptionX, tableTop, { width: 200 })
-      .text("Qty", quantityX, tableTop)
-      .text("Price", priceX, tableTop)
-      .text("Total", totalX, tableTop);
+      .font("Roboto-Bold")
+      .fontSize(14)
+      .fillColor("#0e2642")
+      .text("Venue Details", { underline: true });
+    doc.moveDown(0.5);
+    doc.font("Roboto-Regular").fontSize(12).fillColor("#0e2642");
+    doc.text(`Venue: ${booking.venueId.name}`);
+    doc.text(`Address: ${booking.venueId.address}, ${booking.venueId.city}, ${booking.venueId.state}`);
+    doc.text(`Court: ${booking.courtId.name}`);
+    doc.moveDown(1.5);
 
-    // Table header underline
-    doc
-      .moveTo(30, tableTop + 10)
-      .lineTo(565, tableTop + 10)
-      .lineWidth(1)
-      .strokeColor(accentColor)
-      .stroke();
-    doc.moveDown(0.3);
+    let currentY = doc.y;
 
-    // Table rows
-    let tableRowY = doc.y;
-    let totalAmount = 0;
-    const maxItems = 8; // Reduced to ensure single page
-    order.items.slice(0, maxItems).forEach((item: any, i: number) => {
-      const product = item.productId as any;
-      const productName = product?.productName || "Unknown Product";
-      const y = tableRowY + i * 15; // Reduced row height
+    // Draw Table Header
+    const drawTableHeader = (y: number) => {
+      doc
+        .font("Roboto-Bold")
+        .fontSize(11)
+        .fillColor("#0e2642")
+        .text("Team", 40, y, { width: 80 })
+        .text("Player Name", 120, y, { width: 180 })
+        .text("Payment", 320, y, { width: 80 })
+        .text("Paid By", 410, y, { width: 130 });
+      doc
+        .moveTo(40, y + 15)
+        .lineTo(540, y + 15)
+        .stroke();
+      return y + 20;
+    };
+
+    // Draw Player Row
+    const drawTableRow = (
+      y: number,
+      player: any,
+      index: number,
+      playerDetails: { name: string },
+      teamLabel: string
+    ) => {
+      const paidBy = player.paidBy === "Self" ? "Self" : "Gurraj Sabharwal (Player 1)";
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .fillColor("#0e2642")
+        .text(teamLabel, 40, y, { width: 80 })
+        .text(`${index + 1}. ${playerDetails.name}`, 120, y, { width: 180 })
+        .text(`₹${player.playerPayment}`, 320, y, { width: 80 })
+        .text(paidBy, 410, y, { width: 130 });
+      return y + 20;
+    };
+
+    const renderPlayersTable = async () => {
+      doc
+        .font("Roboto-Bold")
+        .fontSize(14)
+        .fillColor("#0e2642")
+        .text("Teams", 40, currentY, { underline: true });
+      currentY += 20;
+      currentY = drawTableHeader(currentY);
+
+      for (const [index, player] of (booking.team1 || []).entries()) {
+        const details = await getPlayerDetails(player.playerId.toString());
+        currentY = drawTableRow(currentY, player, index, details, "Team 1");
+      }
+
+      for (const [index, player] of (booking.team2 || []).entries()) {
+        const details = await getPlayerDetails(player.playerId.toString());
+        currentY = drawTableRow(currentY, player, index, details, "Team 2");
+      }
+
+      currentY += 15;
+    };
+
+    renderPlayersTable().then(() => {
+      doc
+        .font("Roboto-Bold")
+        .fontSize(14)
+        .fillColor("#0e2642")
+        .text("Payment Summary", 40, currentY, { underline: true });
+      currentY += 20;
 
       doc
-        .fontSize(7)
-        .font("Regular")
-        .fillColor("#4B5563")
-        .text((i + 1).toString(), itemX, y)
-        .text(productName, descriptionX, y, { width: 200, ellipsis: true })
-        .text(item.quantity.toString(), quantityX, y)
-        .text(`${rupeeSymbol}${item.price.toFixed(2)}`, priceX, y)
-        .text(`${rupeeSymbol}${item.total.toFixed(2)}`, totalX, y);
+        .font("Roboto-Bold")
+        .fontSize(11)
+        .fillColor("#0e2642")
+        .text("Description", 40, currentY, { width: 260 })
+        .text("Amount", 300, currentY, { width: 140 });
+      doc
+        .moveTo(40, currentY + 15)
+        .lineTo(440, currentY + 15)
+        .stroke();
+      currentY += 20;
 
-      totalAmount += item.total;
-    });
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .fillColor("#0e2642")
+        .text("Booking Amount", 40, currentY, { width: 260 })
+        .text(`₹${booking.bookingAmount}`, 300, currentY, { width: 140 });
+      currentY += 20;
 
-    // Total Amount
-    doc.moveDown(0.5);
-    doc
-      .moveTo(30, doc.y)
-      .lineTo(565, doc.y)
-      .lineWidth(1)
-      .strokeColor(accentColor)
-      .stroke();
-    doc.moveDown(0.3);
-    doc
-      .fontSize(10)
-      .font("Bold")
-      .fillColor(primaryColor)
-      .text(
-        `${rupeeSymbol}${order.totalAmount.toFixed(2)}`,
-        totalX - 50,
-        doc.y,
-        {
-          align: "right",
-        }
-      );
+      doc
+        .text("Total Player Payments", 40, currentY, { width: 260 })
+        .text(`₹${booking.expectedPayment}`, 300, currentY, { width: 140 });
+      currentY += 20;
 
-    // Payment Information
-    doc.moveDown(0.5);
-    doc
-      .fontSize(8)
-      .font("Regular")
-      .fillColor("#4B5563")
-      .text(
-        `Payment Method: ${order.razorpayPaymentId ? "Razorpay" : "Unknown"}`,
-        rightColumnX,
-        doc.y,
-        { align: "right" }
-      )
-      .text(
-        `Payment ID: ${order.razorpayPaymentId || "N/A"}`,
-        rightColumnX,
-        doc.y + 12,
-        {
-          align: "right",
-        }
-      );
+      doc
+        .text("Payment Status", 40, currentY, { width: 260 })
+        .text(booking.bookingPaymentStatus ? "Paid" : "Pending", 300, currentY, { width: 140 });
+      currentY += 30;
 
-    // Footer
-    const footerY = doc.page.height - 60; // Moved up to save space
-    doc
-      .fontSize(7)
-      .font("Regular")
-      .fillColor("#6B7280")
-      .text("Thank you for your purchase!", 30, footerY, { align: "center" })
-      .text(
-        "Contact us at support@yourcompany.com for any inquiries.",
-        30,
-        footerY + 12,
-        { align: "center" }
-      );
+      doc
+        .font("Roboto-Regular")
+        .fontSize(10)
+        .fillColor("#808080")
+        .text("Thank you for booking with us!", 40, currentY, { align: "center" });
+      currentY += 20;
 
-    // Finalize the PDF
-    doc.end();
-  } catch (error: any) {
-    const { code, message }: { code: number; message: string } =
-      errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
-  }
+      doc.text(`Generated on: ${new Date().toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Kolkata",
+      })}`, 40, currentY, { align: "center" });
+
+      doc.end();
+    }).catch((err) => reject(err));
+  });
 };
