@@ -28,6 +28,7 @@ export const VENUE_TIME_SLOTS = [
   "19:00",
   "20:00",
   "21:00",
+  "22:00"
 ]
 
 export const FIXED_FACILITIES = [

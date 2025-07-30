@@ -951,7 +951,7 @@ export const getUserServices = async (req: Request, res: Response) => {
       loyaltyPoints: additionalInfo?.loyaltyPoints || 0,
       unreadChats: totalMessage || 0,
       unreadNotifications: unreadNotifications || 0,
-      referrals: additionalInfo?.referrals
+      referrals: additionalInfo?.referrals?.isActive
         ? {
             ...additionalInfo?.referrals,
             rewardCoins: rewardCoins?.referral?.bonusAmount,
