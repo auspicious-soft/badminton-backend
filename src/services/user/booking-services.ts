@@ -67,8 +67,8 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     );
   }
 
-  const playerPayment: number = totalSlotPayment / bookingSlots.length / 4; // Average per slot
-  const bookingPrice: number = (totalSlotPayment * 2) / bookingSlots.length / 4; // For half court
+  // const playerPayment: number = totalSlotPayment / bookingSlots.length / 4; // Average per slot
+  // const bookingPrice: number = (totalSlotPayment * 2) / bookingSlots.length / 4; // For half court
   const completeCourtPrice: number = totalSlotPayment / bookingSlots.length; // For full court
 
   // Process all players to set payment information and collect player IDs for paidFor
@@ -76,12 +76,12 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     if (item.playerId) {
       if (item.playerId === userData.id) {
         item.paidBy = "Self";
-        item.playerPayment = playerPayment;
+        item.playerPayment = completeCourtPrice;
         // Add player ID to paidFor array
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       } else if (item.playerId !== userData.id) {
         item.paidBy = "User";
-        item.playerPayment = playerPayment;
+        item.playerPayment = 0;
         // Add player ID to paidFor array
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       }
@@ -99,10 +99,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         {
           userId: userData.id,
           paidFor: paidForPlayers, // Now storing player IDs instead of player types
-          amount:
-            bookingType === "Complete"
-              ? completeCourtPrice * bookingSlots.length
-              : bookingPrice * bookingSlots.length,
+          amount: completeCourtPrice,
           currency: "INR",
           text: "Court Booking",
           status: "created",
@@ -135,8 +132,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         return item;
       }),
       bookingType,
-      bookingAmount:
-        bookingType === "Complete" ? completeCourtPrice : bookingPrice,
+      bookingAmount: completeCourtPrice,
       bookingPaymentStatus: false,
       bookingDate,
     };
