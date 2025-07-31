@@ -18,6 +18,7 @@ import {
   updateAdminDetails,
   updateEmployee,
   updateVenue,
+  venueBookingFile,
 } from "../controllers/admin/admin-controller";
 import { createUpdateCourt } from "src/controllers/admin/court-controller";
 import {
@@ -58,6 +59,8 @@ const router = Router();
 
 router.get("/dashboard", dashboard);
 router.get("/dashboard-emp", employeeDashboard);
+
+router.get("/venue-booking-file/:id", venueBookingFile)
 
 //Emmpoyee routes
 

@@ -1563,6 +1563,21 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
       { $inc: { playCoins: booking.bookingAmount } },
       { session }
     );
+    notifyUser({
+      recipientId: userData.id,
+      type: "REFUND_COMPLETED",
+      title: "Refund Completed Successfully",
+      message: `Your have received a refund of ${booking.bookingAmount} play coins.`,
+      category: "PAYMENT",
+      notificationType: "BOTH",
+      referenceId: bookingId,
+      priority: "HIGH",
+      referenceType: "orders",
+      metadata: {
+        amount: booking.bookingAmount,
+      },
+      session,
+    });
   }
 
   // Refund via Razorpay if applicable
@@ -1590,7 +1605,7 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
         bookingId,
         text: "Booking cancelled by creator",
         amount: booking.bookingAmount,
-        playcoinsUsed: booking.bookingAmount,
+        playcoinsReceived: booking.bookingAmount,
         method: userTransaction?.method,
         status: "refunded",
         isWebhookVerified: true,

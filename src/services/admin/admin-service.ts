@@ -1082,7 +1082,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
           },
           {
             // Case 1: Any booking from before today (fully completed)
-            bookingDate: { $gt: todayEndIST  },
+            bookingDate: { $gt: todayEndIST },
             cancellationReason: null,
           },
         ];
@@ -2008,4 +2008,18 @@ export const employeeDashboardServices = async (req: any, res: Response) => {
       res
     );
   }
+};
+
+export const venueBookingFileServices = async (req: any, res: Response) => {
+  const {id} = req.params;
+  const bookingList = await bookingModel.find({
+    venueId: id,
+    bookingType: "Complete"
+  })
+  console.log(id)
+  return {
+    success: true,
+    message: "Dashboard data retrieved successfully",
+    data:{}
+  };
 };
