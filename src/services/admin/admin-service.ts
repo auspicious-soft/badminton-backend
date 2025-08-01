@@ -2122,9 +2122,9 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
       .then((v) => v?.name)) ||
     id;
 
-  const monthName = monthNames[month + 1];
+  const monthName = monthNames[Number(month) - 1];
   const safeVenueName = venueName.replace(/[\/\\?%*:|"<>]/g, "_"); // sanitize
-  const fileName = `${safeVenueName} - ${monthName} - transactions.csv`;
+  const fileName = `${monthName}-${safeVenueName}-Transactions.csv`;
 
   const headers = [
     "TransactionId",
