@@ -16,7 +16,7 @@ import {
 import { hashPasswordIfEmailAuth } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
 import { attendanceModel } from "src/models/employees/attendance-schema";
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { venueModel } from "src/models/venue/venue-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { usersModel } from "src/models/user/user-schema";
@@ -2011,15 +2011,172 @@ export const employeeDashboardServices = async (req: any, res: Response) => {
 };
 
 export const venueBookingFileServices = async (req: any, res: Response) => {
-  const {id} = req.params;
-  const bookingList = await bookingModel.find({
-    venueId: id,
-    bookingType: "Complete"
-  })
-  console.log(id)
-  return {
-    success: true,
-    message: "Dashboard data retrieved successfully",
-    data:{}
+  const { id } = req.params; // venue id
+  const { month = 7, year = 2025 } = req.query; // defaults
+  const venueObjectId = new Types.ObjectId(id);
+
+  const startOfMonth = new Date(
+    Date.UTC(Number(year), Number(month) - 1, 1, 0, 0, 0)
+  );
+  const startOfNextMonth =
+    Number(month) === 12
+      ? new Date(Date.UTC(Number(year) + 1, 0, 1, 0, 0, 0))
+      : new Date(Date.UTC(Number(year), Number(month), 1, 0, 0, 0));
+
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const pipeline = [
+    {
+      $match: {
+        createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+        isWebhookVerified: true,
+        text: "Court Booking",
+      },
+    },
+    {
+      $addFields: {
+        firstBookingId: { $arrayElemAt: ["$bookingId", 0] },
+      },
+    },
+    {
+      $lookup: {
+        from: bookingModel.collection.name,
+        localField: "firstBookingId",
+        foreignField: "_id",
+        as: "booking",
+      },
+    },
+    { $unwind: "$booking" },
+    {
+      $match: {
+        "booking.venueId": venueObjectId,
+      },
+    },
+    {
+      $lookup: {
+        from: usersModel.collection.name,
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+      },
+    },
+    { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: venueModel.collection.name,
+        localField: "booking.venueId",
+        foreignField: "_id",
+        as: "venue",
+      },
+    },
+    { $unwind: { path: "$venue", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: courtModel.collection.name,
+        localField: "booking.courtId",
+        foreignField: "_id",
+        as: "court",
+      },
+    },
+    { $unwind: { path: "$court", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 1,
+        fullName: "$user.fullName",
+        amount: 1,
+        currency: 1,
+        method: 1,
+        createdAt: 1,
+        razorpayOrderId: 1,
+        razorpayPaymentId: 1,
+        playcoinsUsed: 1,
+        venueName: "$venue.name",
+        courtName: "$court.name",
+        razorPayAmount: {
+          $subtract: ["$amount", { $ifNull: ["$playcoinsUsed", 0] }],
+        },
+      },
+    },
+  ];
+
+  const transactions = await transactionModel.aggregate(pipeline).exec();
+
+  const venueName =
+    transactions?.[0]?.venueName ||
+    (await venueModel
+      .findById(venueObjectId)
+      .lean()
+      .then((v) => v?.name)) ||
+    id;
+
+  const monthName = monthNames[month + 1];
+  const safeVenueName = venueName.replace(/[\/\\?%*:|"<>]/g, "_"); // sanitize
+  const fileName = `${safeVenueName} - ${monthName} - transactions.csv`;
+
+  const headers = [
+    "TransactionId",
+    "VenueName",
+    "CourtName",
+    "UserFullName",
+    "CreatedAt",
+    "RazorpayOrderId",
+    "RazorpayPaymentId",
+    "Method",
+    "Currency",
+    "Amount",
+    "PlaycoinsUsed",
+    "RazorPayAmount",
+  ];
+
+  const escape = (value: any) => {
+    if (value === null || value === undefined) return "";
+    let str = String(value);
+    if (str.includes('"')) str = str.replaceAll('"', '""');
+    if (str.includes(",") || str.includes("\n") || str.includes('"')) {
+      str = `"${str}"`;
+    }
+    return str;
   };
+
+  // Stream CSV
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+  // Write header row
+  res.write(headers.join(",") + "\n");
+
+  // Write each transaction
+  for (const tx of transactions) {
+    const row = [
+      tx._id,
+      tx.venueName || "",
+      tx.courtName || "",
+      tx.fullName || "",
+      tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
+      tx.razorpayOrderId || "",
+      tx.razorpayPaymentId || "",
+      tx.method,
+      tx.currency,
+      tx.amount,
+      tx.playcoinsUsed ?? 0,
+      tx.razorPayAmount ?? "",
+    ].map(escape);
+
+    res.write(row.join(",") + "\n");
+  }
+
+  res.end();
 };

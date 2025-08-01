@@ -60,7 +60,7 @@ const router = Router();
 router.get("/dashboard", dashboard);
 router.get("/dashboard-emp", employeeDashboard);
 
-router.get("/venue-booking-file/:id", venueBookingFile)
+router.get("/venue-booking-file/:id", venueBookingFile);
 
 //Emmpoyee routes
 
@@ -90,7 +90,7 @@ router.get("/get-users/:id", getUsersById);
 router.get("/get-matches", getMatches);
 router.get("/get-cities", getCities);
 
-router.post("/cancel-match", cancelMatch)
+router.post("/cancel-match", cancelMatch);
 
 //Products routes
 router.route("/products").post(createProduct).get(getProducts);
@@ -146,8 +146,8 @@ router.post("/playcoin-plans", async (req: Request, res: Response) => {
   try {
     console.log(req.body);
     await playcoinModel.create({
-      ...req.body
-    })
+      ...req.body,
+    });
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Users notified successfully",
