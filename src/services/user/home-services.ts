@@ -11,168 +11,7 @@ import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { friendsModel } from "src/models/user/friends-schema";
-
-// export const userHomeServices = async (req: Request, res: Response) => {
-//   let nearbyVenues = [];
-//   const userData = req.user as any;
-//   let { nearBy = true, lng: lngQuery = null, lat: latQuery = null } = req.query;
-//   let lng: number | null = null;
-//   let lat: number | null = null;
-
-//   if (lngQuery && latQuery) {
-//     lng = Number(lngQuery);
-//     lat = Number(latQuery);
-
-//     const MAX_NEARBY_DISTANCE = 100000; // 100 km in meters
-
-//     const geoNearStage: any = {
-//       $geoNear: {
-//         near: { type: "Point", coordinates: [lng, lat] },
-//         distanceField: "distance",
-//         spherical: true,
-//       },
-//     };
-
-//     geoNearStage.$geoNear.maxDistance = 100000;
-//     const pipeline: any[] = [
-//       geoNearStage,
-//       {
-//         $match: {
-//           isActive: true,
-//         },
-//       },
-//       {
-//         $project: {
-//           name: 1,
-//           city: 1,
-//           state: 1,
-//           image: 1,
-//           distance: {
-//             $round: [{ $divide: ["$distance", 1000] }, 1],
-//           },
-//           weather: 1,
-//         },
-//       },
-//     ];
-
-//     nearbyVenues = await venueModel.aggregate(pipeline);
-//   } else {
-//     nearbyVenues = await venueModel
-//       .find({ isActive: true })
-//       .select("name city state image weather")
-//       .lean();
-//   }
-
-//   // Get current time in IST
-//   const nowIST = getCurrentISTTime();
-//   const todayStartIST = new Date(nowIST);
-//   todayStartIST.setHours(0, 0, 0, 0);
-
-//   const todayEndIST = new Date(nowIST);
-//   todayEndIST.setHours(23, 59, 59, 999);
-
-//   console.log(`Hour: ${nowIST.getHours()}}`);
-
-//   const todayMatches = await bookingModel
-//     .find({
-//       $or: [
-//         {
-//           team1: {
-//             $elemMatch: {
-//               playerId: new mongoose.Types.ObjectId(userData.id),
-//               paymentStatus: "Paid",
-//             },
-//           },
-//         },
-//         {
-//           team2: {
-//             $elemMatch: {
-//               playerId: new mongoose.Types.ObjectId(userData.id),
-//               paymentStatus: "Paid",
-//             },
-//           },
-//         },
-//       ],
-//       bookingDate: {
-//         $gte: todayStartIST,
-//         $lte: todayEndIST,
-//       },
-//       bookingType: { $ne: "Cancelled" },
-//     })
-//     .lean();
-
-//   const todayProcessed = [];
-
-//   for (const booking of todayMatches) {
-//     const slotHour = parseInt(booking.bookingSlots.split(":")[0], 10);
-//     if (slotHour > nowIST.getHours()) {
-//       todayProcessed.push(booking);
-//     }
-//   }
-//   const futureMatches = await bookingModel
-//     .find({
-//       $or: [
-//         {
-//           team1: {
-//             $elemMatch: {
-//               playerId: new mongoose.Types.ObjectId(userData.id),
-//               paymentStatus: "Paid",
-//             },
-//           },
-//         },
-//         {
-//           team2: {
-//             $elemMatch: {
-//               playerId: new mongoose.Types.ObjectId(userData.id),
-//               paymentStatus: "Paid",
-//             },
-//           },
-//         },
-//       ],
-//       bookingDate: {
-//         $gt: todayEndIST,
-//       },
-//     })
-//     .lean();
-
-//   const upcomingMatchData = [...todayProcessed, ...futureMatches];
-
-//   const banners = await adminSettingModel
-//     .findOne({ isActive: true })
-//     .select("banners loyaltyPoints")
-//     .lean();
-
-//   const totalLevel =
-//     (banners?.loyaltyPoints?.limit || 2000) /
-//     (banners?.loyaltyPoints?.perMatch || 200);
-
-//   const userLoyalty = await additionalUserInfoModel.findOne({
-//     userId: userData.id,
-//   });
-
-//   const level =
-//     (userLoyalty?.loyaltyPoints || 0) /
-//     (banners?.loyaltyPoints?.perMatch || 200);
-
-//   const data = {
-//     banners: banners?.banners || [],
-//     upcomingMatches: upcomingMatchData,
-//     venueNearby: nearbyVenues,
-//     playersRanking: [],
-//     loyaltyPoints: {
-//       points: userLoyalty?.loyaltyPoints,
-//       level: level,
-//       totalLevels: totalLevel,
-//       freeGames: userLoyalty?.freeGameCount || 0,
-//     },
-//   };
-
-//   return {
-//     success: true,
-//     message: "User home data retrieved successfully",
-//     data,
-//   };
-// };
+import { end } from "pdfkit";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -182,15 +21,12 @@ export const userHomeServices = async (req: Request, res: Response) => {
     lat: latQuery = null,
   } = req.query;
 
-  const lng = lngQuery ? Number(lngQuery) : null;
-  const lat = latQuery ? Number(latQuery) : null;
+  // const lng = lngQuery ? Number(lngQuery) : null;
+  // const lat = latQuery ? Number(latQuery) : null;
+  const lng = null;
+  const lat = null;
 
-  const nowIST = getCurrentISTTime();
-  const todayStartIST = new Date(nowIST);
-  todayStartIST.setHours(0, 0, 0, 0);
-
-  const todayEndIST = new Date(nowIST);
-  todayEndIST.setHours(23, 59, 59, 999);
+  const currentDate = new Date().toISOString();
 
   // Build geo query pipeline
   const geoPipeline: mongoose.PipelineStage[] =
@@ -214,7 +50,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
               city: 1,
               state: 1,
               image: 1,
-              location:1,
+              location: 1,
               weather: 1,
               distance: { $round: [{ $divide: ["$distance", 1000] }, 1] }, // Convert to km
             },
@@ -242,18 +78,19 @@ export const userHomeServices = async (req: Request, res: Response) => {
         },
       },
     ],
-    bookingDate: { $gte: todayStartIST },
+    bookingDate: { $gte: currentDate },
     bookingType: { $ne: "Cancelled" },
   };
 
   // Fetch data in parallel
   const nearbyVenuesPromise =
-    lng && lat
-      ? venueModel.aggregate(geoPipeline)
-      : venueModel
-          .find({ isActive: true })
-          .select("name city state image weather location")
-          .lean();
+    // lng && lat
+    //   ? venueModel.aggregate(geoPipeline)
+    //   :
+    venueModel
+      .find({ isActive: true })
+      .select("name city state image weather location")
+      .lean();
 
   const [nearbyVenues, allMatches, banners, userLoyalty] = await Promise.all([
     nearbyVenuesPromise,
@@ -265,27 +102,6 @@ export const userHomeServices = async (req: Request, res: Response) => {
     additionalUserInfoModel.findOne({ userId: userData.id }).lean(),
   ]);
 
-  // Separate today's and future matches
-  const todayProcessed: any[] = [];
-  const futureMatches: any[] = [];
-
-  for (const booking of allMatches) {
-    const bookingDate = new Date(booking.bookingDate);
-    const slotHour = parseInt(booking.bookingSlots.split(":")[0], 10);
-
-    if (
-      bookingDate >= todayStartIST &&
-      bookingDate <= todayEndIST &&
-      slotHour > nowIST.getHours()
-    ) {
-      todayProcessed.push(booking);
-    } else if (bookingDate > todayEndIST) {
-      futureMatches.push(booking);
-    }
-  }
-
-  const upcomingMatchData = [...todayProcessed, ...futureMatches];
-
   const perMatch = banners?.loyaltyPoints?.perMatch || 200;
   const limit = banners?.loyaltyPoints?.limit || 2000;
 
@@ -294,7 +110,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
 
   const data = {
     banners: banners?.banners || [],
-    upcomingMatches: upcomingMatchData,
+    upcomingMatches: allMatches,
     venueNearby: nearbyVenues,
     playersRanking: [], // Can be fetched in parallel too if added later
     loyaltyPoints: {
@@ -362,7 +178,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
           gamesAvailable: 1,
           timeslots: 1,
           weather: 1,
-          location:1,
+          location: 1,
           distance: { $round: [{ $divide: ["$distance", 1000] }, 1] },
         },
       },
@@ -1049,30 +865,35 @@ export const createGuestServices = async (req: Request, res: Response) => {
 
 export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { date, distance = "ASC", game = "all", lng, lat } = req.query;
+  const { date, game = "all" } = req.query;
 
-  if (!lng || !lat) {
-    return errorResponseHandler(
-      "Location coordinates (lng, lat) are required",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
+  let startOfDay = new Date().toISOString() as any;
+  let endOfDay = new Date(
+    new Date().setHours(23, 59, 59, 999)
+  ).toISOString() as any;
+
+  if (date) {
+    startOfDay = new Date(date as string);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    endOfDay = new Date(date as string);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    startOfDay = startOfDay.toISOString();
+    endOfDay = endOfDay.toISOString();
   }
+  const isToday =
+    startOfDay.split("T")[0] === new Date().toISOString().split("T")[0];
+  let dateQuery: any = {};
 
-  const lngNum = Number(lng);
-  const latNum = Number(lat);
-  const istTime = getCurrentISTTime();
-  const currentHour = istTime.getHours();
-
-  let requestDate = date ? new Date(date as string) : new Date(istTime);
-  requestDate.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(requestDate);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  const isRequestedDateToday = isDateTodayInIST(requestDate);
-  const dateQuery = date
-    ? { $gte: requestDate, $lte: endOfDay }
-    : { $gte: requestDate };
+  if (date) {
+    dateQuery = {
+      $gt: isToday ? new Date().toISOString() : startOfDay,
+      $lte: endOfDay,
+    };
+  } else {
+    dateQuery = {
+      $gt: isToday ? new Date().toISOString() : startOfDay,
+    };
+  }
 
   try {
     const userObjectId = new mongoose.Types.ObjectId(userData.id);
@@ -1087,6 +908,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
           { "team2.playerId": userObjectId },
         ],
       })
+      .sort({ bookingDate: 1 })
       .lean();
 
     if (!bookings.length) {
@@ -1095,9 +917,9 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         message: "No open matches found",
         data: [],
         meta: {
-          date: date ? requestDate.toLocaleDateString("en-CA") : "all",
+          date: startOfDay,
           isSpecificDate: !!date,
-          isToday: isRequestedDateToday,
+          isToday: true,
         },
       };
     }
@@ -1151,41 +973,6 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         const court = courtsMap.get(booking.courtId.toString());
         if (!venue || !court) return null;
 
-        // Filter past slots if today
-        let filteredSlots = Array.isArray(booking.bookingSlots)
-          ? booking.bookingSlots
-          : [booking.bookingSlots];
-
-        if (isRequestedDateToday || isDateTodayInIST(booking.bookingDate)) {
-          filteredSlots = filteredSlots.filter((slot) => {
-            const hour = parseInt(slot.split(":")[0], 10);
-            return hour > currentHour;
-          });
-          if (!filteredSlots.length) return null;
-        }
-
-        // Calculate distance if location exists
-        let distanceKm: number | null = null;
-        if (
-          venue.location?.coordinates?.length === 2 &&
-          typeof latNum === "number" &&
-          typeof lngNum === "number"
-        ) {
-          const [venueLng, venueLat] = venue.location.coordinates;
-          const toRad = (deg: number) => (deg * Math.PI) / 180;
-          const R = 6371;
-          const dLat = toRad(venueLat - latNum);
-          const dLon = toRad(venueLng - lngNum);
-          const a =
-            Math.sin(dLat / 2) ** 2 +
-            Math.cos(toRad(latNum)) *
-              Math.cos(toRad(venueLat)) *
-              Math.sin(dLon / 2) ** 2;
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          distanceKm = R * c;
-          if (distanceKm > 15000) return null;
-        }
-
         const formatTeam = (team: any[]) =>
           team.map((player) => ({
             playerType: player.playerType,
@@ -1207,7 +994,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
           _id: booking._id,
           bookingDate,
           formattedDate,
-          bookingSlots: filteredSlots,
+          bookingSlots: booking.bookingSlots,
           askToJoin: booking.askToJoin,
           isCompetitive: booking.isCompetitive,
           skillRequired: booking.skillRequired,
@@ -1223,25 +1010,10 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
             weather: venue.weather,
           },
           court,
-          distance:
-            distanceKm !== null ? Math.round(distanceKm * 10) / 10 : null,
+          distance: null,
         };
       })
       .filter(Boolean) as any[];
-
-    // 5. Sorting
-    processedBookings.sort((a, b) => {
-      const timeDiff =
-        new Date(a.bookingDate).getTime() - new Date(b.bookingDate).getTime();
-      if (timeDiff !== 0) return timeDiff;
-
-      if (a.distance === null) return 1;
-      if (b.distance === null) return -1;
-
-      return distance === "ASC"
-        ? a.distance - b.distance
-        : b.distance - a.distance;
-    });
 
     return {
       success: true,
@@ -1250,8 +1022,8 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       meta: {
         totalMatches: processedBookings.length,
         isSpecificDate: !!date,
-        date: requestDate.toLocaleDateString("en-CA"),
-        isToday: isRequestedDateToday,
+        date: startOfDay,
+        isToday: isToday,
       },
     };
   } catch (error) {

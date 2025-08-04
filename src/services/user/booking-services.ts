@@ -18,68 +18,16 @@ import { notifyUser } from "src/utils/FCM/FCM";
 import { venueModel } from "src/models/venue/venue-schema";
 import { fillAndStroke } from "pdfkit";
 
-/**
- * Normalize various incoming date strings and set the hour slot (zeroing minutes/seconds/ms).
- * @param {string|Date} rawDate - e.g. "2025-08-04 09:51:23.420380" or "2025-08-13T00:00:00.000Z" or a Date.
- * @param {string|number} slotHour - e.g. "14" or 14
- * @param {boolean} keepUTC - if true, interprets/sets the hour in UTC; otherwise uses local time.
- * @returns {Date} adjusted Date object
- */
-function applySlotHour(rawDate: any, slotHour: any, keepUTC = false) {
-  // Parse slot to number
-  const hour = parseInt(slotHour, 10);
-  if (Number.isNaN(hour) || hour < 0 || hour > 23) {
-    throw new Error("Invalid slot hour: " + slotHour);
-  }
-
-  // Normalize rawDate into a Date object
-  let date;
-  if (rawDate instanceof Date) {
-    date = new Date(rawDate); // clone
-  } else if (typeof rawDate === "string") {
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/.test(rawDate)) {
-      // "2025-08-04 09:51:23.420380" → convert to ISO-ish by replacing space and trimming to milliseconds
-      const isoish = rawDate.replace(" ", "T").replace(/(\.\d{3})\d+$/, "$1"); // drop beyond ms
-      date = new Date(isoish); // treated as local if no Z
-    } else {
-      // assume parsable ISO (like "2025-08-13T00:00:00.000Z")
-      date = new Date(rawDate);
-    }
-  } else {
-    throw new Error("Unsupported date input: " + rawDate);
-  }
-
-  if (isNaN(date.getTime())) {
-    throw new Error("Failed to parse date: " + rawDate);
-  }
-
-  // Apply slot hour, zeroing minutes/seconds/milliseconds
-  if (keepUTC) {
-    date.setUTCHours(hour, 0, 0, 0);
-  } else {
-    date.setHours(hour, 0, 0, 0);
-  }
-
-  return date;
-}
-
-// Helper: normalize incoming date (from Flutter or web), extract the intended IST date parts,
-// then apply the slot hour as IST wall time and return a JS Date that, when stored (UTC internally),
-// corresponds to that IST slot hour.
 function makeBookingDateInIST(rawDate: any, slotHour: any) {
   const hour = parseInt(slotHour, 10);
   if (Number.isNaN(hour) || hour < 0 || hour > 23) {
     throw new Error("Invalid slot hour: " + slotHour);
   }
 
-  // Parse rawDate into a JS Date (could be "2025-08-04 09:51:23.420380" or ISO like "2025-08-13T00:00:00.000Z")
   let base;
   if (typeof rawDate === "string") {
     if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/.test(rawDate)) {
-      // Flutter-style: convert to ISO-ish by replacing space and trimming beyond milliseconds
-      const isoish = rawDate
-        .replace(" ", "T")
-        .replace(/(\.\d{3})\d+$/, "$1"); // drop microseconds beyond ms
+      const isoish = rawDate.replace(" ", "T").replace(/(\.\d{3})\d+$/, "$1"); // drop microseconds beyond ms
       base = new Date(isoish); // interpreted as local
     } else {
       base = new Date(rawDate); // ISO (with Z or without)
@@ -105,7 +53,6 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
 
   return adjusted;
 }
-
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -185,7 +132,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         {
           userId: userData.id,
           paidFor: paidForPlayers, // Now storing player IDs instead of player types
-          amount: completeCourtPrice,
+          amount: totalSlotPayment,
           currency: "INR",
           text: "Court Booking",
           status: "created",
@@ -273,15 +220,6 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     paymentMethod = "razorpay", // Default payment method
   } = req.body;
 
-  // Validate payment method
-  if (!["razorpay", "playcoins", "both"].includes(paymentMethod)) {
-    return errorResponseHandler(
-      "Invalid payment method. Must be 'razorpay', 'playcoins', or 'both'",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
-
   // Validate team and position
   if (!requestedTeam || !["team1", "team2"].includes(requestedTeam)) {
     return errorResponseHandler(
@@ -321,7 +259,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     .findOne({
       _id: bookingId,
       askToJoin: true,
-      // bookingDate: { $gte: new Date() },
+      bookingDate: { $gte: new Date().toISOString() },
     })
     .lean();
 
@@ -329,31 +267,6 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     return errorResponseHandler(
       "Booking not found or not open for joining",
       httpStatusCode.NOT_FOUND,
-      res
-    );
-  }
-
-  // Get current time in UTC to ensure consistent comparison
-  const now = new Date();
-
-  // Create booking date object and normalize to start of day in UTC
-  const bookingDate = new Date(booking.bookingDate);
-
-  // Get the booking slot time
-  const bookingSlot = booking.bookingSlots;
-  const [slotHour, slotMinute] = bookingSlot
-    .split(":")
-    .map((num) => parseInt(num, 10));
-
-  // Create a date object for the exact booking time
-  const bookingTime = new Date(bookingDate);
-  bookingTime.setHours(slotHour, slotMinute || 0, 0, 0);
-
-  // Compare the full datetime objects
-  if (bookingTime < now) {
-    return errorResponseHandler(
-      "Cannot join a booking that has already started or passed",
-      httpStatusCode.BAD_REQUEST,
       res
     );
   }
@@ -393,9 +306,7 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
   if (checkExist) {
     // If the existing request is pending, delete it and allow creating a new one
     if (checkExist.status === "pending") {
-      console.log(`Deleting existing pending request: ${checkExist._id}`);
       await bookingRequestModel.findByIdAndDelete(checkExist._id);
-      // Continue with the rest of the function to create a new request
     } else {
       // For other statuses (accepted, rejected, completed), return an error
       return errorResponseHandler(
@@ -406,347 +317,198 @@ export const joinOpenBookingServices = async (req: Request, res: Response) => {
     }
   }
 
-  // Determine if it's a weekday or weekend
-  const bookingDayOfWeek = bookingDate.getDay();
-  const isWeekend = bookingDayOfWeek === 0 || bookingDayOfWeek === 6;
-  const dayType = isWeekend ? "weekend" : "weekday";
+  if (true) {
+    const session = await mongoose.startSession();
 
-  // Get the price for the booking slot
-  // let slotPrice = await priceModel.findPriceForSlot(dayType, bookingSlot);
-  let slotPrice = Number(booking?.expectedPayment || 0) / 4;
-  if (!slotPrice) {
-    return errorResponseHandler(
-      `Price configuration not found for slot ${bookingSlot}`,
-      httpStatusCode.NOT_FOUND,
-      res
-    );
-  }
+    try {
+      await session.startTransaction();
 
-  // Get user's playcoins balance if payment method involves playcoins
-  let playcoinsBalance = 0;
-  if (paymentMethod === "playcoins" || paymentMethod === "both") {
-    const userInfo = await additionalUserInfoModel
-      .findOne({ userId: userData.id })
-      .lean();
+      // 1. Create a transaction record for this join request
+      // const transaction = await transactionModel.create(
+      //   [
+      //     {
+      //       userId: userData.id,
+      //       bookingId: [new mongoose.Types.ObjectId(bookingId)],
+      //       paidFor: [new mongoose.Types.ObjectId(userData.id)],
+      //       amount: 0,
+      //       currency: "INR",
+      //       text: "Court Joining",
+      //       status: "captured",
+      //       notes: {
+      //         bookingSlot: booking.bookingSlots,
+      //         requestedTeam,
+      //         requestedPosition,
+      //         rackets: rackets || 0,
+      //         balls: balls || 0,
+      //       },
+      //       isWebhookVerified: true,
+      //       method: null,
+      //       playcoinsUsed: 0,
+      //       razorpayAmount: 0,
+      //       paymentDate: true,
+      //       playcoinsDeducted: false,
+      //     },
+      //   ],
+      //   { session }
+      // );
 
-    playcoinsBalance = userInfo?.playCoins || 0;
-
-    // Check if user has enough playcoins when using only playcoins
-    if (paymentMethod === "playcoins" && playcoinsBalance < slotPrice) {
-      return errorResponseHandler(
-        "Insufficient playcoins balance",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-  }
-
-  // Start a MongoDB session for transaction consistency
-  const session = await mongoose.startSession();
-
-  try {
-    await session.startTransaction();
-
-    // Calculate payment details based on method
-    const playcoinsToUse =
-      paymentMethod === "razorpay" ? 0 : Math.min(playcoinsBalance, slotPrice);
-    const razorpayAmount = slotPrice - playcoinsToUse;
-
-    // Determine if payment can be completed immediately with playcoins
-    const canCompleteWithPlaycoins =
-      paymentMethod === "playcoins" && playcoinsToUse >= slotPrice;
-    const transactionStatus = canCompleteWithPlaycoins ? "captured" : "created";
-    const isWebhookVerified = canCompleteWithPlaycoins;
-
-    // 1. Create a transaction record for this join request
-    const transaction = await transactionModel.create(
-      [
-        {
-          userId: userData.id,
-          bookingId: [new mongoose.Types.ObjectId(bookingId)],
-          paidFor: [new mongoose.Types.ObjectId(userData.id)],
-          amount: slotPrice,
-          currency: "INR",
-          text: "Court Joining",
-          status: transactionStatus,
-          notes: {
-            bookingSlot,
-            requestedTeam,
-            requestedPosition,
-            rackets: rackets || 0,
-            balls: balls || 0,
-          },
-          isWebhookVerified: isWebhookVerified,
-          method: paymentMethod,
-          playcoinsUsed: playcoinsToUse,
-          razorpayAmount: razorpayAmount,
-          paymentDate: isWebhookVerified ? new Date() : null,
-          playcoinsDeducted: paymentMethod === "playcoins" ? true : false,
-        },
-      ],
-      { session }
-    );
-
-    // Deduct playcoins ONLY if using playcoins method (not both)
-    if (paymentMethod === "playcoins" && playcoinsToUse > 0) {
-      await additionalUserInfoModel.findOneAndUpdate(
-        { userId: userData.id },
-        { $inc: { playCoins: -playcoinsToUse } },
-        { session }
-      );
-    }
-
-    // For "both" method, reserve the playcoins but don't deduct yet
-    if (paymentMethod === "both" && playcoinsToUse > 0) {
-      await additionalUserInfoModel.findOneAndUpdate(
-        { userId: userData.id },
-        { $inc: { reservedPlayCoins: playcoinsToUse } },
-        { session }
-      );
-
-      // Update transaction to indicate playcoins are reserved
-      await transactionModel.findByIdAndUpdate(
-        transaction[0]._id,
-        { playcoinsReserved: true },
-        { session }
-      );
-    }
-
-    // 2. Create the booking request with transaction ID
-    const requestData = {
-      bookingId,
-      requestedBy: userData.id,
-      requestedTo: booking.userId,
-      requestedTeam,
-      requestedPosition,
-      status: canCompleteWithPlaycoins ? "completed" : "pending", // If fully paid with playcoins, mark as completed
-      rackets: rackets || 0,
-      balls: balls || 0,
-      playerPayment: slotPrice,
-      paymentStatus: isWebhookVerified ? "Paid" : "Pending",
-      transactionId: transaction[0]._id, // Link to the transaction
-    };
-
-    const bookingRequest = (await bookingRequestModel.create([requestData], {
-      session,
-    })) as any;
-
-    // 4. If payment is completed with playcoins, update the booking immediately
-    if (isWebhookVerified) {
-      // Create player object with payment details
-      const playerObject = {
-        playerId: userData.id,
-        playerType: requestedPosition,
-        playerPayment: slotPrice,
-        paymentStatus: "Paid",
-        transactionId: transaction[0]._id,
-        paidBy: "Self",
+      // 2. Create the booking request with transaction ID
+      const requestData = {
+        bookingId,
+        requestedBy: userData.id,
+        requestedTo: booking.userId,
+        requestedTeam,
+        requestedPosition,
+        status: "completed", // If fully paid with playcoins, mark as completed
         rackets: rackets || 0,
         balls: balls || 0,
+        playerPayment: 0,
+        paymentStatus: "Paid",
+        transactionId: null, // Link to the transaction
       };
 
-      // Update the booking to add the player to the requested team and position
-      const bookingToUpdate = await bookingModel.findById(bookingId);
+      const bookingRequest = (await bookingRequestModel.create([requestData], {
+        session,
+      })) as any;
 
-      const checkGroupExist = await chatModel.findOne({
-        bookingId: bookingId,
-        participants: { $all: [userData.id] },
-      });
+      // 4. If payment is completed with playcoins, update the booking immediately
+      if (true) {
+        // Create player object with payment details
+        const playerObject = {
+          playerId: userData.id,
+          playerType: requestedPosition,
+          playerPayment: 0,
+          paymentStatus: "Paid",
+          transactionId: null,
+          paidBy: "User",
+          rackets: rackets || 0,
+          balls: balls || 0,
+        };
 
-      if (!checkGroupExist) {
-        await chatModel.updateOne(
-          { bookingId: bookingId },
-          {
-            $addToSet: {
-              participants: userData.id,
-            },
-          },
-          { session }
-        );
-      }
+        // Update the booking to add the player to the requested team and position
+        const bookingToUpdate = await bookingModel.findById(bookingId);
 
-      if (bookingToUpdate) {
-        // Add player to the requested team
-        if (requestedTeam === "team1") {
-          bookingToUpdate.team1 = bookingToUpdate.team1.filter(
-            (player: any) => player.playerType !== requestedPosition
-          );
-          bookingToUpdate.team1.push(playerObject);
-        } else {
-          bookingToUpdate.team2 = bookingToUpdate.team2.filter(
-            (player: any) => player.playerType !== requestedPosition
-          );
-          bookingToUpdate.team2.push(playerObject);
-        }
-
-        await bookingToUpdate.save({ session });
-
-        // Get the new player's details
-        const newPlayer = await usersModel
-          .findById(userData.id)
-          .select("fullName profilePic")
-          .lean();
-
-        if (!newPlayer) {
-          console.error(`User not found for ID: ${userData.id}`);
-        }
-
-        // Get all existing players in the booking
-        const existingPlayerIds = [
-          ...bookingToUpdate.team1
-            .map((player: any) => player.playerId?.toString())
-            .filter(Boolean),
-          ...bookingToUpdate.team2
-            .map((player: any) => player.playerId?.toString())
-            .filter(Boolean),
-        ];
-
-        // Remove the new player from the list (to avoid sending notification to themselves)
-        const otherPlayerIds = existingPlayerIds.filter(
-          (id) => id !== userData.id.toString()
-        );
-
-        // Add booking owner to notification recipients if not already included
-        if (
-          bookingToUpdate.userId.toString() !== userData.id.toString() &&
-          !otherPlayerIds.includes(bookingToUpdate.userId.toString())
-        ) {
-          otherPlayerIds.push(bookingToUpdate.userId.toString());
-        }
-
-        // Send notifications to all existing players about the new player joining
-        if (newPlayer && otherPlayerIds.length > 0) {
-          const teamName = requestedTeam === "team1" ? "Team 1" : "Team 2";
-          const positionName =
-            requestedPosition.charAt(0).toUpperCase() +
-            requestedPosition.slice(1);
-
-          // Send notifications to all existing players
-
-          await Promise.all([
-            otherPlayerIds?.map(async (data: any) => {
-              await notifyUser({
-                recipientId: data,
-                type: "PLAYER_JOINED_GAME",
-                title: "New Player Joined",
-                message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
-                category: "GAME",
-                notificationType: "BOTH", // Send both in-app and push notification
-                referenceId: bookingId,
-                referenceType: "bookings",
-                priority: "MEDIUM",
-                metadata: {
-                  bookingId,
-                  newPlayerId: userData.id,
-                  newPlayerName: newPlayer.fullName,
-                  newPlayerPosition: requestedPosition,
-                  newPlayerTeam: requestedTeam,
-                  timestamp: new Date().toISOString(),
-                },
-                session,
-              });
-            }),
-          ]);
-          // for (const playerId of otherPlayerIds) {
-          //   try {
-
-          //   } catch (error) {
-          //     console.error(
-          //       `Failed to send notification to player ${playerId}:`,
-          //       error
-          //     );
-          //     // Continue with other notifications even if one fails
-          //   }
-          // }
-        }
-
-        // Create notification for the booking owner
-        // await notifyUser({
-        //   recipientId: bookingToUpdate.userId,
-        //   type: "PLAYER_JOINED_GAME",
-        //   title: "New Player Joined",
-        //   priority: "HIGH",
-        //   message: `${
-        //     userData.name || newPlayer?.fullName || "A player"
-        //   } has joined your game.`,
-        //   category: "GAME",
-        //   referenceId: bookingId,
-        //   referenceType: "bookings",
-        //   notificationType: "BOTH",
-        //   session,
-        // });
-      }
-    }
-
-    // 5. Handle payment based on method
-    let paymentDetails = null;
-
-    if (
-      (paymentMethod === "razorpay" || paymentMethod === "both") &&
-      razorpayAmount > 0
-    ) {
-      // Create a Razorpay order for the full amount or remaining amount
-      const options = {
-        amount: razorpayAmount * 100, // Amount in paise
-        currency: "INR",
-        receipt: (transaction[0]._id as mongoose.Types.ObjectId).toString(),
-        notes: {
+        const checkGroupExist = await chatModel.findOne({
           bookingId: bookingId,
-          userId: userData.id.toString(),
-          requestId: bookingRequest[0]._id.toString(),
-          requestedTeam,
-          requestedPosition,
-          playcoinsUsed: playcoinsToUse,
-        },
-      };
+          participants: { $all: [userData.id] },
+        });
 
-      interface RazorpayOrder {
-        id: string;
+        if (!checkGroupExist) {
+          await chatModel.updateOne(
+            { bookingId: bookingId },
+            {
+              $addToSet: {
+                participants: userData.id,
+              },
+            },
+            { session }
+          );
+        }
+
+        if (bookingToUpdate) {
+          // Add player to the requested team
+          if (requestedTeam === "team1") {
+            bookingToUpdate.team1 = bookingToUpdate.team1.filter(
+              (player: any) => player.playerType !== requestedPosition
+            );
+            bookingToUpdate.team1.push(playerObject);
+          } else {
+            bookingToUpdate.team2 = bookingToUpdate.team2.filter(
+              (player: any) => player.playerType !== requestedPosition
+            );
+            bookingToUpdate.team2.push(playerObject);
+          }
+
+          await bookingToUpdate.save({ session });
+
+          // Get the new player's details
+          const newPlayer = await usersModel
+            .findById(userData.id)
+            .select("fullName profilePic")
+            .lean();
+
+          if (!newPlayer) {
+            console.error(`User not found for ID: ${userData.id}`);
+          }
+
+          // Get all existing players in the booking
+          const existingPlayerIds = [
+            ...bookingToUpdate.team1
+              .map((player: any) => player.playerId?.toString())
+              .filter(Boolean),
+            ...bookingToUpdate.team2
+              .map((player: any) => player.playerId?.toString())
+              .filter(Boolean),
+          ];
+
+          // Remove the new player from the list (to avoid sending notification to themselves)
+          const otherPlayerIds = existingPlayerIds.filter(
+            (id) => id !== userData.id.toString()
+          );
+
+          // Add booking owner to notification recipients if not already included
+          if (
+            bookingToUpdate.userId.toString() !== userData.id.toString() &&
+            !otherPlayerIds.includes(bookingToUpdate.userId.toString())
+          ) {
+            otherPlayerIds.push(bookingToUpdate.userId.toString());
+          }
+
+          // Send notifications to all existing players about the new player joining
+          if (newPlayer && otherPlayerIds.length > 0) {
+            const teamName = requestedTeam === "team1" ? "Team 1" : "Team 2";
+            const positionName =
+              requestedPosition.charAt(0).toUpperCase() +
+              requestedPosition.slice(1);
+
+            // Send notifications to all existing players
+
+            await Promise.all([
+              otherPlayerIds?.map(async (data: any) => {
+                await notifyUser({
+                  recipientId: data,
+                  type: "PLAYER_JOINED_GAME",
+                  title: "New Player Joined",
+                  message: `${newPlayer.fullName} has joined your game as ${positionName} in ${teamName}.`,
+                  category: "GAME",
+                  notificationType: "BOTH", // Send both in-app and push notification
+                  referenceId: bookingId,
+                  referenceType: "bookings",
+                  priority: "MEDIUM",
+                  metadata: {
+                    bookingId,
+                    newPlayerId: userData.id,
+                    newPlayerName: newPlayer.fullName,
+                    newPlayerPosition: requestedPosition,
+                    newPlayerTeam: requestedTeam,
+                    timestamp: new Date().toISOString(),
+                  },
+                  session,
+                });
+              }),
+            ]);
+          }
+        }
+
+        await session.commitTransaction();
+
+        return {
+          success: true,
+          message: "Game joined successfully",
+          data: {
+            request: bookingRequest[0],
+            transaction: null,
+            payment: {},
+          },
+        };
       }
-
-      const razorpayOrder: RazorpayOrder =
-        (await razorpayInstance.orders.create(options as any)) as any;
-
-      // Update transaction with Razorpay order ID
-      await transactionModel.findByIdAndUpdate(
-        transaction[0]._id,
-        { razorpayOrderId: razorpayOrder.id },
-        { session }
-      );
-
-      paymentDetails = {
-        razorpayOrderId: razorpayOrder.id,
-        amount: razorpayAmount,
-        playcoinsUsed: playcoinsToUse,
-        currency: "INR",
-      };
-    } else {
-      // Payment is completed with playcoins (either method="playcoins" or method="both" with enough coins)
-      paymentDetails = {
-        method: "playcoins",
-        amount: slotPrice,
-        playcoinsUsed: playcoinsToUse,
-        status: "completed",
-      };
+    } catch (error) {
+      await session.abortTransaction();
+      console.error("Error in joinOpenBookingServices:", error);
+      throw error;
+    } finally {
+      await session.endSession();
     }
-
-    await session.commitTransaction();
-
-    return {
-      success: true,
-      message: "Request to join the game sent successfully",
-      data: {
-        request: bookingRequest[0],
-        transaction: transaction[0],
-        payment: paymentDetails,
-      },
-    };
-  } catch (error) {
-    await session.abortTransaction();
-    console.error("Error in joinOpenBookingServices:", error);
-    throw error;
-  } finally {
-    await session.endSession();
   }
 };
 
@@ -1610,14 +1372,19 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  // Construct booking datetime in IST
-  const [slotHour, slotMinute] = booking.bookingSlots.split(":").map(Number);
-  const bookingDateTime = new Date(booking.bookingDate);
-  bookingDateTime.setUTCHours(slotHour - 5, slotMinute - 30, 0, 0); // Convert IST to UTC
+  const currentTime = new Date().toISOString();
 
-  const currentUTC = new Date();
+  console.log(booking.bookingDate, currentTime);
 
-  if (bookingDateTime < currentUTC) {
+  function diffHours(a: any, b: any) {
+    const da = a instanceof Date ? a : new Date(a);
+    const db = b instanceof Date ? b : new Date(b);
+    const diffMs = Math.abs(da.getTime() - db.getTime());
+    return diffMs / (1000 * 60 * 60);
+  }
+  const hours = diffHours(currentTime, booking.bookingDate);
+
+  if (booking.bookingDate.toISOString() < currentTime) {
     await session.abortTransaction();
     return errorResponseHandler(
       "Cannot cancel a booking that has already passed",
@@ -1626,13 +1393,10 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  const diffMs = bookingDateTime.getTime() - currentUTC.getTime();
-  const diffHours = diffMs / (1000 * 60 * 60);
-
-  if (diffHours < 4) {
+  if (hours < 24) {
     await session.abortTransaction();
     return errorResponseHandler(
-      "Bookings can only be cancelled at least 4 hours before the scheduled time",
+      "Bookings can only be cancelled at least 24 hours before the scheduled time",
       httpStatusCode.BAD_REQUEST,
       res
     );

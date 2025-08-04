@@ -19,14 +19,14 @@ export const getMyMatches = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
 
-    const { type, filter } = req.query;
+    const { type } = req.query;
     let response: any = {
       success: true,
       message: "Matches retrieved successfully",
       data: [],
     };
 
-    if (type !== "all" && type !== "current") {
+    if (type !== "all" && type !== "upcoming" && type !== "previous") {
       return errorResponseHandler(
         "Invalid Type",
         httpStatusCode.BAD_REQUEST,
@@ -34,20 +34,8 @@ export const getMyMatches = async (req: Request, res: Response) => {
       );
     }
 
-    // Validate filter if provided
-    if (
-      filter &&
-      !["upcoming", "current", "previous"].includes(filter as string)
-    ) {
-      return errorResponseHandler(
-        "Invalid Filter. Must be 'upcoming', 'current', or 'previous'",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-
     // Get current time in IST
-    const currentDate = new Date().setHours(0, 0, 0, 0);
+    const currentDate = new Date().toISOString();
 
     if (type === "all") {
       // For all type, get all bookings (previous, current, and upcoming)
@@ -72,7 +60,6 @@ export const getMyMatches = async (req: Request, res: Response) => {
             },
           ],
           bookingPaymentStatus: true,
-          bookingType: {$ne:"Cancelled"}
         })
         .populate({
           path: "venueId",
@@ -82,7 +69,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
           path: "courtId",
           select: "games",
         })
-        .sort({ bookingDate: 1 }) // Sort by date ascending
+        .sort({ bookingDate: -1 }) // Sort by date descending
         .lean();
 
       // Get all player IDs from both teams
@@ -111,13 +98,9 @@ export const getMyMatches = async (req: Request, res: Response) => {
         return map;
       }, {} as Record<string, any>);
 
-      // Define date boundaries for categorization
-      const today = new Date().setHours(0, 0, 0, 0);
-      const endOfToday = new Date().setHours(23, 59, 59, 999);
-
       // Process all bookings to include player data, scores, and status
       const processedBookings = await Promise.all(
-        allBookings.map(async (booking) => {
+        allBookings.map(async (booking: any) => {
           // Get score for this booking
           const score =
             (await gameScoreModel.findOne({ bookingId: booking._id }).lean()) ||
@@ -145,14 +128,12 @@ export const getMyMatches = async (req: Request, res: Response) => {
             }
           );
 
-          // Determine booking status based on date
-          let status = "upcoming";
-          const bookingDate = new Date(booking.bookingDate).getTime();
+          let status = "";
 
-          if (bookingDate < today) {
+          if (booking?.bookingDate.toISOString() < currentDate) {
             status = "previous";
-          } else if (bookingDate >= today && bookingDate <= endOfToday) {
-            status = "current";
+          } else if (booking?.bookingDate.toISOString() > currentDate) {
+            status = "upcoming";
           }
 
           return {
@@ -165,36 +146,9 @@ export const getMyMatches = async (req: Request, res: Response) => {
         })
       );
 
-      // Apply filter if provided
-      let filteredBookings = processedBookings;
-      if (filter) {
-        filteredBookings = processedBookings.filter(
-          (booking) => booking.status === filter
-        );
-      }
-
-      // Sort the processed bookings by status priority (current, upcoming, previous)
-      const sortedBookings = filteredBookings.sort((a, b) => {
-        const statusOrder = { current: 0, upcoming: 1, previous: 2 };
-        return (
-          statusOrder[a.status as keyof typeof statusOrder] -
-          statusOrder[b.status as keyof typeof statusOrder]
-        );
-      });
-
-      response.data = sortedBookings;
+      response.data = processedBookings;
     } else {
-      const nowIST = getCurrentISTTime();
-      const currentISTHour = nowIST.getHours();
-
-      // Normalize today's date in IST
-      const todayStartIST = new Date(nowIST);
-      todayStartIST.setHours(0, 0, 0, 0);
-
-      const todayEndIST = new Date(nowIST);
-      todayEndIST.setHours(23, 59, 59, 999);
-      // Keep the existing implementation for type === "current"
-      const todayBookings = await bookingModel
+      const myBooking = await bookingModel
         .find({
           $or: [
             {
@@ -214,49 +168,20 @@ export const getMyMatches = async (req: Request, res: Response) => {
               },
             },
           ],
-          bookingDate: {
-            $gte: todayStartIST,
-            $lte: todayEndIST,
-          },
-          bookingType: {$ne:"Cancelled"}
+          bookingDate:
+            type === "upcoming" ? { $gte: currentDate } : { $lt: currentDate },
+          bookingPaymentStatus: true,
+          bookingType: { $ne: "Cancelled" },
         })
         .populate("venueId", "name city state address")
         .populate("courtId", "games")
         .lean();
 
       // Split into current and previous using slot hour comparison
-      const current: any[] = [];
-      const currentPrevious: any[] = [];
-
-      for (const booking of todayBookings) {
-        const slotHour = parseInt(booking.bookingSlots.split(":")[0], 10);
-        if (slotHour >= currentISTHour) {
-          current.push(booking);
-        } else {
-          currentPrevious.push(booking);
-        }
-      }
-
-      // Fetch all previous day bookings
-      const previousDaysBookings = await bookingModel
-        .find({
-          $or: [
-            { "team1.playerId": new mongoose.Types.ObjectId(userData.id) },
-            { "team2.playerId": new mongoose.Types.ObjectId(userData.id) },
-          ],
-          bookingDate: { $lt: todayStartIST }, // strictly before today
-          bookingType: {$ne:"Cancelled"}
-        })
-        .populate("venueId", "name city state address")
-        .populate("courtId", "games")
-        .lean();
-
-      // Combine with today’s past-hour slots for full "previous"
-      const previous = [...previousDaysBookings, ...currentPrevious];
 
       // Get all player IDs from both previous and current bookings
       const playerIds = new Set<string>();
-      [...previous, ...current].forEach((booking) => {
+      myBooking.forEach((booking) => {
         booking.team1?.forEach((player: any) => {
           if (player.playerId) playerIds.add(player.playerId.toString());
         });
@@ -281,8 +206,8 @@ export const getMyMatches = async (req: Request, res: Response) => {
       }, {} as Record<string, any>);
 
       // Process previous bookings
-      const processedPrevious = await Promise.all(
-        previous.map(async (booking) => {
+      const processedMyBooking = await Promise.all(
+        myBooking.map(async (booking) => {
           // Get score for this booking
           const score =
             (await gameScoreModel.findOne({ bookingId: booking._id }).lean()) ||
@@ -319,49 +244,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
         })
       );
 
-      // Process current bookings
-      const processedCurrent = await Promise.all(
-        current.map(async (booking) => {
-          // Get score for this booking
-          const score =
-            (await gameScoreModel.findOne({ bookingId: booking._id }).lean()) ||
-            {};
-
-          // Process team1 players
-          const team1WithPlayerData = (booking.team1 || []).map(
-            (player: any) => {
-              const playerId = player.playerId?.toString();
-              return {
-                ...player,
-                playerData: playerId ? playersMap[playerId] : null,
-              };
-            }
-          );
-
-          // Process team2 players
-          const team2WithPlayerData = (booking.team2 || []).map(
-            (player: any) => {
-              const playerId = player.playerId?.toString();
-              return {
-                ...player,
-                playerData: playerId ? playersMap[playerId] : null,
-              };
-            }
-          );
-
-          return {
-            ...booking,
-            team1: team1WithPlayerData,
-            team2: team2WithPlayerData,
-            score,
-          };
-        })
-      );
-
-      response.data = {
-        previous: processedPrevious,
-        current: processedCurrent,
-      };
+      response.data = processedMyBooking;
     }
 
     return res.status(httpStatusCode.OK).json(response);
@@ -693,7 +576,7 @@ export const getMyTransactions = async (req: Request, res: Response) => {
     const transactions = await transactionModel
       .find({
         userId: userData.id,
-        isWebhookVerified: true
+        isWebhookVerified: true,
       })
       .select(
         "amount method status playcoinsUsed createdAt notes razorpayAmount text"
