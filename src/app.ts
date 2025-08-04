@@ -57,7 +57,7 @@ app.get("/api/booking-receipt/:bookingId", async (req, res) => {
     const booking = await bookingModel
       .findById(bookingId)
       .populate("userId", "fullName email")
-      .populate("venueId","name address city state")
+      .populate("venueId","name address city state gstNumber")
       .populate("courtId","name")
       .lean();
 

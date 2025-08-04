@@ -22,6 +22,7 @@ export interface VenueDocument extends Document {
   venueInfo?: string;
   timeslots?: any;
   openingHours?: any;
+  gstNumber?: string;
   location?: {
     type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
@@ -32,8 +33,7 @@ export interface VenueDocument extends Document {
     temperature: number;
     lastUpdated: Date;
   };
-  contactInfo?:string;
-
+  contactInfo?: string;
 }
 
 const venueSchema = new Schema<VenueDocument>(
@@ -127,6 +127,10 @@ const venueSchema = new Schema<VenueDocument>(
         },
       },
     ],
+    gstNumber: {
+      type: String,
+      default: null,
+    },
     location: {
       type: {
         type: String,

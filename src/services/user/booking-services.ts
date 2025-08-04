@@ -16,6 +16,96 @@ import { chatModel } from "src/models/chat/chat-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { venueModel } from "src/models/venue/venue-schema";
+import { fillAndStroke } from "pdfkit";
+
+/**
+ * Normalize various incoming date strings and set the hour slot (zeroing minutes/seconds/ms).
+ * @param {string|Date} rawDate - e.g. "2025-08-04 09:51:23.420380" or "2025-08-13T00:00:00.000Z" or a Date.
+ * @param {string|number} slotHour - e.g. "14" or 14
+ * @param {boolean} keepUTC - if true, interprets/sets the hour in UTC; otherwise uses local time.
+ * @returns {Date} adjusted Date object
+ */
+function applySlotHour(rawDate: any, slotHour: any, keepUTC = false) {
+  // Parse slot to number
+  const hour = parseInt(slotHour, 10);
+  if (Number.isNaN(hour) || hour < 0 || hour > 23) {
+    throw new Error("Invalid slot hour: " + slotHour);
+  }
+
+  // Normalize rawDate into a Date object
+  let date;
+  if (rawDate instanceof Date) {
+    date = new Date(rawDate); // clone
+  } else if (typeof rawDate === "string") {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/.test(rawDate)) {
+      // "2025-08-04 09:51:23.420380" → convert to ISO-ish by replacing space and trimming to milliseconds
+      const isoish = rawDate.replace(" ", "T").replace(/(\.\d{3})\d+$/, "$1"); // drop beyond ms
+      date = new Date(isoish); // treated as local if no Z
+    } else {
+      // assume parsable ISO (like "2025-08-13T00:00:00.000Z")
+      date = new Date(rawDate);
+    }
+  } else {
+    throw new Error("Unsupported date input: " + rawDate);
+  }
+
+  if (isNaN(date.getTime())) {
+    throw new Error("Failed to parse date: " + rawDate);
+  }
+
+  // Apply slot hour, zeroing minutes/seconds/milliseconds
+  if (keepUTC) {
+    date.setUTCHours(hour, 0, 0, 0);
+  } else {
+    date.setHours(hour, 0, 0, 0);
+  }
+
+  return date;
+}
+
+// Helper: normalize incoming date (from Flutter or web), extract the intended IST date parts,
+// then apply the slot hour as IST wall time and return a JS Date that, when stored (UTC internally),
+// corresponds to that IST slot hour.
+function makeBookingDateInIST(rawDate: any, slotHour: any) {
+  const hour = parseInt(slotHour, 10);
+  if (Number.isNaN(hour) || hour < 0 || hour > 23) {
+    throw new Error("Invalid slot hour: " + slotHour);
+  }
+
+  // Parse rawDate into a JS Date (could be "2025-08-04 09:51:23.420380" or ISO like "2025-08-13T00:00:00.000Z")
+  let base;
+  if (typeof rawDate === "string") {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/.test(rawDate)) {
+      // Flutter-style: convert to ISO-ish by replacing space and trimming beyond milliseconds
+      const isoish = rawDate
+        .replace(" ", "T")
+        .replace(/(\.\d{3})\d+$/, "$1"); // drop microseconds beyond ms
+      base = new Date(isoish); // interpreted as local
+    } else {
+      base = new Date(rawDate); // ISO (with Z or without)
+    }
+  } else if (rawDate instanceof Date) {
+    base = new Date(rawDate);
+  } else {
+    throw new Error("Unsupported date input: " + rawDate);
+  }
+
+  if (isNaN(base.getTime())) {
+    throw new Error("Failed to parse bookingDate: " + rawDate);
+  }
+
+  // Compute the date components in IST
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // +5:30
+  const istEquivalent = new Date(base.getTime() + IST_OFFSET_MS);
+  const year = istEquivalent.getFullYear();
+  const month = istEquivalent.getMonth(); // zero-based
+  const day = istEquivalent.getDate();
+  const utcForIstSlot = Date.UTC(year, month, day, hour, 0, 0); // this is YYYY-MM-DD hour:00 UTC
+  const adjusted = new Date(utcForIstSlot - IST_OFFSET_MS); // subtract offset to align to IST wall time
+
+  return adjusted;
+}
+
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -38,8 +128,8 @@ export const bookCourtServices = async (req: Request, res: Response) => {
   // ********************Validations****************************
 
   // Get the current date and determine if it's a weekday or weekend
-  const currentDate = new Date();
-  const dayOfWeek = currentDate.getDay();
+  const dateCheck = makeBookingDateInIST(bookingDate, bookingSlots[0]);
+  const dayOfWeek = dateCheck.getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
   const dayType = isWeekend ? "weekend" : "weekday";
 
@@ -67,8 +157,6 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     );
   }
 
-  // const playerPayment: number = totalSlotPayment / bookingSlots.length / 4; // Average per slot
-  // const bookingPrice: number = (totalSlotPayment * 2) / bookingSlots.length / 4; // For half court
   const completeCourtPrice: number = totalSlotPayment / bookingSlots.length; // For full court
 
   // Process all players to set payment information and collect player IDs for paidFor
@@ -77,12 +165,10 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       if (item.playerId === userData.id) {
         item.paidBy = "Self";
         item.playerPayment = completeCourtPrice;
-        // Add player ID to paidFor array
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       } else if (item.playerId !== userData.id) {
         item.paidBy = "User";
         item.playerPayment = 0;
-        // Add player ID to paidFor array
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       }
     }
@@ -110,7 +196,6 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       { session }
     );
 
-    // Prepare booking payload
     let bookingPayload = {
       userId: userData.id,
       venueId,
@@ -142,17 +227,14 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       return {
         ...bookingPayload,
         bookingSlots: slot,
+        bookingDate: makeBookingDateInIST(bookingDate, slot),
         expectedPayment: completeCourtPrice,
       };
     });
 
-    // Insert the bookings
     const bookings = await bookingModel.insertMany(finalPayload, { session });
-
-    // Get all booking IDs
     const bookingIds = bookings.map((booking) => booking._id);
 
-    // Update the transaction with the booking IDs
     await transactionModel.findByIdAndUpdate(
       bookingTransaction[0]._id,
       { bookingId: bookingIds }, // Store the first booking ID in the transaction

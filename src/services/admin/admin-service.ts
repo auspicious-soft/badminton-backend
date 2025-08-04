@@ -597,6 +597,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     employees?: { employeeId: string; isActive: boolean }[];
     location?: any;
     timeslots?: any;
+    gstNumber?: any;
     openingHours?: any;
   }
 
@@ -615,6 +616,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     location,
     timeslots,
     openingHours,
+    gstNumber 
   } = payload as UpdateVenuePayload;
 
   if (!venueId || !mongoose.Types.ObjectId.isValid(venueId)) {
@@ -650,6 +652,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
   }
   if (timeslots) venue.timeslots = timeslots;
   if (openingHours) venue.openingHours = openingHours;
+  if (gstNumber) venue.gstNumber = gstNumber
 
   // **Replace Facilities, Courts, and Employees with New Data**
   if (facilities) {
