@@ -1318,7 +1318,13 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  const booking = await bookingModel.findById(bookingId).lean();
+  const booking = await bookingModel
+    .findOne({
+      _id: bookingId,
+      bookingType: { $ne: "Cancelled" },
+      userId: userData.id,
+    })
+    .lean();
 
   if (!booking) {
     await session.abortTransaction();
@@ -1329,23 +1335,23 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     );
   }
 
-  if (booking.userId.toString() !== userData.id.toString()) {
-    await session.abortTransaction();
-    return errorResponseHandler(
-      "Only the booking creator can cancel this booking",
-      httpStatusCode.UNAUTHORIZED,
-      res
-    );
-  }
+  // if (booking.userId.toString() !== userData.id.toString()) {
+  //   await session.abortTransaction();
+  //   return errorResponseHandler(
+  //     "Only the booking creator can cancel this booking",
+  //     httpStatusCode.UNAUTHORIZED,
+  //     res
+  //   );
+  // }
 
-  if (booking.askToJoin === true) {
-    await session.abortTransaction();
-    return errorResponseHandler(
-      "Cannot cancel a booking that is open for others to join",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
-  }
+  // if (booking.askToJoin === true) {
+  //   await session.abortTransaction();
+  //   return errorResponseHandler(
+  //     "Cannot cancel a booking that is open for others to join",
+  //     httpStatusCode.BAD_REQUEST,
+  //     res
+  //   );
+  // }
 
   const userTransaction = await transactionModel
     .findOne({

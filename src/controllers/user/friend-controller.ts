@@ -721,6 +721,9 @@ export const getFriendsById = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
     const { id } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
 
     if (!id) {
       return errorResponseHandler(
@@ -730,7 +733,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
       );
     }
 
-    // Check if user exists
     const user = await usersModel
       .findById(id)
       .select("fullName profilePic")
@@ -744,7 +746,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
       );
     }
 
-    // Check friendship status
     const friendship = await friendsModel
       .findOne({
         $or: [
@@ -754,7 +755,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
       })
       .lean();
 
-    // Check if the requested user has blocked the current user
     if (
       friendship &&
       friendship.status === "blocked" &&
@@ -767,7 +767,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
       );
     }
 
-    // Determine detailed friendship status
     let friendshipStatus = null;
     let isFriend = false;
 
@@ -776,7 +775,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
         friendshipStatus = "friends";
         isFriend = true;
       } else if (friendship.status === "pending") {
-        // Check if current user sent the request or received it
         friendshipStatus =
           friendship.userId.toString() === userData.id.toString()
             ? "request_sent"
@@ -791,49 +789,43 @@ export const getFriendsById = async (req: Request, res: Response) => {
       }
     }
 
-    const currentDate = new Date().setHours(0, 0, 0, 0); // Normalize to start of the day
-    const currentISTHour = getCurrentISTTime().getHours();
-    const endOfToday = new Date().setHours(23,59,59,999)
+    const currentDate = new Date().toISOString();
 
-    // Get previous matches played by the user
-    const previousMatches = (await bookingModel
-      .find({
-        $and: [
-          // Player condition - must be in either team1 or team2
-          {
-            $or: [
-              { "team1.playerId": new mongoose.Types.ObjectId(id) },
-              { "team2.playerId": new mongoose.Types.ObjectId(id) },
-            ],
+    const baseMatchFilter: any = {
+      $or: [
+        {
+          team1: {
+            $elemMatch: {
+              playerId: new mongoose.Types.ObjectId(id),
+              paymentStatus: "Paid",
+            },
           },
-          // Date/time condition - booking must be completed
-          {
-            $or: [
-              {
-                // Case 1: Any booking from before today (fully completed)
-                bookingDate: { $lt: currentDate },
-              },
-              {
-                // Case 2: Today's booking, but time has passed
-                bookingDate: {$gte: currentDate, $lte: endOfToday},
-                bookingSlots: { $lt: currentISTHour },
-              },
-            ],
+        },
+        {
+          team2: {
+            $elemMatch: {
+              playerId: new mongoose.Types.ObjectId(id),
+              paymentStatus: "Paid",
+            },
           },
-        ],
-      })
-      .populate({
-        path: "venueId",
-        select: "name address city state",
-      })
-      .populate({
-        path: "courtId",
-        select: "name games",
-      })
+        },
+      ],
+      bookingDate: { $lt: currentDate }, // previous games only
+      bookingPaymentStatus: true,
+      // DO NOT exclude cancelled games
+    };
+
+    const totalCount = await bookingModel.countDocuments(baseMatchFilter);
+
+    const previousMatches = await bookingModel
+      .find(baseMatchFilter)
+      .populate("venueId", "name city state address")
+      .populate("courtId", "games")
       .sort({ bookingDate: -1 })
-      .lean()) as any[];
+      .skip((pageNumber - 1) * limitNumber)
+      .limit(limitNumber)
+      .lean();
 
-    // Get all player IDs from the matches
     const playerIds = new Set<string>();
     previousMatches.forEach((match) => {
       match.team1?.forEach((player: any) => {
@@ -844,33 +836,27 @@ export const getFriendsById = async (req: Request, res: Response) => {
       });
     });
 
-    // Get player details
     const players = await usersModel
       .find({ _id: { $in: Array.from(playerIds) } })
       .select("_id fullName profilePic")
       .lean();
 
-    // Create a map for quick player lookup
     const playerMap = players.reduce((map, player: any) => {
       map[player._id.toString()] = player;
       return map;
     }, {} as Record<string, any>);
 
-    // Get scores for all matches
     const matchIds = previousMatches.map((match) => match._id);
     const scores = await gameScoreModel
       .find({ bookingId: { $in: matchIds } })
       .lean();
 
-    // Create a map for quick score lookup
     const scoreMap = scores.reduce((map, score: any) => {
       map[score.bookingId.toString()] = score;
       return map;
     }, {} as Record<string, any>);
 
-    // Process matches with player details and scores
     const processedMatches = previousMatches.map((match) => {
-      // Process team1 players
       const team1WithDetails = (match.team1 || []).map((player: any) => {
         const playerId = player.playerId?.toString();
         return {
@@ -879,7 +865,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
         };
       });
 
-      // Process team2 players
       const team2WithDetails = (match.team2 || []).map((player: any) => {
         const playerId = player.playerId?.toString();
         return {
@@ -888,48 +873,47 @@ export const getFriendsById = async (req: Request, res: Response) => {
         };
       });
 
-      // Get score for this match
       const matchScore = scoreMap[match._id.toString()] || {};
 
       return {
-        matchId: match._id,
-        date: match.bookingDate,
-        time: match.bookingSlots,
-        venue: match.venueId,
-        court: match.courtId,
-        matchType: match.courtId?.games || "Unknown",
+        ...match,
         team1: team1WithDetails,
         team2: team2WithDetails,
         score: matchScore,
-        isCompetitive: match.isCompetitive || false,
+        status: "previous", // always previous
       };
     });
-
-    // Add hardcoded stats
-    const userWithStats = {
-      ...user,
-      stats: {
-        totalMatches: 0,
-        padlelMatches: 0,
-        pickleballMatches: 0,
-        loyaltyPoints: 0,
-        level: 0,
-        lastMonthLevel: 0,
-        level6MonthsAgo: 0,
-        level1YearAgo: 0,
-        improvement: 0,
-        confidence: "10%",
-      },
-      friendshipStatus: friendshipStatus,
-      isFriend: isFriend,
-      relationshipId: friendship ? friendship._id : null,
-      previousMatches: processedMatches,
-    };
 
     const response = {
       success: true,
       message: "User data retrieved successfully",
-      data: userWithStats,
+      data: {
+        ...user,
+        stats: {
+          totalMatches: 0,
+          padlelMatches: 0,
+          pickleballMatches: 0,
+          loyaltyPoints: 0,
+          level: 0,
+          lastMonthLevel: 0,
+          level6MonthsAgo: 0,
+          level1YearAgo: 0,
+          improvement: 0,
+          confidence: "10%",
+        },
+        friendshipStatus,
+        isFriend,
+        relationshipId: friendship ? friendship._id : null,
+        previousMatches: processedMatches,
+        pagination: {
+          totalCount,
+          currentPage: pageNumber,
+          totalPages: Math.ceil(totalCount / limitNumber),
+          limit: limitNumber,
+          hasNextPage: pageNumber * limitNumber < totalCount,
+          hasPrevPage: pageNumber > 1,
+        },
+      },
     };
 
     return res.status(httpStatusCode.OK).json(response);

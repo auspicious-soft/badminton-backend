@@ -158,15 +158,15 @@ export const getVenuesServices = async (req: Request, res: Response) => {
 
     const MAX_SEARCH_DISTANCE = 100000; // 100 km
     const venues = await venueModel.aggregate([
-      {
-        $geoNear: {
-          near: { type: "Point", coordinates: [lngNum, latNum] },
-          distanceField: "distance",
-          spherical: true,
-          maxDistance: MAX_SEARCH_DISTANCE,
-          query: geoQuery,
-        },
-      },
+      // {
+      //   $geoNear: {
+      //     near: { type: "Point", coordinates: [lngNum, latNum] },
+      //     distanceField: "distance",
+      //     spherical: true,
+      //     maxDistance: MAX_SEARCH_DISTANCE,
+      //     query: geoQuery,
+      //   },
+      // },
       {
         $project: {
           _id: 1,
@@ -182,7 +182,7 @@ export const getVenuesServices = async (req: Request, res: Response) => {
           distance: { $round: [{ $divide: ["$distance", 1000] }, 1] },
         },
       },
-      { $sort: { distance: distance === "ASC" ? 1 : -1 } },
+      // { $sort: { distance: distance === "ASC" ? 1 : -1 } },
     ]);
 
     if (venues.length === 0) {
@@ -865,7 +865,11 @@ export const createGuestServices = async (req: Request, res: Response) => {
 
 export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
-  const { date, game = "all" } = req.query;
+  const { date, game = "all", page = 1, limit = 10 } = req.query;
+
+  const pageNumber = Number(page);
+  const limitNumber = Number(limit);
+  const skip = (pageNumber - 1) * limitNumber;
 
   let startOfDay = new Date().toISOString() as any;
   let endOfDay = new Date(
@@ -880,10 +884,11 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     startOfDay = startOfDay.toISOString();
     endOfDay = endOfDay.toISOString();
   }
+
   const isToday =
     startOfDay.split("T")[0] === new Date().toISOString().split("T")[0];
-  let dateQuery: any = {};
 
+  let dateQuery: any = {};
   if (date) {
     dateQuery = {
       $gt: isToday ? new Date().toISOString() : startOfDay,
@@ -895,145 +900,150 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     };
   }
 
-  try {
-    const userObjectId = new mongoose.Types.ObjectId(userData.id);
+  const userObjectId = new mongoose.Types.ObjectId(userData.id);
 
-    // 1. Fetch bookings first
-    const bookings = await bookingModel
-      .find({
-        askToJoin: true,
-        bookingDate: dateQuery,
-        $nor: [
-          { "team1.playerId": userObjectId },
-          { "team2.playerId": userObjectId },
-        ],
-      })
-      .sort({ bookingDate: 1 })
-      .lean();
+  // Count total matches (before pagination)
+  const totalMatches = await bookingModel.countDocuments({
+    askToJoin: true,
+    bookingDate: dateQuery,
+    $nor: [
+      { "team1.playerId": userObjectId },
+      { "team2.playerId": userObjectId },
+    ],
+  });
 
-    if (!bookings.length) {
-      return {
-        success: true,
-        message: "No open matches found",
-        data: [],
-        meta: {
-          date: startOfDay,
-          isSpecificDate: !!date,
-          isToday: true,
-        },
-      };
-    }
+  // 1. Fetch bookings with pagination
+  const bookings = await bookingModel
+    .find({
+      askToJoin: true,
+      bookingDate: dateQuery,
+      $nor: [
+        { "team1.playerId": userObjectId },
+        { "team2.playerId": userObjectId },
+      ],
+    })
+    .sort({ bookingDate: 1 })
+    .skip(skip)
+    .limit(limitNumber)
+    .lean();
 
-    const venueIds = [...new Set(bookings.map((b) => b.venueId.toString()))];
-    const courtIds = [...new Set(bookings.map((b) => b.courtId.toString()))];
-
-    // 2. Parallel fetch for venues, courts, and users
-    const [venues, courts, users] = await Promise.all([
-      venueModel
-        .find({ _id: { $in: venueIds }, isActive: true })
-        .select("_id name city state address image weather location")
-        .lean(),
-      courtModel
-        .find({
-          _id: { $in: courtIds },
-          isActive: true,
-          ...(game !== "all" && { games: game }),
-        })
-        .select("_id name venueId games hourlyRate image")
-        .lean(),
-      usersModel
-        .find({
-          _id: {
-            $in: Array.from(
-              bookings.flatMap((b) => [
-                ...b.team1.map((p: any) => p.playerId),
-                ...b.team2.map((p: any) => p.playerId),
-              ])
-            ),
-          },
-        })
-        .select("_id fullName profilePic")
-        .lean(),
-    ]);
-
-    // 3. Build Maps
-    const venuesMap = new Map(venues.map((v) => [v._id.toString(), v]));
-    const courtsMap = new Map(courts.map((c) => [c._id.toString(), c]));
-    const usersMap = new Map(
-      users.map((u) => [
-        u._id.toString(),
-        { _id: u._id, name: u.fullName, image: u.profilePic },
-      ])
-    );
-
-    // 4. Process bookings
-    const processedBookings = bookings
-      .map((booking) => {
-        const venue = venuesMap.get(booking.venueId.toString());
-        const court = courtsMap.get(booking.courtId.toString());
-        if (!venue || !court) return null;
-
-        const formatTeam = (team: any[]) =>
-          team.map((player) => ({
-            playerType: player.playerType,
-            player:
-              player.playerId && usersMap.has(player.playerId.toString())
-                ? usersMap.get(player.playerId.toString())
-                : null,
-          }));
-
-        const bookingDate = new Date(booking.bookingDate);
-        const formattedDate = new Intl.DateTimeFormat("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }).format(bookingDate);
-
-        return {
-          _id: booking._id,
-          bookingDate,
-          formattedDate,
-          bookingSlots: booking.bookingSlots,
-          askToJoin: booking.askToJoin,
-          isCompetitive: booking.isCompetitive,
-          skillRequired: booking.skillRequired,
-          team1: formatTeam(booking.team1),
-          team2: formatTeam(booking.team2),
-          venue: {
-            _id: venue._id,
-            name: venue.name,
-            city: venue.city,
-            state: venue.state,
-            address: venue.address,
-            image: venue.image,
-            weather: venue.weather,
-          },
-          court,
-          distance: null,
-        };
-      })
-      .filter(Boolean) as any[];
-
-    return {
+  if (!bookings.length) {
+    return res.status(httpStatusCode.OK).json({
       success: true,
-      message: "Open matches retrieved successfully",
-      data: processedBookings,
+      message: "No open matches found",
+      data: [],
       meta: {
-        totalMatches: processedBookings.length,
-        isSpecificDate: !!date,
+        totalMatches: 0,
         date: startOfDay,
-        isToday: isToday,
+        isSpecificDate: !!date,
+        isToday: true,
+        currentPage: pageNumber,
+        totalPages: 0,
       },
-    };
-  } catch (error) {
-    console.error("Error in getOpenMatchesServices:", error);
-    return errorResponseHandler(
-      "Error retrieving open matches: " + (error as Error).message,
-      httpStatusCode.INTERNAL_SERVER_ERROR,
-      res
-    );
+    });
   }
+
+  const venueIds = [...new Set(bookings.map((b) => b.venueId.toString()))];
+  const courtIds = [...new Set(bookings.map((b) => b.courtId.toString()))];
+
+  const [venues, courts, users] = await Promise.all([
+    venueModel
+      .find({ _id: { $in: venueIds }, isActive: true })
+      .select("_id name city state address image weather location")
+      .lean(),
+    courtModel
+      .find({
+        _id: { $in: courtIds },
+        isActive: true,
+        ...(game !== "all" && { games: game }),
+      })
+      .select("_id name venueId games hourlyRate image")
+      .lean(),
+    usersModel
+      .find({
+        _id: {
+          $in: Array.from(
+            bookings.flatMap((b) => [
+              ...b.team1.map((p: any) => p.playerId),
+              ...b.team2.map((p: any) => p.playerId),
+            ])
+          ),
+        },
+      })
+      .select("_id fullName profilePic")
+      .lean(),
+  ]);
+
+  const venuesMap = new Map(venues.map((v) => [v._id.toString(), v]));
+  const courtsMap = new Map(courts.map((c) => [c._id.toString(), c]));
+  const usersMap = new Map(
+    users.map((u) => [
+      u._id.toString(),
+      { _id: u._id, name: u.fullName, image: u.profilePic },
+    ])
+  );
+
+  const processedBookings = bookings
+    .map((booking) => {
+      const venue = venuesMap.get(booking.venueId.toString());
+      const court = courtsMap.get(booking.courtId.toString());
+      if (!venue || !court) return null;
+
+      const formatTeam = (team: any[]) =>
+        team.map((player) => ({
+          playerType: player.playerType,
+          player:
+            player.playerId && usersMap.has(player.playerId.toString())
+              ? usersMap.get(player.playerId.toString())
+              : null,
+        }));
+
+      const bookingDate = new Date(booking.bookingDate);
+      const formattedDate = new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }).format(bookingDate);
+
+      return {
+        _id: booking._id,
+        bookingDate,
+        formattedDate,
+        bookingSlots: booking.bookingSlots,
+        askToJoin: booking.askToJoin,
+        isCompetitive: booking.isCompetitive,
+        skillRequired: booking.skillRequired,
+        team1: formatTeam(booking.team1),
+        team2: formatTeam(booking.team2),
+        venue: {
+          _id: venue._id,
+          name: venue.name,
+          city: venue.city,
+          state: venue.state,
+          address: venue.address,
+          image: venue.image,
+          weather: venue.weather,
+        },
+        court,
+        distance: null,
+      };
+    })
+    .filter(Boolean) as any[];
+
+  return {
+    success: true,
+    message: "Open matches retrieved successfully",
+    data: processedBookings,
+    meta: {
+      totalMatches,
+      currentPage: pageNumber,
+      totalPages: Math.ceil(totalMatches / limitNumber),
+      isSpecificDate: !!date,
+      date: startOfDay,
+      isToday: isToday,
+    },
+  };
 };
 
 export const getOpenMatchesByIdServices = async (
