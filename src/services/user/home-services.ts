@@ -928,7 +928,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     .lean();
 
   if (!bookings.length) {
-    return res.status(httpStatusCode.OK).json({
+    return {
       success: true,
       message: "No open matches found",
       data: [],
@@ -940,7 +940,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
         currentPage: pageNumber,
         totalPages: 0,
       },
-    });
+    };
   }
 
   const venueIds = [...new Set(bookings.map((b) => b.venueId.toString()))];
