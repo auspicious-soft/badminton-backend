@@ -29,6 +29,7 @@ import {
   bookCourt,
   bookingPayment,
   cancelBooking,
+  clubStatus,
   createGuest,
   getAppInfo,
   getCourts,
@@ -53,6 +54,7 @@ const router = Router();
 router.get("/get-user", getUser);
 router.put("/update-user", updateUser);
 router.get("/user-home-screen", userHome);
+router.post("/club-status", clubStatus);
 
 router.get("/get-venues", getVenues);
 router.get("/get-courts", getCourts);

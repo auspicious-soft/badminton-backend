@@ -1235,6 +1235,15 @@ export const getMatchesService = async (payload: any, res: Response) => {
   }
 };
 
+export const createMatchService = async (payload: any, res: Response) => {
+
+  return {
+    success: true,
+    message: "Success",
+    data: payload.body,
+  }
+}
+
 export const getCitiesService = async (payload: any, res: Response) => {
   try {
     const cities = await venueModel.distinct("city");

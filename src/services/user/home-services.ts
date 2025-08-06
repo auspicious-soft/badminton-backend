@@ -12,6 +12,7 @@ import { adminSettingModel } from "src/models/admin/admin-settings";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { friendsModel } from "src/models/user/friends-schema";
 import { end } from "pdfkit";
+import { user } from "src/routes";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -108,11 +109,17 @@ export const userHomeServices = async (req: Request, res: Response) => {
   const level = (userLoyalty?.loyaltyPoints || 0) / perMatch;
   const totalLevel = limit / perMatch;
 
+  const clubResponse = await usersModel
+    .findById(userData.id)
+    .select("clubResponse")
+    .lean();
+
   const data = {
     banners: banners?.banners || [],
     upcomingMatches: allMatches,
     venueNearby: nearbyVenues,
     playersRanking: [], // Can be fetched in parallel too if added later
+    clubResponse: clubResponse?.clubResponse ? true : false,
     loyaltyPoints: {
       points: userLoyalty?.loyaltyPoints || 0,
       level,
@@ -128,18 +135,50 @@ export const userHomeServices = async (req: Request, res: Response) => {
   };
 };
 
-export const getVenuesServices = async (req: Request, res: Response) => {
-  try {
-    const userData = req.user as any;
-    const { date, distance = "ASC", game = "all", lng, lat } = req.query;
+export const clubResponseServices = async (req: Request, res: Response) => {
+  const userData = req.user as any;
+  const { status, clubName = "Chandigarh Club", clubId } = req.body;
 
-    if (!date || !lng || !lat) {
+  if (!status) {
+    await usersModel.findByIdAndUpdate(userData.id, {
+      clubResponse: true,
+    });
+    return {
+      success: true,
+      message: "Club status updated successfully",
+    };
+  } else {
+    if (!clubId) {
       return errorResponseHandler(
-        "Date, longitude, and latitude are required",
+        "Club ID is required",
         httpStatusCode.BAD_REQUEST,
         res
       );
     }
+
+    await usersModel.findByIdAndUpdate(userData.id, {
+      clubId,
+      clubName,
+      clubResponse: true,
+    });
+
+    return {
+      success: true,
+      message: "Club status updated successfully",
+    };
+  }
+};
+
+export const getVenuesServices = async (req: Request, res: Response) => {
+  try {
+    const userData = req.user as any;
+    const {
+      date = new Date().toISOString(),
+      distance = "ASC",
+      game = "all",
+      lng,
+      lat,
+    } = req.query;
 
     const lngNum = Number(lng);
     const latNum = Number(lat);
@@ -258,16 +297,16 @@ export const getVenuesServices = async (req: Request, res: Response) => {
         const courtId = court._id.toString();
         const booked = bookedSlots[venueId]?.[courtId] || [];
 
-        const availableSlots = venueTimeslots.filter((slot: string) => {
-          if (booked.includes(slot)) return false;
-          if (isRequestedDateToday) {
-            const slotHour = parseInt(slot.split(":")[0], 10);
-            if (slotHour <= currentHour) return false;
-          }
-          return true;
-        });
+        // const availableSlots = venueTimeslots.filter((slot: string) => {
+        //   if (booked.includes(slot)) return false;
+        //   if (isRequestedDateToday) {
+        //     const slotHour = parseInt(slot.split(":")[0], 10);
+        //     if (slotHour <= currentHour) return false;
+        //   }
+        //   return true;
+        // });
 
-        return { ...court, availableSlots };
+        return { ...court, availableSlots: [] };
       });
 
       return {

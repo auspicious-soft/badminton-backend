@@ -1450,6 +1450,8 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
   //   );
   // }
 
+  await chatModel.deleteOne({ bookingId }, { session });
+
   await transactionModel.create(
     [
       {

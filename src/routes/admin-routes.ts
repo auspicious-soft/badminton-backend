@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   cancelMatch,
   createEmployee,
+  createMatch,
   createVenue,
   dashboard,
   employeeDashboard,
@@ -88,6 +89,7 @@ router.get("/get-users/:id", getUsersById);
 
 //Matches routes
 router.get("/get-matches", getMatches);
+router.post("/create-match", createMatch);
 router.get("/get-cities", getCities);
 
 router.post("/cancel-match", cancelMatch);

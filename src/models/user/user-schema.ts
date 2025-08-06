@@ -28,6 +28,9 @@ export interface UserDocument {
   createdAt?: Date;
   updatedAt?: Date;
   referralUsed: string;
+  clubResponse?: boolean;
+  clubName?: string;
+  clubId?: string;
   location?: {
     type: "Point";
     coordinates: [number, number]; // [longitude, latitude]
@@ -131,6 +134,18 @@ const usersSchema = new mongoose.Schema(
     referralUsed: {
       type: String,
       default: "",
+    },
+    clubResponse: {
+      type: Boolean,
+      default: false,
+    },
+    clubName: {
+      type: String,
+      default: null,
+    },
+    clubId: {
+      type: String,
+      default: null,
     },
     isBlocked: {
       type: Boolean,

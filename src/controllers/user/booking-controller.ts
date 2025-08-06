@@ -7,7 +7,7 @@ import {
 } from "src/lib/errors/error-response-handler";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { gameScoreModel } from "src/models/venue/game-score";
-import { getCurrentISTTime } from "../../utils";
+import { getCurrentISTTime, getWinnerTeam } from "../../utils";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { courtModel } from "src/models/venue/court-schema";
@@ -291,6 +291,8 @@ export const uploadScore = async (req: Request, res: Response) => {
   try {
     const { bookingId, ...restData } = req.body;
 
+    console.log(restData);
+
     // Validate bookingId
     if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) {
       return errorResponseHandler(
@@ -301,7 +303,50 @@ export const uploadScore = async (req: Request, res: Response) => {
     }
 
     // Check if booking exists
-    const checkExist = await bookingModel.findById(bookingId);
+    let checkExist = await bookingModel.findById(bookingId).lean();
+    if (!checkExist) {
+      return errorResponseHandler(
+        "Booking not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    // let checkExist;
+
+    if (checkExist.team2.length == 0) {
+      checkExist = await bookingModel.findByIdAndUpdate(
+        bookingId,
+        {
+          $set: {
+            team2: [
+              {
+                playerId: checkExist.team1[1].playerId,
+                rackets: checkExist.team1[1].rackets,
+                balls: checkExist.team1[1].balls,
+                transactionId: checkExist.team1[1].transactionId,
+                paymentStatus: checkExist.team1[1].paymentStatus,
+                paidBy: checkExist.team1[1].paidBy,
+                playerType: "player3",
+              },
+            ],
+            team1: [
+              {
+                playerId: checkExist.team1[0].playerId,
+                rackets: checkExist.team1[0].rackets,
+                balls: checkExist.team1[0].balls,
+                transactionId: checkExist.team1[0].transactionId,
+                paymentStatus: checkExist.team1[0].paymentStatus,
+                paidBy: checkExist.team1[0].paidBy,
+                playerType: "player1",
+              },
+            ],
+          },
+        },
+        { new: true }
+      );
+    }
+
     if (!checkExist) {
       return errorResponseHandler(
         "Booking not found",
@@ -311,12 +356,7 @@ export const uploadScore = async (req: Request, res: Response) => {
     }
 
     // Validate score data
-    if (
-      !restData.set1 &&
-      !restData.set2 &&
-      !restData.set3 &&
-      !restData.winner
-    ) {
+    if (!restData.set1 && !restData.set2 && !restData.set3) {
       return errorResponseHandler(
         "At least one set score or winner must be provided",
         httpStatusCode.BAD_REQUEST,
@@ -327,6 +367,8 @@ export const uploadScore = async (req: Request, res: Response) => {
     // Check if score already exists for this booking
     const checkScoreExist = await gameScoreModel.findOne({ bookingId });
 
+    const winner = getWinnerTeam(restData.gameType, restData);
+
     let data;
     let message = "Score uploaded successfully";
 
@@ -334,7 +376,7 @@ export const uploadScore = async (req: Request, res: Response) => {
       // Update existing score
       data = await gameScoreModel.findByIdAndUpdate(
         checkScoreExist._id,
-        restData,
+        { winner, ...restData },
         { new: true }
       );
       message = "Score updated successfully";
@@ -350,7 +392,7 @@ export const uploadScore = async (req: Request, res: Response) => {
         ? "Competitive"
         : "Friendly";
       // Create new score
-      data = await gameScoreModel.create({ bookingId, ...restData });
+      data = await gameScoreModel.create({ bookingId, winner, ...restData });
 
       const settings = await adminSettingModel
         .findOne({ isActive: true })
@@ -368,11 +410,7 @@ export const uploadScore = async (req: Request, res: Response) => {
       const { player_A1, player_A2, player_B1, player_B2 } = restData;
       const inc = settings?.loyaltyPoints?.perMatch || 200;
 
-      await chatModel.updateOne(
-        { bookingId: bookingId },
-        { isActive: false },
-        { new: true }
-      );
+      await chatModel.deleteOne({ bookingId: bookingId });
 
       const countGames = async (id: any) => {
         // Fixed: Corrected the updateOne syntax and added proper error handling

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
 import { errorParser } from "../../lib/errors/error-response-handler";
-import {createGuestServices, getCourtsServices, getOpenMatchesByIdServices, getOpenMatchesServices, getVenuesServices, userHomeServices } from "src/services/user/home-services";
+import {clubResponseServices, createGuestServices, getCourtsServices, getOpenMatchesByIdServices, getOpenMatchesServices, getVenuesServices, userHomeServices } from "src/services/user/home-services";
 import { bookCourtServices, cancelBookingServices, getDynamicPriceServices, joinOpenBookingServices, modifyBookingServices, paymentBookingServices, readUserNotificationServices, userNotificationServices } from "src/services/user/booking-services";
 import { getAppInfoServices, getUserServices, updateUserServices } from "src/services/user/user-service";
 
@@ -10,6 +10,17 @@ import { getAppInfoServices, getUserServices, updateUserServices } from "src/ser
 export const userHome = async (req: Request, res: Response) => {
   try {
     const response = await userHomeServices(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const clubStatus = async (req: Request, res: Response) => {
+  try {
+    const response = await clubResponseServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);

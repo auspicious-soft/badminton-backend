@@ -23,6 +23,7 @@ import {
   employeeDashboardServices,
   cancelMatchServices,
   venueBookingFileServices,
+  createMatchService,
 } from "../../services/admin/admin-service";
 import { errorParser, formatErrorResponse } from "../../lib/errors/error-response-handler";
 import { httpStatusCode } from "../../lib/constant";
@@ -226,6 +227,17 @@ export const getUsersById = async (req: Request, res: Response) => {
 export const getMatches = async (req: Request, res: Response) => {
   try {
     const response = await getMatchesService(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const createMatch = async (req: Request, res: Response) => {
+  try {
+    const response = await createMatchService(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
