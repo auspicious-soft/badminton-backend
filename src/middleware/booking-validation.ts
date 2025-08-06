@@ -59,11 +59,11 @@ export const validateBookingRequest = async (
     // Date validation using IST
     const currentDate = getCurrentISTTime();
     const bookingDateObj = new Date(bookingDate);
-    
+
     // Set hours to 0 for proper date comparison (ignoring time)
     const currentDateOnly = new Date(currentDate);
     currentDateOnly.setHours(0, 0, 0, 0);
-    
+
     const bookingDateOnly = new Date(bookingDateObj);
     bookingDateOnly.setHours(0, 0, 0, 0);
 
@@ -83,17 +83,33 @@ export const validateBookingRequest = async (
         res
       );
     }
-    
+
+    if (
+      bookingDateOnly.getTime() - currentDateOnly.getTime() >
+      14 * 24 * 60 * 60 * 1000
+    ) {
+      return errorResponseHandler(
+        "Booking date cannot be more than 14 days in the future",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
     // For same-day bookings, check if any slot time has already passed
     if (bookingDateOnly.getTime() === currentDateOnly.getTime()) {
       const currentHour = currentDate.getHours();
       const currentMinute = currentDate.getMinutes();
       // Check each booking slot
       for (const slot of bookingSlots) {
-        const [slotHour, slotMinute] = slot.split(':').map(num => parseInt(num, 10));
-        
+        const [slotHour, slotMinute] = slot
+          .split(":")
+          .map((num) => parseInt(num, 10));
+
         // If slot time is earlier than or equal to current time, reject the booking
-        if (slotHour < currentHour || (slotHour === currentHour && slotMinute <= currentMinute)) {
+        if (
+          slotHour < currentHour ||
+          (slotHour === currentHour && slotMinute <= currentMinute)
+        ) {
           return errorResponseHandler(
             `Booking slot ${slot} has already passed for today`,
             httpStatusCode.BAD_REQUEST,
@@ -110,7 +126,7 @@ export const validateBookingRequest = async (
       bookingPaymentStatus: true,
       bookingDate: bookingDateObj,
       bookingSlots: { $in: bookingSlots },
-      bookingType: {$ne:"Cancelled"}
+      bookingType: { $ne: "Cancelled" },
       // bookingPaymentStatus: true,
     });
 
@@ -148,27 +164,27 @@ export const validateBookingRequest = async (
         res
       );
     }
-    
+
     // Check if booking slots are consecutive if more than one
     if (bookingSlots.length > 1) {
       // Sort slots by time
       const sortedSlots = [...bookingSlots].sort((a, b) => {
-        const [aHour, aMinute] = a.split(':').map(num => parseInt(num, 10));
-        const [bHour, bMinute] = b.split(':').map(num => parseInt(num, 10));
-        
+        const [aHour, aMinute] = a.split(":").map((num) => parseInt(num, 10));
+        const [bHour, bMinute] = b.split(":").map((num) => parseInt(num, 10));
+
         if (aHour !== bHour) return aHour - bHour;
         return aMinute - bMinute;
       });
-      
+
       // Check if slots are consecutive
       // for (let i = 0; i < sortedSlots.length - 1; i++) {
       //   const [currentHour, currentMinute] = sortedSlots[i].split(':').map(num => parseInt(num, 10));
       //   const [nextHour, nextMinute] = sortedSlots[i+1].split(':').map(num => parseInt(num, 10));
-        
+
       //   // Check if slots are 1 hour apart (assuming all slots are hourly)
       //   const currentTotalMinutes = currentHour * 60 + currentMinute;
       //   const nextTotalMinutes = nextHour * 60 + nextMinute;
-        
+
       //   if (nextTotalMinutes - currentTotalMinutes !== 60) {
       //     return errorResponseHandler(
       //       "Booking slots must be consecutive",
@@ -229,9 +245,9 @@ export const validateBookingRequest = async (
     // Court validation - now using separate court collection
     const court = await courtModel.findOne({
       _id: courtId,
-      venueId: venueId
+      venueId: venueId,
     });
-    
+
     if (!court) {
       return errorResponseHandler(
         "Court not found for the specified venue",
@@ -274,8 +290,3 @@ export const validateBookingRequest = async (
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-
-
-
-
-
