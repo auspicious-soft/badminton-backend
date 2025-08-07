@@ -322,8 +322,8 @@ export const uploadScore = async (req: Request, res: Response) => {
             team2: [
               {
                 playerId: checkExist.team1[1].playerId,
-                rackets: checkExist.team1[1].rackets,
-                balls: checkExist.team1[1].balls,
+                rackets: checkExist.team1[1].rackets ?? 0,
+                balls: checkExist.team1[1].balls ?? 0,
                 transactionId: checkExist.team1[1].transactionId,
                 paymentStatus: checkExist.team1[1].paymentStatus,
                 paidBy: checkExist.team1[1].paidBy,
@@ -333,8 +333,8 @@ export const uploadScore = async (req: Request, res: Response) => {
             team1: [
               {
                 playerId: checkExist.team1[0].playerId,
-                rackets: checkExist.team1[0].rackets,
-                balls: checkExist.team1[0].balls,
+                rackets: checkExist.team1[0].rackets ?? 0,
+                balls: checkExist.team1[0].balls ?? 0,
                 transactionId: checkExist.team1[0].transactionId,
                 paymentStatus: checkExist.team1[0].paymentStatus,
                 paidBy: checkExist.team1[0].paidBy,

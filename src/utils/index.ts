@@ -88,17 +88,20 @@ export const getWinnerTeam = (
 
   for (const key of Object.keys(score)) {
     const set = score[key];
-    if (!set || typeof set.team1 !== "number" || typeof set.team2 !== "number")
-      continue;
 
-    if (set.team1 > set.team2) {
+    const team1 = Number(set?.team1);
+    const team2 = Number(set?.team2);
+
+    if (isNaN(team1) || isNaN(team2)) continue;
+
+    if (team1 > team2) {
       team1Sets += 1;
-    } else if (set.team2 > set.team1) {
+    } else if (team2 > team1) {
       team2Sets += 1;
     }
   }
 
   if (team1Sets > team2Sets) return "team1";
   if (team2Sets > team1Sets) return "team2";
-  return "draw"; // Optional if draw isn't possible
+  return "draw";
 };
