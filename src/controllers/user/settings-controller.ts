@@ -42,7 +42,6 @@ export const logout = async (req: Request, res: Response) => {
     });
   }
 };
-
 export const getPackages = async (req: Request, res: Response) => {
   try {
     const data = await playcoinModel.find({ isActive: true });
@@ -148,6 +147,23 @@ export const buyPackages = async (req: Request, res: Response) => {
       success: true,
       message: "Payment initiated successfully",
       data: updateTransaction,
+    });
+  } catch (error: any) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while logging out",
+    });
+  }
+};
+
+export const deleteAccount = async (req: Request, res: Response) => {
+  try {
+    
+    return res.status(httpStatusCode.OK).send({
+      success: true,
+      message: "Account deleted successfully",
+      data: [],
     });
   } catch (error: any) {
     console.error("Logout error:", error);

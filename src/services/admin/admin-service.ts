@@ -30,6 +30,7 @@ import { match } from "assert";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import razorpayInstance from "src/config/razorpay";
 import { notifyUser } from "src/utils/FCM/FCM";
+import { priceModel } from "src/models/admin/price-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -616,7 +617,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
     location,
     timeslots,
     openingHours,
-    gstNumber 
+    gstNumber,
   } = payload as UpdateVenuePayload;
 
   if (!venueId || !mongoose.Types.ObjectId.isValid(venueId)) {
@@ -652,7 +653,7 @@ export const updateVenueService = async (payload: any, res: Response) => {
   }
   if (timeslots) venue.timeslots = timeslots;
   if (openingHours) venue.openingHours = openingHours;
-  if (gstNumber) venue.gstNumber = gstNumber
+  if (gstNumber) venue.gstNumber = gstNumber;
 
   // **Replace Facilities, Courts, and Employees with New Data**
   if (facilities) {
@@ -1235,14 +1236,272 @@ export const getMatchesService = async (payload: any, res: Response) => {
   }
 };
 
+function makeBookingDateInIST(rawDate: any, slotHour: any) {
+  const hour = parseInt(slotHour, 10);
+  if (Number.isNaN(hour) || hour < 0 || hour > 23) {
+    throw new Error("Invalid slot hour: " + slotHour);
+  }
+
+  let base;
+  if (typeof rawDate === "string") {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/.test(rawDate)) {
+      const isoish = rawDate.replace(" ", "T").replace(/(\.\d{3})\d+$/, "$1"); // drop microseconds beyond ms
+      base = new Date(isoish); // interpreted as local
+    } else {
+      base = new Date(rawDate); // ISO (with Z or without)
+    }
+  } else if (rawDate instanceof Date) {
+    base = new Date(rawDate);
+  } else {
+    throw new Error("Unsupported date input: " + rawDate);
+  }
+
+  if (isNaN(base.getTime())) {
+    throw new Error("Failed to parse bookingDate: " + rawDate);
+  }
+
+  // Compute the date components in IST
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // +5:30
+  const istEquivalent = new Date(base.getTime() + IST_OFFSET_MS);
+  const year = istEquivalent.getFullYear();
+  const month = istEquivalent.getMonth(); // zero-based
+  const day = istEquivalent.getDate();
+  const utcForIstSlot = Date.UTC(year, month, day, hour, 0, 0); // this is YYYY-MM-DD hour:00 UTC
+  const adjusted = new Date(utcForIstSlot - IST_OFFSET_MS); // subtract offset to align to IST wall time
+
+  return adjusted;
+}
+
 export const createMatchService = async (payload: any, res: Response) => {
+  const {
+    player1,
+    player1Email,
+    player1phone,
+    player2 = "Guest Player 2",
+    player3 = "Guest Player 3",
+    player4 = "Guest Player 4",
+    venueId,
+    courtId,
+    bookingSlots,
+  } = payload.body;
+
+  const today = new Date().toISOString();
+  const todayEndDate = new Date(
+    new Date().setHours(23, 59, 59, 999)
+  ).toISOString();
+
+  console.log(makeBookingDateInIST(today, bookingSlots[0]))
+
+  const checkBookings = await bookingModel
+    .find({
+      bookingSlots: { $in: bookingSlots },
+      bookingDate: {
+        $gte: today,
+        $lte: todayEndDate,
+      },
+      bookingPaymentStatus: true,
+      bookingType: { $ne: "Cancelled" },
+      courtId: courtId,
+    })
+    .lean();
+
+  if (checkBookings.length > 0) {
+    return errorResponseHandler(
+      `Slot ${checkBookings[0].bookingSlots} is already booked for today`,
+      httpStatusCode.BAD_REQUEST,
+      res
+    );
+  }
+
+  const dayType = (today: string) => {
+    const day = new Date(today).getDay();
+    return day === 0 || day === 6 ? "weekend" : "weekday";
+  };
+
+  const dynamicPrices = await priceModel
+    .findOne({
+      dayType: dayType(today),
+    })
+    .select("slotPricing")
+    .lean();
+
+  const result = [] as any;
+
+  bookingSlots.forEach((slot: any) => {
+    const slotPrice =
+      dynamicPrices?.slotPricing?.find((price: any) => price.slot === slot)
+        ?.price || 0;
+    result.push({
+      slot,
+      price: slotPrice,
+    });
+  });
+
+  // create multiple users
+  const users = [
+    {
+      fullName: player1,
+      email: player1Email,
+      phone: player1phone,
+      role: "guest",
+      phoneVerified: true,
+      emailVerified: true,
+    },
+    {
+      fullName: player2,
+      role: "guest",
+    },
+    {
+      fullName: player3,
+      role: "guest",
+    },
+    {
+      fullName: player4,
+      role: "guest",
+    },
+  ];
+
+  // create multiple users
+  const createdUsers = await usersModel.insertMany(users);
+
+  if (createdUsers.length !== users.length) {
+    return errorResponseHandler(
+      "Failed to create all users",
+      httpStatusCode.INTERNAL_SERVER_ERROR,
+      res
+    );
+  }
+
+  // create booking
+  const bookingData = {
+    team1: [
+      {
+        playerId: createdUsers[0]._id,
+        playerType: "player1",
+        paymentStatus: "Paid",
+        paidBy: "Self",
+        playerPayment: 0,
+      },
+      {
+        playerId: createdUsers[1]._id,
+        playerType: "player2",
+        paymentStatus: "Paid",
+        paidBy: "User",
+      },
+    ],
+    team2: [
+      {
+        playerId: createdUsers[2]._id,
+        playerType: "player3",
+        paymentStatus: "Paid",
+        paidBy: "User",
+      },
+      {
+        playerId: createdUsers[3]._id,
+        playerType: "player4",
+        paymentStatus: "Paid",
+        paidBy: "User",
+      },
+    ],
+    userId: createdUsers[0]._id,
+    bookingType: "Complete",
+    venueId,
+    courtId,
+    bookingDate: makeBookingDateInIST(today, bookingSlots[0]),
+    bookingPaymentStatus: true,
+    bookingSlots: null,
+  };
+
+  for (let i = 0; i < result.length; i++) {
+    bookingData.bookingSlots = result[i].slot;
+    bookingData.team1[0].playerPayment = result[i].price;
+    bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
+
+    await bookingModel.create(bookingData);
+  }
+
+  console.log(checkBookings);
 
   return {
     success: true,
     message: "Success",
-    data: payload.body,
-  }
-}
+    data: {},
+  };
+};
+
+export const availableCourtSlotServices = async (
+  payload: any,
+  res: Response
+) => {
+  const { courtId } = payload.query;
+  const today = new Date().toISOString();
+  const todayEndDate = new Date(
+    new Date().setHours(23, 59, 59, 999)
+  ).toISOString();
+
+  const venue = (await courtModel
+    .findById(courtId)
+    .populate("venueId", "timeslots")
+    .lean()) as any;
+  const bookings = await bookingModel
+    .find({
+      courtId: courtId,
+      bookingPaymentStatus: true,
+      isMaintenance: false,
+      bookingType: { $ne: "Cancelled" },
+      bookingDate: {
+        $gte: today,
+        $lte: todayEndDate,
+      },
+    })
+    .select("bookingSlots")
+    .lean();
+
+  let slots = venue?.venueId?.timeslots || [];
+
+  const istTime = getCurrentISTTime();
+  const currentHour = istTime.getHours();
+
+  slots = slots.filter((slot: any) => {
+    const slotHour = parseInt(slot.split(":")[0]);
+    return slotHour > currentHour; // Filter out slots before the current hour
+  });
+
+  bookings.forEach((booking: any) => {
+    const bookedSlot = booking.bookingSlots;
+    slots = slots.filter((slot: any) => slot !== bookedSlot);
+  });
+
+  const dayType = (today: string) => {
+    const day = new Date(today).getDay();
+    return day === 0 || day === 6 ? "weekend" : "weekday";
+  };
+
+  const dynamicPrices = await priceModel
+    .findOne({
+      dayType: dayType(today),
+    })
+    .select("slotPricing")
+    .lean();
+
+  const result = [] as any;
+
+  slots.forEach((slot: any) => {
+    const slotPrice =
+      dynamicPrices?.slotPricing?.find((price: any) => price.slot === slot)
+        ?.price || 0;
+    result.push({
+      slot,
+      price: slotPrice,
+    });
+  });
+
+  return {
+    success: true,
+    message: "Success",
+    data: result,
+  };
+};
 
 export const getCitiesService = async (payload: any, res: Response) => {
   try {

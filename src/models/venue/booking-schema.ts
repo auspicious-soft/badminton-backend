@@ -149,7 +149,7 @@ const bookingSchema = new Schema(
     bookingType: {
       type: String,
       enum: ["Booking", "Complete", "Cancelled"],
-      default: "Booking",
+      default: "Complete",
       required: true,
       index: true,
     },

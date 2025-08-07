@@ -24,6 +24,7 @@ import {
   cancelMatchServices,
   venueBookingFileServices,
   createMatchService,
+  availableCourtSlotServices,
 } from "../../services/admin/admin-service";
 import { errorParser, formatErrorResponse } from "../../lib/errors/error-response-handler";
 import { httpStatusCode } from "../../lib/constant";
@@ -238,6 +239,17 @@ export const getMatches = async (req: Request, res: Response) => {
 export const createMatch = async (req: Request, res: Response) => {
   try {
     const response = await createMatchService(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+export const availableCourtSlot = async (req: Request, res: Response) => {
+  try {
+    const response = await availableCourtSlotServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
   } catch (error: any) {
     const { code, message } = errorParser(error);
