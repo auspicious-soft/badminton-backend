@@ -14,6 +14,7 @@ import webhookRoutes from "./routes/webhook-routes";
 import { downloadBookingReceipt } from "./controllers/admin/product-controller";
 import { initializeFirebase } from "./utils/FCM/FCM";
 import { bookingModel } from "./models/venue/booking-schema";
+import { sendBookingInvoiceEmail } from "./utils/mails/mail";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -51,36 +52,41 @@ app.use("/api/chat", checkAuth, chat);
 app.use("/api", auth);
 app.use("/api/webhooks", webhookRoutes);
 
-app.get("/api/booking-receipt/:bookingId", async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-    const booking = await bookingModel
-      .findById(bookingId)
-      .populate("userId", "fullName email")
-      .populate("venueId","name address city state gstNumber")
-      .populate("courtId","name")
-      .lean();
+app.get(
+  "/api/booking-receipt/:bookingId",
+  checkValidAdminRole,
+  checkAdminAuth,
+  async (req, res) => {
+    try {
+      const { bookingId } = req.params;
+      const booking = await bookingModel
+        .findById(bookingId)
+        .populate("userId", "fullName email")
+        .populate("venueId", "name address city state gstNumber")
+        .populate("courtId", "name")
+        .lean();
 
-    if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      console.log(booking);
+
+      const pdfBuffer = await downloadBookingReceipt(booking);
+
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="booking-receipt-${bookingId}.pdf"`,
+        "Content-Length": pdfBuffer.length,
+      });
+
+      return res.send(pdfBuffer);
+    } catch (err) {
+      console.error("Error generating receipt:", err);
+      res.status(500).json({ message: "Failed to generate receipt" });
     }
-
-    console.log(booking)
-
-    const pdfBuffer = await downloadBookingReceipt(booking);
-
-    res.set({
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="booking-receipt-${bookingId}.pdf"`,
-      "Content-Length": pdfBuffer.length,
-    });
-
-    return res.send(pdfBuffer);
-  } catch (err) {
-    console.error("Error generating receipt:", err);
-    res.status(500).json({ message: "Failed to generate receipt" });
   }
-});
+);
 
 // Use server.listen instead of app.listen
 server.listen(PORT, () => console.log(`Server is listening on port ${PORT}`));

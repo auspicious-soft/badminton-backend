@@ -2,7 +2,10 @@ import axios from "axios";
 import { configDotenv } from "dotenv";
 import { Request, Response } from "express";
 import mongoose, { SortOrder } from "mongoose";
+import { downloadBookingReceipt } from "src/controllers/admin/product-controller";
 import { usersModel } from "src/models/user/user-schema";
+import { sendBookingInvoiceEmail } from "./mails/mail";
+import { bookingModel } from "src/models/venue/booking-schema";
 configDotenv();
 
 const { AWS_REGION, AWS_BUCKET_NAME } = process.env;
@@ -105,3 +108,61 @@ export const getWinnerTeam = (
   if (team2Sets > team1Sets) return "team2";
   return "draw";
 };
+
+export const sendInvoiceToUser = async (userId: object, bookingId: any) => {
+  const booking = await bookingModel
+    .findById(bookingId)
+    .populate("userId", "fullName email")
+    .populate("venueId", "name address city state gstNumber")
+    .populate("courtId", "name")
+    .lean();
+
+  const userData = await usersModel
+    .findById(userId)
+    .select("email fullName")
+    .lean();
+  const pdfBuffer = await downloadBookingReceipt(booking);
+  await sendBookingInvoiceEmail(
+    (userData as any).email,
+    (userData as any).fullName,
+    (booking as any).invoiceNumber,
+    (booking as any).bookingAmount,
+    pdfBuffer
+  );
+
+  return;
+};
+
+// utils/invoiceNumber.ts
+
+// export const generateInvoiceNumber = async (): Promise<string> => {
+//   const prefix = "PPINV";
+//   const year = new Date().getFullYear().toString().slice(-2); // e.g. "25"
+//   const padding = 5;
+
+//   // Find the last invoice for this year
+//   const lastBooking = await bookingModel
+//     .findOne({
+//       invoiceNumber: { $regex: `^${prefix}-${year}-` },
+//     })
+//     .sort({ createdAt: -1 }) // latest first
+//     .lean();
+
+//   let nextNumber = 1;
+
+//   if (lastBooking && lastBooking.invoiceNumber) {
+//     // Extract numeric part from "PPINV-25-00001"
+//     const parts = lastBooking.invoiceNumber.split("-");
+//     const lastNumber = parseInt(parts[2], 10);
+//     nextNumber = lastNumber + 1;
+//   }
+
+//   return `${prefix}-${year}-${String(nextNumber).padStart(padding, "0")}`;
+// };
+
+// const booking = await bookingModel
+//   .findById(bookingId)
+//   .populate("userId", "fullName email")
+//   .populate("venueId", "name address city state gstNumber")
+//   .populate("courtId", "name")
+//   .lean();

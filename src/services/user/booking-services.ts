@@ -17,6 +17,7 @@ import { usersModel } from "src/models/user/user-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { venueModel } from "src/models/venue/venue-schema";
 import { fillAndStroke } from "pdfkit";
+import { sendInvoiceToUser } from "src/utils";
 
 function makeBookingDateInIST(rawDate: any, slotHour: any) {
   const hour = parseInt(slotHour, 10);
@@ -724,6 +725,8 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           return player;
         });
 
+        await sendInvoiceToUser(userData.id, booking._id);
+
         await booking.save({ session });
 
         const checkGroupExist = await chatModel.findOne({
@@ -1022,6 +1025,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           isWebhookVerified: true,
           method: "freeGame",
           playcoinsUsed: 0,
+          amount: 0,
           paymentDate: new Date(),
         },
         { session }
@@ -1030,7 +1034,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       // Update all associated bookings
       await bookingModel.updateMany(
         { _id: { $in: bookingIds } },
-        { bookingPaymentStatus: true },
+        { bookingPaymentStatus: true, bookingAmount: 0 },
         { session }
       );
 
@@ -1069,6 +1073,8 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           }
           return player;
         });
+
+        await sendInvoiceToUser(userData.id, booking._id);
 
         await booking.save({ session });
 

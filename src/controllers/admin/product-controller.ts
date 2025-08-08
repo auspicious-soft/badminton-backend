@@ -1095,8 +1095,8 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
       const valueWidth = 515 - labelWidth - 10; // total usable width
 
       y = drawKeyValueRow({
-        label: "Booking ID",
-        value: String(booking._id || "N/A"),
+        label: "Invoice Number",
+        value: String(booking.invoiceNumber || "N/A"),
         x: sectionX,
         y,
         labelWidth,

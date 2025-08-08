@@ -31,6 +31,7 @@ import { additionalUserInfoModel } from "src/models/user/additional-info-schema"
 import razorpayInstance from "src/config/razorpay";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { priceModel } from "src/models/admin/price-schema";
+import invoices from "razorpay/dist/types/invoices";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -1416,7 +1417,6 @@ export const createMatchService = async (payload: any, res: Response) => {
     bookingData.bookingSlots = result[i].slot;
     bookingData.team1[0].playerPayment = result[i].price;
     bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
-
     await bookingModel.create(bookingData);
   }
 
@@ -2365,7 +2365,7 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     { $unwind: { path: "$court", preserveNullAndEmptyArrays: true } },
     {
       $project: {
-        _id: 1,
+        invoiceNumber: "$booking.invoiceNumber",
         fullName: "$user.fullName",
         amount: 1,
         currency: 1,
@@ -2398,7 +2398,7 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
   const fileName = `${monthName}-${safeVenueName}-Transactions.csv`;
 
   const headers = [
-    "TransactionId",
+    "InvoiceNumber",
     "VenueName",
     "CourtName",
     "UserFullName",
@@ -2432,7 +2432,7 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
   // Write each transaction
   for (const tx of transactions) {
     const row = [
-      tx._id,
+      tx.invoiceNumber || "",
       tx.venueName || "",
       tx.courtName || "",
       tx.fullName || "",

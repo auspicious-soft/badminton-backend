@@ -9,22 +9,10 @@ const ForgotPasswordEmail: React.FC<Readonly<EmailProps>> = (props) => {
   const { otp, language } = props;
   const translations: { [key: string]: { subject: string; body: string; footer: string; expiry: string } } = {
     eng: {
-      subject: "Reset Password",
+      subject: "Project Play - Reset Password",
       body: `Below is the OTP for resetting your password.`,
       footer: `If you did not request the reset password, please ignore this email.`,
       expiry: `This OTP will expire in 2 minutes.`
-    },
-    kaz: {
-      subject: "Құпия сөзді қалпына келтіру",
-      body: `Төменде құпия сөзді қалпына келтіруге арналған OTP берілген.`,
-      footer: `Егер сіз құпия сөзді қалпына келтіруді сұрамасаңыз, бұл хатты елемеңіз.`,
-      expiry: `Бұл OTP 2 минут ішінде жарамсыз болады.`
-    },
-    rus: {
-      subject: "Сброс пароля",
-      body: `Ниже приведен OTP для сброса пароля.`,
-      footer: `Если вы не запрашивали сброс пароля, просто проигнорируйте это письмо.`,
-      expiry: `Этот OTP истечет через 2 минуты.`
     },
   };
   const { subject, body, footer, expiry } = translations[language] || translations.en;
@@ -32,7 +20,7 @@ const ForgotPasswordEmail: React.FC<Readonly<EmailProps>> = (props) => {
   return (
     <Html lang="en">
       <Head>
-        <title> Bookstagram Reset Password</title>
+        <title>Project Play - Reset Password</title>
       </Head>
       <Container>
         <h1 style={{ color: "black" }}>{subject}</h1>

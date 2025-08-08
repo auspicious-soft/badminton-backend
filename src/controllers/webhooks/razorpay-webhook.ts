@@ -13,7 +13,7 @@ import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { usersModel } from "src/models/user/user-schema";
-import { getCurrentISTTime } from "src/utils";
+import { getCurrentISTTime, sendInvoiceToUser } from "src/utils";
 import { venueModel } from "src/models/venue/venue-schema";
 
 configDotenv();
@@ -234,7 +234,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 { $inc: { playCoins: +transaction?.playcoinsReceived } },
                 { session }
               );
-
             }
 
             if (transaction?.userId) {
@@ -359,6 +358,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 }
                 return player;
               });
+
+              await sendInvoiceToUser(booking.userId, booking._id);
 
               await booking.save({ session });
 

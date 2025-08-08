@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { VENUE_TIME_SLOTS } from "src/lib/constant";
+import { Counter } from "./counter-schema";
 
 export interface BookingDocument extends Document {
   userId: mongoose.Types.ObjectId;
@@ -20,6 +21,7 @@ export interface BookingDocument extends Document {
   cancellationReason?: string;
   isMaintenance?: boolean;
   maintenanceReason?: string;
+  invoiceNumber?: string;
   createdBy?: mongoose.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
@@ -187,6 +189,10 @@ const bookingSchema = new Schema(
       type: String,
       default: null,
     },
+    invoiceNumber: {
+      type: String,
+      default: null,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "employees",
@@ -199,6 +205,32 @@ const bookingSchema = new Schema(
 bookingSchema.index({ "team1.playerId": 1, "team1.paymentStatus": 1 });
 bookingSchema.index({ "team2.playerId": 1, "team2.paymentStatus": 1 });
 bookingSchema.index({ userId: 1, bookingDate: 1 });
+
+bookingSchema.pre("save", async function (next) {
+  // only trigger if payment just got confirmed and no invoice exists
+  if (
+    this.isModified("bookingPaymentStatus") &&
+    this.bookingPaymentStatus &&
+    !this.invoiceNumber
+  ) {
+    const prefix = "PPINV";
+    const year = new Date().getFullYear().toString().slice(-2);
+    const padding = 5;
+
+    const counter = await Counter.findOneAndUpdate(
+      { name: "invoiceNumber", year },
+      { $inc: { seq: 1 }, $setOnInsert: { year } },
+      { new: true, upsert: true }
+    );
+
+    this.invoiceNumber = `${prefix}-${year}-${String(counter.seq).padStart(
+      padding,
+      "0"
+    )}`;
+  }
+
+  next();
+});
 
 export const bookingModel = mongoose.model<BookingDocument>(
   "bookings",

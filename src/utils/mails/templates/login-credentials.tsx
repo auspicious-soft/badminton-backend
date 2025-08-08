@@ -10,7 +10,7 @@ const LoginCredentials: React.FC<EmailProps> = ({ email, password }) => {
   return (
     <Html lang="en">
       <Head>
-        <title>Bookstagram - Your Login Credentials</title>
+        <title>Project Play - Your Login Credentials</title>
       </Head>
       <Container style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
         <h1 style={{ color: "#000" }}>Your Login Credentials</h1>
