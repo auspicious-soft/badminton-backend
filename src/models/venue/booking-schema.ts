@@ -207,19 +207,15 @@ bookingSchema.index({ "team2.playerId": 1, "team2.paymentStatus": 1 });
 bookingSchema.index({ userId: 1, bookingDate: 1 });
 
 bookingSchema.pre("save", async function (next) {
-  // only trigger if payment just got confirmed and no invoice exists
-  if (
-    this.isModified("bookingPaymentStatus") &&
-    this.bookingPaymentStatus &&
-    !this.invoiceNumber
-  ) {
+  // Only generate invoice number if it doesn't already exist
+  if (!this.invoiceNumber) {
     const prefix = "PPINV";
     const year = new Date().getFullYear().toString().slice(-2);
     const padding = 5;
 
     const counter = await Counter.findOneAndUpdate(
       { name: "invoiceNumber", year },
-      { $inc: { seq: 1 }, $setOnInsert: { year } },
+      { $inc: { seq: 1 }, $setOnInsert: { year, seq: 0 } },
       { new: true, upsert: true }
     );
 
