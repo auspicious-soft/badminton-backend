@@ -13,7 +13,7 @@ import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { usersModel } from "src/models/user/user-schema";
-import { getCurrentISTTime, sendInvoiceToUser } from "src/utils";
+import { getCurrentISTTime } from "src/utils";
 import { venueModel } from "src/models/venue/venue-schema";
 
 configDotenv();
@@ -234,6 +234,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 { $inc: { playCoins: +transaction?.playcoinsReceived } },
                 { session }
               );
+
             }
 
             if (transaction?.userId) {
@@ -315,8 +316,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             );
           }
 
-          let bookings: any[] = [];
-
           // Update all associated bookings
           if (transaction.bookingId && transaction.bookingId.length > 0) {
             await bookingModel.updateMany(
@@ -326,7 +325,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             );
 
             // Update player payment status in each booking
-            bookings = await bookingModel.find(
+            const bookings = await bookingModel.find(
               { _id: { $in: transaction.bookingId } },
               null,
               { session }
@@ -360,8 +359,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 }
                 return player;
               });
-
-              // await sendInvoiceToUser(booking.userId, booking._id);
 
               await booking.save({ session });
 
@@ -456,6 +453,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             });
 
             if (bookingRequest) {
+              // Update the booking request status
               bookingRequest.status = "completed";
               bookingRequest.paymentStatus = "Paid";
               await bookingRequest.save({ session });
@@ -600,11 +598,8 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               }
             }
           }
-          await session.commitTransaction();
 
-          // for (const booking of bookings) {
-          //   await sendInvoiceToUser(booking.userId, booking._id);
-          // }
+          await session.commitTransaction();
 
           return res.status(httpStatusCode.OK).json({
             success: true,
