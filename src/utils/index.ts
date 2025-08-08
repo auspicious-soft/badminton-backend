@@ -135,30 +135,30 @@ export const sendInvoiceToUser = async (userId: object, bookingId: any) => {
 
 // utils/invoiceNumber.ts
 
-// export const generateInvoiceNumber = async (): Promise<string> => {
-//   const prefix = "PPINV";
-//   const year = new Date().getFullYear().toString().slice(-2); // e.g. "25"
-//   const padding = 5;
+export const generateInvoiceNumber = async (): Promise<string> => {
+  const prefix = "PPINV";
+  const year = new Date().getFullYear().toString().slice(-2); // e.g. "25"
+  const padding = 5;
 
-//   // Find the last invoice for this year
-//   const lastBooking = await bookingModel
-//     .findOne({
-//       invoiceNumber: { $regex: `^${prefix}-${year}-` },
-//     })
-//     .sort({ createdAt: -1 }) // latest first
-//     .lean();
+  // Find the last invoice for this year
+  const lastBooking = await bookingModel
+    .findOne({
+      invoiceNumber: { $regex: `^${prefix}-${year}-` },
+    })
+    .sort({ createdAt: -1 }) // latest first
+    .lean();
 
-//   let nextNumber = 1;
+  let nextNumber = 1;
 
-//   if (lastBooking && lastBooking.invoiceNumber) {
-//     // Extract numeric part from "PPINV-25-00001"
-//     const parts = lastBooking.invoiceNumber.split("-");
-//     const lastNumber = parseInt(parts[2], 10);
-//     nextNumber = lastNumber + 1;
-//   }
+  if (lastBooking && lastBooking.invoiceNumber) {
+    // Extract numeric part from "PPINV-25-00001"
+    const parts = lastBooking.invoiceNumber.split("-");
+    const lastNumber = parseInt(parts[2], 10);
+    nextNumber = lastNumber + 1;
+  }
 
-//   return `${prefix}-${year}-${String(nextNumber).padStart(padding, "0")}`;
-// };
+  return `${prefix}-${year}-${String(nextNumber).padStart(padding, "0")}`;
+};
 
 // const booking = await bookingModel
 //   .findById(bookingId)

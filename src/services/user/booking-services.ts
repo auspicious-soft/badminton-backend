@@ -17,7 +17,7 @@ import { usersModel } from "src/models/user/user-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { venueModel } from "src/models/venue/venue-schema";
 import { fillAndStroke } from "pdfkit";
-import { sendInvoiceToUser } from "src/utils";
+import { generateInvoiceNumber, sendInvoiceToUser } from "src/utils";
 
 function makeBookingDateInIST(rawDate: any, slotHour: any) {
   const hour = parseInt(slotHour, 10);
@@ -175,14 +175,17 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     };
 
     // Create a booking for each slot
-    let finalPayload = bookingSlots.map((slot: string) => {
-      return {
-        ...bookingPayload,
-        bookingSlots: slot,
-        bookingDate: makeBookingDateInIST(bookingDate, slot),
-        expectedPayment: completeCourtPrice,
-      };
-    });
+    let finalPayload = await Promise.all(
+      bookingSlots.map(async (slot: string) => {
+        return {
+          ...bookingPayload,
+          bookingSlots: slot,
+          bookingDate: makeBookingDateInIST(bookingDate, slot),
+          invoiceNumber: await generateInvoiceNumber(),
+          expectedPayment: completeCourtPrice,
+        };
+      })
+    );
 
     const bookings = await bookingModel.insertMany(finalPayload, { session });
     const bookingIds = bookings.map((booking) => booking._id);

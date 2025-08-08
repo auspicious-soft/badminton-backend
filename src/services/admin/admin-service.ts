@@ -23,7 +23,7 @@ import { usersModel } from "src/models/user/user-schema";
 import { object } from "webidl-conversions";
 import { courtModel } from "src/models/venue/court-schema";
 import { productModel } from "src/models/admin/products-schema";
-import { getCurrentISTTime } from "../../utils";
+import { generateInvoiceNumber, getCurrentISTTime } from "../../utils";
 import { request } from "http";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { match } from "assert";
@@ -1291,7 +1291,7 @@ export const createMatchService = async (payload: any, res: Response) => {
     new Date().setHours(23, 59, 59, 999)
   ).toISOString();
 
-  console.log(makeBookingDateInIST(today, bookingSlots[0]))
+  console.log(makeBookingDateInIST(today, bookingSlots[0]));
 
   const checkBookings = await bookingModel
     .find({
@@ -1411,12 +1411,14 @@ export const createMatchService = async (payload: any, res: Response) => {
     bookingDate: makeBookingDateInIST(today, bookingSlots[0]),
     bookingPaymentStatus: true,
     bookingSlots: null,
+    invoiceNumber: "",
   };
 
   for (let i = 0; i < result.length; i++) {
     bookingData.bookingSlots = result[i].slot;
     bookingData.team1[0].playerPayment = result[i].price;
     bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
+    bookingData.invoiceNumber = await generateInvoiceNumber();
     await bookingModel.create(bookingData);
   }
 
