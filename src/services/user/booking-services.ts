@@ -1436,7 +1436,7 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
       recipientId: userData.id,
       type: "REFUND_COMPLETED",
       title: "Refund Completed Successfully",
-      message: `Your have received a refund of ${booking.bookingAmount} play coins.`,
+      message: `You have received a refund of ${booking.bookingAmount} play coins.`,
       category: "PAYMENT",
       notificationType: "BOTH",
       referenceId: bookingId,
@@ -1486,6 +1486,30 @@ export const cancelBookingServices = async (req: Request, res: Response) => {
     ],
     { session }
   );
+
+  if (userTransaction.method === "freeGame") {
+    await additionalUserInfoModel.findOneAndUpdate(
+      { userId: userData.id },
+      { $inc: { freeGameCount: 1 } },
+      { session }
+    );
+
+    notifyUser({
+      recipientId: userData.id,
+      type: "REFUND_COMPLETED",
+      title: "Refund Completed Successfully",
+      message: `You have received a refund of 1 free game.`,
+      category: "PAYMENT",
+      notificationType: "BOTH",
+      referenceId: bookingId,
+      priority: "HIGH",
+      referenceType: "orders",
+      metadata: {
+        amount: booking.bookingAmount,
+      },
+      session,
+    });
+  }
 
   // Update booking record
   await bookingModel.findByIdAndUpdate(
