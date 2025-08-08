@@ -206,28 +206,49 @@ bookingSchema.index({ "team1.playerId": 1, "team1.paymentStatus": 1 });
 bookingSchema.index({ "team2.playerId": 1, "team2.paymentStatus": 1 });
 bookingSchema.index({ userId: 1, bookingDate: 1 });
 
+async function generateInvoiceNumber() {
+  const prefix = "PPINV";
+  const year = new Date().getFullYear().toString().slice(-2);
+  const padding = 5;
+
+  const counter = await Counter.findOneAndUpdate(
+    { name: "invoiceNumber", year },
+    { $inc: { seq: 1 }, $setOnInsert: { year, seq: 0 } },
+    { new: true, upsert: true }
+  );
+
+  return `${prefix}-${year}-${String(counter.seq).padStart(padding, "0")}`;
+}
+
+// Generate on .save() and .create()
+bookingSchema.pre("save", async function (next) {
+  if (!this.invoiceNumber) {
+    this.invoiceNumber = await generateInvoiceNumber();
+  }
+  next();
+});
+
+// Generate on insertMany
+bookingSchema.pre("insertMany", async function (next, docs: BookingDocument[]) {
+  for (const doc of docs) {
+    if (!doc.invoiceNumber) {
+      doc.invoiceNumber = await generateInvoiceNumber();
+    }
+  }
+  next();
+});
+
+// Generate on findOneAndUpdate with upsert
 bookingSchema.pre("findOneAndUpdate", async function (next) {
   const update = this.getUpdate() as any;
+  const options = this.getOptions();
 
-  // Only if payment status is being set to true and invoiceNumber not set
+  // Only generate if invoiceNumber is missing
   if (
-    update.bookingPaymentStatus === true &&
-    (!update.invoiceNumber || update.invoiceNumber === null)
+    (!update.invoiceNumber || update.invoiceNumber === null) &&
+    options.upsert
   ) {
-    const prefix = "PPINV";
-    const year = new Date().getFullYear().toString().slice(-2);
-    const padding = 5;
-
-    const counter = await Counter.findOneAndUpdate(
-      { name: "invoiceNumber", year },
-      { $inc: { seq: 1 }, $setOnInsert: { year } },
-      { new: true, upsert: true }
-    );
-
-    update.invoiceNumber = `${prefix}-${year}-${String(counter.seq).padStart(
-      padding,
-      "0"
-    )}`;
+    update.invoiceNumber = await generateInvoiceNumber();
     this.setUpdate(update);
   }
 
