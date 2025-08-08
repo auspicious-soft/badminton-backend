@@ -81,7 +81,7 @@ const usersSchema = new mongoose.Schema(
     },
     profilePic: {
       type: String,
-      default: null,
+      default: "profiles/image (2).png",
     },
     emailVerified: {
       type: Boolean,

@@ -169,7 +169,7 @@ export const socialLoginService = async (
       firstName: given_name || fullName,
       lastName: family_name,
       fullName: fullName, // Add fullName
-      profilePic: picture,
+      profilePic: authType === "Apple" ? "profiles/image (2).png" : picture,
       location,
       emailVerified: true,
       fcmToken: fcmToken,
