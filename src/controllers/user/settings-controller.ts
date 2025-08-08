@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import razorpayInstance from "src/config/razorpay";
 import { httpStatusCode } from "src/lib/constant";
+import { adminSettingModel } from "src/models/admin/admin-settings";
 import { playcoinModel } from "src/models/admin/playcoin-schema";
 import { transactionModel } from "src/models/admin/transaction-schema";
 import { usersModel } from "src/models/user/user-schema";
@@ -159,6 +160,21 @@ export const buyPackages = async (req: Request, res: Response) => {
 
 export const deleteAccount = async (req: Request, res: Response) => {
   try {
+    const userData = req.user as any
+
+    const dateAfter30Days = new Date();
+    dateAfter30Days.setDate(dateAfter30Days.getDate() + 30);
+
+    await usersModel.findByIdAndUpdate(
+      userData.id,
+      {
+        isBlocked: true,
+        permanentBlackAfter: dateAfter30Days,
+        fcmToken: [],
+        profilePic: null
+      },
+      { new: true }
+    );
     
     return res.status(httpStatusCode.OK).send({
       success: true,
@@ -170,6 +186,23 @@ export const deleteAccount = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "An error occurred while logging out",
+    });
+  }
+};
+export const getTutorialLink = async (req: Request, res: Response) => {
+  try {
+    const adminSettings = await adminSettingModel.findOne({ isActive: true });
+    
+    return res.status(httpStatusCode.OK).send({
+      success: true,
+      message: "Success",
+      data: adminSettings?.tutorialLink || null,
+    });
+  } catch (error: any) {
+    console.error("Logout error:", error);
+    res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching tutorial link",
     });
   }
 };

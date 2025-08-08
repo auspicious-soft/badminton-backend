@@ -33,15 +33,27 @@ export const checkAuth = async (
       process.env.AUTH_SECRET as string
     ) as JwtPayload & { id: string };
 
+    const todayDate = new Date();
+
     const user = await usersModel.findOne({
       _id: decoded?.id,
-      isBlocked: false,
     });
+
+    if (
+      user?.permanentBlackAfter &&
+      user.isBlocked &&
+      user.permanentBlackAfter < todayDate
+    ) {
+      return res.status(httpStatusCode.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized: user is permanently deleted",
+      });
+    }
 
     if (!user || !decoded.verificationToken) {
       return res.status(httpStatusCode.UNAUTHORIZED).json({
         success: false,
-        message: "Unauthorized: user not found or invalid token",
+        message: "Unauthorized: user not found!",
         timestamp: new Date().toISOString(),
       });
     }
@@ -166,7 +178,7 @@ export const authenticateSocket = (socket: Socket): Promise<any> => {
           String(token),
           process.env.AUTH_SECRET || "your-jwt-secret"
         );
-        
+
         resolve(decoded);
       } catch (jwtError: unknown) {
         reject(new Error(`Invalid token: ${(jwtError as Error).message}`));

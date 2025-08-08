@@ -78,12 +78,26 @@ export const loginUserService = async (
   ) {
     user = await createNewUser(userData, authType); // You should implement the createNewUser function as per your needs
   }
-  if (!user) {
+  const todayDate = new Date();
+  const isDeleted =
+    user.isBlocked &&
+    user?.permanentBlackAfter &&
+    user.permanentBlackAfter < todayDate;
+  if (!user || isDeleted) {
     return errorResponseHandler(
       "User not found",
       httpStatusCode.BAD_REQUEST,
       res
     );
+  }
+
+  if (
+    user?.isBlocked &&
+    user.permanentBlackAfter &&
+    user.permanentBlackAfter > todayDate
+  ) {
+    user.isBlocked = false;
+    user.permanentBlackAfter = null;
   }
 
   if (authType !== user.authType) {

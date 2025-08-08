@@ -35,6 +35,10 @@ const admintSettingSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    tutorialLink: {
+      type: String,
+      default: null,
+    },
     referral: {
       enabled: {
         type: Boolean,

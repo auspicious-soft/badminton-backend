@@ -47,7 +47,7 @@ import {
 } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
 import { uploadUserImageController } from "src/controllers/user/user-controller";
-import { buyPackages, deleteAccount, getPackages, logout } from "src/controllers/user/settings-controller";
+import { buyPackages, deleteAccount, getPackages, getTutorialLink, logout } from "src/controllers/user/settings-controller";
 
 const router = Router();
 
@@ -108,5 +108,6 @@ router.route("/packages").get(getPackages).post(buyPackages);
 router.post("/upload-image", uploadUserImageController);
 router.post("/logout", logout);
 router.get("/delete-account", deleteAccount);
+router.get("/get-tutorial", getTutorialLink);
 
 export { router };

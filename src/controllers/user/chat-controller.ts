@@ -573,7 +573,7 @@ export const createOrGetIndividualChat = async (
 
     // Check if recipient exists
     const recipient = await usersModel.findById(recipientId);
-    if (!recipient) {
+    if (!recipient || recipient.isBlocked) {
       return res.status(httpStatusCode.NOT_FOUND).json({
         success: false,
         message: "Recipient user not found",

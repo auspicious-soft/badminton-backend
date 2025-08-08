@@ -36,6 +36,7 @@ export interface UserDocument {
     coordinates: [number, number]; // [longitude, latitude]
   };
   isBlocked?: boolean;
+  permanentBlackAfter?: Date;
 }
 
 const usersSchema = new mongoose.Schema(
@@ -151,6 +152,10 @@ const usersSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    permanentBlackAfter:{
+      type: Date,
+      default: null,
+    }
   },
   { timestamps: true }
 );

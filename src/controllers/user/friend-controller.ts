@@ -52,6 +52,7 @@ export const searchFriend = async (req: Request, res: Response) => {
         { fullName: { $regex: new RegExp(String(search), "i") } },
         { email: { $regex: new RegExp(String(search), "i") } },
         { phoneNumber: { $regex: new RegExp(String(search), "i") } },
+        { isBlocked: false }
       ];
     }
 
@@ -136,7 +137,7 @@ export const sendRequest = async (req: Request, res: Response) => {
 
     // Check if friend exists
     const friend = await usersModel.findById(friendId);
-    if (!friend) {
+    if (!friend || friend.isBlocked) {
       return errorResponseHandler(
         "User not found",
         httpStatusCode.NOT_FOUND,
@@ -738,7 +739,7 @@ export const getFriendsById = async (req: Request, res: Response) => {
       .select("fullName profilePic")
       .lean();
 
-    if (!user) {
+    if (!user || user.isBlocked) {
       return errorResponseHandler(
         "User not found",
         httpStatusCode.NOT_FOUND,
