@@ -114,9 +114,13 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         item.paidBy = "Self";
         item.playerPayment = completeCourtPrice;
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
+        item.rackets = item.rackets || 0;
+        item.balls = item.balls || 0;
       } else if (item.playerId !== userData.id) {
         item.paidBy = "User";
         item.playerPayment = 0;
+        item.rackets = item.rackets || 0;
+        item.balls = item.balls || 0;
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
       }
     }
@@ -725,8 +729,6 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           return player;
         });
 
-        await sendInvoiceToUser(userData.id, booking._id);
-
         await booking.save({ session });
 
         const checkGroupExist = await chatModel.findOne({
@@ -766,7 +768,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           recipientId: playerId,
           type: "PAYMENT_SUCCESSFUL",
           title: "Game Booked Successfully",
-          message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+          message: `Your payment of ${transaction.amount} PlayCoins for booking has been successfully processed.`,
           category: "PAYMENT",
           notificationType: "BOTH",
           referenceId: bookingId.toString(),
@@ -786,6 +788,10 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       }
 
       await session.commitTransaction();
+
+      // for (const booking of bookings) {
+      //   await sendInvoiceToUser(userData.id, booking._id);
+      // }
 
       return {
         success: true,
@@ -1074,8 +1080,6 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           return player;
         });
 
-        await sendInvoiceToUser(userData.id, booking._id);
-
         await booking.save({ session });
 
         const checkGroupExist = await chatModel.findOne({
@@ -1114,7 +1118,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           recipientId: playerId,
           type: "FREE_GAME_USED",
           title: "Game Booked Successfully",
-          message: `Your payment of ₹${transaction.amount} for booking has been successfully processed.`,
+          message: `Your free booking has been successfully processed.`,
           category: "PAYMENT",
           notificationType: "BOTH",
           referenceId: bookingId.toString(),
@@ -1134,6 +1138,10 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       }
 
       await session.commitTransaction();
+
+      // for (const booking of bookings) {
+      //   await sendInvoiceToUser(userData.id, booking._id);
+      // }
 
       return {
         success: true,

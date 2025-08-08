@@ -70,7 +70,6 @@ app.get(
         return res.status(404).json({ message: "Booking not found" });
       }
 
-      console.log(booking);
 
       const pdfBuffer = await downloadBookingReceipt(booking);
 
