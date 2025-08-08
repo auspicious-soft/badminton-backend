@@ -105,6 +105,9 @@ export const getMyMatches = async (req: Request, res: Response) => {
           const playerId = player.playerId?.toString();
           return {
             ...player,
+            playerId: playerId ?? "",
+            rackets: player.rackets ?? 0,
+            balls: player.balls ?? 0,
             playerData: playerId ? playersMap[playerId] : null,
           };
         });
@@ -113,6 +116,9 @@ export const getMyMatches = async (req: Request, res: Response) => {
           const playerId = player.playerId?.toString();
           return {
             ...player,
+            playerId: playerId ?? "",
+            rackets: player.rackets ?? 0,
+            balls: player.balls ?? 0,
             playerData: playerId ? playersMap[playerId] : null,
           };
         });
