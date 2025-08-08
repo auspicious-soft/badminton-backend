@@ -206,12 +206,13 @@ bookingSchema.index({ "team1.playerId": 1, "team1.paymentStatus": 1 });
 bookingSchema.index({ "team2.playerId": 1, "team2.paymentStatus": 1 });
 bookingSchema.index({ userId: 1, bookingDate: 1 });
 
-bookingSchema.pre("save", async function (next) {
-  // only trigger if payment just got confirmed and no invoice exists
+bookingSchema.pre("findOneAndUpdate", async function (next) {
+  const update = this.getUpdate() as any;
+
+  // Only if payment status is being set to true and invoiceNumber not set
   if (
-    this.isModified("bookingPaymentStatus") &&
-    this.bookingPaymentStatus &&
-    !this.invoiceNumber
+    update.bookingPaymentStatus === true &&
+    (!update.invoiceNumber || update.invoiceNumber === null)
   ) {
     const prefix = "PPINV";
     const year = new Date().getFullYear().toString().slice(-2);
@@ -223,10 +224,11 @@ bookingSchema.pre("save", async function (next) {
       { new: true, upsert: true }
     );
 
-    this.invoiceNumber = `${prefix}-${year}-${String(counter.seq).padStart(
+    update.invoiceNumber = `${prefix}-${year}-${String(counter.seq).padStart(
       padding,
       "0"
     )}`;
+    this.setUpdate(update);
   }
 
   next();
