@@ -22,6 +22,7 @@ export interface BookingDocument extends Document {
   isMaintenance?: boolean;
   maintenanceReason?: string;
   invoiceNumber?: string;
+  invoiceSent?: boolean;
   createdBy?: mongoose.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
@@ -192,6 +193,10 @@ const bookingSchema = new Schema(
     invoiceNumber: {
       type: String,
       default: null,
+    },
+    invoiceSent: {
+      type: Boolean,
+      default: false,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

@@ -121,6 +121,7 @@ export const sendInvoiceToUser = async (userId: object, bookingId: any) => {
     .findById(userId)
     .select("email fullName")
     .lean();
+
   const pdfBuffer = await downloadBookingReceipt(booking);
   await sendBookingInvoiceEmail(
     (userData as any).email,
@@ -128,6 +129,14 @@ export const sendInvoiceToUser = async (userId: object, bookingId: any) => {
     (booking as any).invoiceNumber,
     (booking as any).bookingAmount,
     pdfBuffer
+  );
+
+  console.log("📧 Sending invoice to user:", userData?.email);
+
+  // ✅ Mark invoice as sent
+  await bookingModel.updateOne(
+    { _id: bookingId },
+    { $set: { invoiceSent: true } }
   );
 
   return;

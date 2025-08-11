@@ -1,6 +1,6 @@
 import { configDotenv } from "dotenv";
 import mongoose from "mongoose";
-import { startWeatherCron } from "src/crons/weather.cron";
+import { startInvoiceCron, startWeatherCron } from "src/crons/weather.cron";
 
 configDotenv(); 
 
@@ -13,6 +13,7 @@ const connectDB = async () => {
       await mongoose.connect(process.env.MONGO_URL as string);
       console.log("MongoDB connected 🚀");
       startWeatherCron();
+      startInvoiceCron()
       console.log("Weather cron started 🚀");
 
     } catch (error: any) {
