@@ -54,8 +54,7 @@ app.use("/api/webhooks", webhookRoutes);
 
 app.get(
   "/api/booking-receipt/:bookingId",
-  checkValidAdminRole,
-  checkAdminAuth,
+
   async (req, res) => {
     try {
       const { bookingId } = req.params;

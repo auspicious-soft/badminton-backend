@@ -974,10 +974,8 @@ export const getUsersByIdService = async (payload: any, res: Response) => {
 
       // Get court details
       let courtData = null;
-      if (venueData.courts) {
-        courtData = venueData.courts.find(
-          (court: any) => court._id.toString() === booking.courtId.toString()
-        );
+      if (booking.courtId) {
+        courtData = await courtModel.findById(booking.courtId)
       }
       delete venueData.courts;
 
