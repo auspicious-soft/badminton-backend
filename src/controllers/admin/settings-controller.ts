@@ -405,11 +405,24 @@ export const getNotifications = async (req: Request, res: Response) => {
     ];
 
     if (venueId) {
-      aggregationPipeline.push({
-        $match: {
-          "bookingData.venueId": new mongoose.Types.ObjectId(venueId),
+      aggregationPipeline.push(
+        {
+          $lookup: {
+            from: "bookings",
+            localField: "referenceId", // from notifications
+            foreignField: "_id", // from bookings
+            as: "bookingData",
+          },
         },
-      });
+        {
+          $unwind: "$bookingData",
+        },
+        {
+          $match: {
+            "bookingData.venueId": new mongoose.Types.ObjectId(venueId),
+          },
+        }
+      );
     }
 
     // Clone pipeline for count before pagination stages
@@ -448,6 +461,7 @@ export const getNotifications = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
 export const readNotification = async (req: Request, res: Response) => {
   try {
     const { notificationId } = req.body;
