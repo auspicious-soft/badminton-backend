@@ -140,11 +140,18 @@ router
   .get(getUsersForPush)
   .post(sendPushToUsers);
 
+router.get("/get-venues", getVenues);
+router.get("/get-courts", getCourts);
+
 //Test Route to create playcoin plans
 
 import { Request, Response } from "express";
 import { httpStatusCode } from "src/lib/constant";
 import { playcoinModel } from "src/models/admin/playcoin-schema";
+import {
+  getCourts,
+  getVenues,
+} from "src/controllers/user/user-home-controller";
 
 router.post("/playcoin-plans", async (req: Request, res: Response) => {
   try {

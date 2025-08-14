@@ -1,6 +1,6 @@
 import { configDotenv } from "dotenv";
 import mongoose from "mongoose";
-import { startInvoiceCron, startWeatherCron } from "src/crons/weather.cron";
+import { startInvoiceCron, startWeatherCron } from "src/crons/app.cron";
 
 configDotenv(); 
 

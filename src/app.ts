@@ -74,7 +74,7 @@ app.get(
 
       res.set({
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="booking-receipt-${bookingId}.pdf"`,
+        "Content-Disposition": `attachment; filename="Booking-Invoice-${booking.invoiceNumber}.pdf"`,
         "Content-Length": pdfBuffer.length,
       });
 

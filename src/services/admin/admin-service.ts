@@ -975,7 +975,7 @@ export const getUsersByIdService = async (payload: any, res: Response) => {
       // Get court details
       let courtData = null;
       if (booking.courtId) {
-        courtData = await courtModel.findById(booking.courtId)
+        courtData = await courtModel.findById(booking.courtId);
       }
       delete venueData.courts;
 
@@ -1360,8 +1360,29 @@ export const createMatchService = async (payload: any, res: Response) => {
     },
   ];
 
+  const createdUsers = [];
+
+  for (const u of users) {
+    if (u.email) {
+      // Check if a user with the same email exists
+      const existing = await usersModel.findOneAndUpdate(
+        { email: u.email },
+        { $set: u },
+        { new: true }
+      );
+      if (existing) {
+        createdUsers.push(existing);
+        continue; // skip creation
+      }
+    }
+
+    // Create if no email or email not found
+    const newUser = await usersModel.create(u);
+    createdUsers.push(newUser);
+  }
+
   // create multiple users
-  const createdUsers = await usersModel.insertMany(users);
+  // const createdUsers = await usersModel.insertMany(users);
 
   if (createdUsers.length !== users.length) {
     return errorResponseHandler(
@@ -1405,6 +1426,8 @@ export const createMatchService = async (payload: any, res: Response) => {
     userId: createdUsers[0]._id,
     bookingType: "Complete",
     venueId,
+    bookingAmount: 0,
+    expectedPayment: 0,
     courtId,
     bookingDate: makeBookingDateInIST(today, bookingSlots[0]),
     bookingPaymentStatus: true,
@@ -1412,20 +1435,35 @@ export const createMatchService = async (payload: any, res: Response) => {
     invoiceNumber: "",
   };
 
+  const finalBookingData = [];
+
   for (let i = 0; i < result.length; i++) {
     bookingData.bookingSlots = result[i].slot;
     bookingData.team1[0].playerPayment = result[i].price;
+    bookingData.bookingAmount = result[i].price
+    bookingData.expectedPayment = result[i].price
     bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
     bookingData.invoiceNumber = await generateInvoiceNumber();
-    await bookingModel.create(bookingData);
+    const data = await bookingModel.create(bookingData);
+    finalBookingData.push(data);
   }
 
-  console.log(checkBookings);
+  for(let i= 0; i<finalBookingData.length; i++){
+    await transactionModel.create({
+      userId: createdUsers[0]._id,
+      bookingId: finalBookingData[i]._id,
+      method: "In-Court",
+      isWebhookVerified: true,
+      status: "authorized",
+      amount: finalBookingData[i].bookingAmount
+    })
+  }
+
 
   return {
     success: true,
     message: "Success",
-    data: {},
+    data: finalBookingData,
   };
 };
 
@@ -2457,15 +2495,27 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
   const { month = 7, year = 2025 } = req.query; // defaults
   const venueObjectId = new Types.ObjectId(id);
 
-  const startOfMonth = new Date(Date.UTC(Number(year), Number(month) - 1, 1, 0, 0, 0));
+  const startOfMonth = new Date(
+    Date.UTC(Number(year), Number(month) - 1, 1, 0, 0, 0)
+  );
   const startOfNextMonth =
     Number(month) === 12
       ? new Date(Date.UTC(Number(year) + 1, 0, 1, 0, 0, 0))
       : new Date(Date.UTC(Number(year), Number(month), 1, 0, 0, 0));
 
   const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   const pipeline = [
@@ -2547,7 +2597,10 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
 
   const venueName =
     transactions?.[0]?.venueName ||
-    (await venueModel.findById(venueObjectId).lean().then((v) => v?.name)) ||
+    (await venueModel
+      .findById(venueObjectId)
+      .lean()
+      .then((v) => v?.name)) ||
     id;
 
   const monthName = monthNames[Number(month) - 1];
@@ -2569,7 +2622,7 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     "RazorPayAmount",
     "BookingAmountWithoutGST",
     "CGST",
-    "SGST_or_UTGST"
+    "SGST_or_UTGST",
   ];
 
   const escape = (value: any) => {
@@ -2590,11 +2643,12 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
 
   for (const tx of transactions) {
     // GST calculations
-    const bookingAmountWithoutGST = (Number(tx.amount) / 1.18);
+    const bookingAmountWithoutGST = Number(tx.amount) / 1.18;
     const gst = Number(tx.amount) - bookingAmountWithoutGST;
     const cgst = gst / 2;
     const sgstOrUtgst = gst / 2;
-    const gstLabel = tx.venueState?.toLowerCase() === "chandigarh" ? "UTGST" : "SGST";
+    const gstLabel =
+      tx.venueState?.toLowerCase() === "chandigarh" ? "UTGST" : "SGST";
 
     const row = [
       tx.invoiceNumber || "",
@@ -2611,7 +2665,7 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
       tx.razorPayAmount ?? "",
       bookingAmountWithoutGST.toFixed(2),
       cgst.toFixed(2),
-      `${sgstOrUtgst.toFixed(2)}`
+      `${sgstOrUtgst.toFixed(2)}`,
     ].map(escape);
 
     res.write(row.join(",") + "\n");
