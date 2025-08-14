@@ -6,6 +6,8 @@ import { downloadBookingReceipt } from "src/controllers/admin/product-controller
 import { usersModel } from "src/models/user/user-schema";
 import { sendBookingInvoiceEmail } from "./mails/mail";
 import { bookingModel } from "src/models/venue/booking-schema";
+import { uploadStreamToS3Service } from "src/services/user/user-service";
+import { uploadFileToS3 } from "src/config/s3";
 configDotenv();
 
 const { AWS_REGION, AWS_BUCKET_NAME } = process.env;
@@ -109,7 +111,7 @@ export const getWinnerTeam = (
   return "draw";
 };
 
-export const sendInvoiceToUser = async (userId: object, bookingId: any) => {
+export const sendInvoiceToUser = async (userId: any, bookingId: any) => {
   const booking = await bookingModel
     .findById(bookingId)
     .populate("userId", "fullName email")
@@ -130,8 +132,17 @@ export const sendInvoiceToUser = async (userId: object, bookingId: any) => {
     (booking as any).bookingAmount,
     pdfBuffer
   );
+  const fileName = `Booking-Invoice-${booking?.invoiceNumber}.pdf`;
+  const { fileUrl } = await uploadFileToS3(
+    pdfBuffer,
+    fileName,
+    "application/pdf"
+  );
 
-  console.log("📧 Sending invoice to user:", userData?.email);
+  console.log("📧 Sending invoice to user:", fileUrl);
+
+  await bookingModel.findByIdAndUpdate(bookingId,{invoiceLink: fileUrl})
+
 
   // ✅ Mark invoice as sent
   await bookingModel.updateOne(

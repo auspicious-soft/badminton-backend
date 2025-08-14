@@ -1381,9 +1381,6 @@ export const createMatchService = async (payload: any, res: Response) => {
     createdUsers.push(newUser);
   }
 
-  // create multiple users
-  // const createdUsers = await usersModel.insertMany(users);
-
   if (createdUsers.length !== users.length) {
     return errorResponseHandler(
       "Failed to create all users",
@@ -1440,25 +1437,40 @@ export const createMatchService = async (payload: any, res: Response) => {
   for (let i = 0; i < result.length; i++) {
     bookingData.bookingSlots = result[i].slot;
     bookingData.team1[0].playerPayment = result[i].price;
-    bookingData.bookingAmount = result[i].price
-    bookingData.expectedPayment = result[i].price
+    bookingData.bookingAmount = result[i].price;
+    bookingData.expectedPayment = result[i].price;
     bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
     bookingData.invoiceNumber = await generateInvoiceNumber();
     const data = await bookingModel.create(bookingData);
     finalBookingData.push(data);
   }
 
-  for(let i= 0; i<finalBookingData.length; i++){
-    await transactionModel.create({
-      userId: createdUsers[0]._id,
-      bookingId: finalBookingData[i]._id,
-      method: "In-Court",
-      isWebhookVerified: true,
-      status: "authorized",
-      amount: finalBookingData[i].bookingAmount
-    })
-  }
+  await transactionModel.create({
+    userId: createdUsers[0]._id,
+    bookingId:
+      result.length == 1
+        ? [finalBookingData[0]._id]
+        : [finalBookingData[0]._id, finalBookingData[1]._id],
+    method: "In-Court",
+    isWebhookVerified: true,
+    status: "authorized",
+    amount:
+      result.length == 1
+        ? finalBookingData[0].bookingAmount
+        : finalBookingData[0].bookingAmount + finalBookingData[1].bookingAmount,
+  });
 
+  // for (let i = 0; i < finalBookingData.length; i++) {
+  //   await transactionModel.create({
+  //     userId: createdUsers[0]._id,
+  //     bookingId: finalBookingData[i]._id,
+  //     method: "In-Court",
+
+  //     isWebhookVerified: true,
+  //     status: "authorized",
+  //     amount: finalBookingData[i].bookingAmount,
+  //   });
+  // }
 
   return {
     success: true,

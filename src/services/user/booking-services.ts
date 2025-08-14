@@ -85,6 +85,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
   let totalSlotPayment = 0;
 
   // Get price for each booking slot
+  const pricePerSlot = [] as number[];
   for (const slot of bookingSlots) {
     const slotPrice = await priceModel.findPriceForSlot(dayType, slot);
     if (!slotPrice) {
@@ -94,6 +95,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         res
       );
     }
+    pricePerSlot.push(slotPrice);
     totalSlotPayment += slotPrice;
   }
 
@@ -112,7 +114,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     if (item.playerId) {
       if (item.playerId === userData.id) {
         item.paidBy = "Self";
-        item.playerPayment = completeCourtPrice;
+        item.playerPayment = 0;
         paidForPlayers.push(new mongoose.Types.ObjectId(item.playerId));
         item.rackets = item.rackets || 0;
         item.balls = item.balls || 0;
@@ -169,20 +171,29 @@ export const bookCourtServices = async (req: Request, res: Response) => {
         return item;
       }),
       bookingType,
-      bookingAmount: completeCourtPrice,
+      bookingAmount: 0,
       bookingPaymentStatus: false,
       bookingDate,
     };
 
     // Create a booking for each slot
     let finalPayload = await Promise.all(
-      bookingSlots.map(async (slot: string) => {
+      bookingSlots.map(async (slot: string, indx: number) => {
         return {
           ...bookingPayload,
+          team1: bookingPayload.team1.map((val: any, idx1: number) => ({
+            ...val,
+            playerPayment: idx1 === 0 ? pricePerSlot[indx] : 0,
+          })),
+          team2: bookingPayload.team2.map((val: any) => ({
+            ...val,
+            playerPayment: 0,
+          })),
           bookingSlots: slot,
           bookingDate: makeBookingDateInIST(bookingDate, slot),
           invoiceNumber: await generateInvoiceNumber(),
-          expectedPayment: completeCourtPrice,
+          bookingAmount: pricePerSlot[indx],
+          expectedPayment: pricePerSlot[indx],
         };
       })
     );

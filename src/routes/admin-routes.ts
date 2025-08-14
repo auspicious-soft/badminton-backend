@@ -143,6 +143,11 @@ router
 router.get("/get-venues", getVenues);
 router.get("/get-courts", getCourts);
 
+router.post("/test", async (req: Request, res: Response)=> {
+  sendInvoiceToUser("686e21c6b41016313fdd5989", "689dc68b3cbe8b35384e3f39")
+  return{}
+})
+
 //Test Route to create playcoin plans
 
 import { Request, Response } from "express";
@@ -152,6 +157,7 @@ import {
   getCourts,
   getVenues,
 } from "src/controllers/user/user-home-controller";
+import { sendInvoiceToUser } from "src/utils";
 
 router.post("/playcoin-plans", async (req: Request, res: Response) => {
   try {

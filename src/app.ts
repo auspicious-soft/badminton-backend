@@ -69,7 +69,6 @@ app.get(
         return res.status(404).json({ message: "Booking not found" });
       }
 
-
       const pdfBuffer = await downloadBookingReceipt(booking);
 
       res.set({

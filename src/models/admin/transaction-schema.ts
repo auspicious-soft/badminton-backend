@@ -12,6 +12,7 @@ export interface TransactionDocument extends Document {
   currency: string;
   status: "created" | "authorized" | "captured" | "failed" | "refunded" | "received";
   method?: string;
+  invoiceLink?:string;
   notes?: any;
   isWebhookVerified: boolean;
   playcoinsUsed: number;
@@ -87,6 +88,10 @@ const transactionSchema = new Schema<TransactionDocument>(
     method: {
       type: String,
       default: null,
+    },
+    invoiceLink:{
+      type: String,
+      default:null
     },
     notes: {
       type: Schema.Types.Mixed,

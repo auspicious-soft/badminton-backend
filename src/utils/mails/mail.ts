@@ -60,7 +60,7 @@ export const sendBookingInvoiceEmail = async (
     react: InvoiceEmail({ username, invoiceNumber, amount }),
     attachments: [
       {
-        filename: `invoice-${invoiceNumber}.pdf`,
+        filename: `Booking-Invoice-${invoiceNumber}.pdf`,
         content: pdfBuffer.toString("base64"), // convert buffer to base64
       },
     ],
