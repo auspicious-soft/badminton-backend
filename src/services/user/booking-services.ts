@@ -76,7 +76,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
   // ********************Validations****************************
 
   // Get the current date and determine if it's a weekday or weekend
-  const dateCheck = makeBookingDateInIST(bookingDate, bookingSlots[0]);
+  const dateCheck = new Date(bookingDate);
   const dayOfWeek = dateCheck.getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
   const dayType = isWeekend ? "weekend" : "weekday";
@@ -107,7 +107,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
     );
   }
 
-  const completeCourtPrice: number = totalSlotPayment / bookingSlots.length; // For full court
+  // const completeCourtPrice: number = totalSlotPayment / bookingSlots.length; // For full court
 
   // Process all players to set payment information and collect player IDs for paidFor
   [...team1, ...team2].forEach((item) => {
@@ -190,7 +190,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
             playerPayment: 0,
           })),
           bookingSlots: slot,
-          bookingDate: makeBookingDateInIST(bookingDate, slot),
+          bookingDate: dateCheck.setHours(Number(slot)),
           invoiceNumber: await generateInvoiceNumber(),
           bookingAmount: pricePerSlot[indx],
           expectedPayment: pricePerSlot[indx],
