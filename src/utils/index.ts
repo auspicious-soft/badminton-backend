@@ -112,8 +112,14 @@ export const getWinnerTeam = (
 };
 
 export const sendInvoiceToUser = async (userId: any, bookingId: any) => {
+  const bookingInvoiceNumber = await generateInvoiceNumber();
+
   const booking = await bookingModel
-    .findById(bookingId)
+    .findOneAndUpdate(
+      { _id: bookingId },
+      { $set: { invoiceNumber: bookingInvoiceNumber } },
+      { new: true }
+    )
     .populate("userId", "fullName email")
     .populate("venueId", "name address city state gstNumber")
     .populate("courtId", "name")
@@ -141,14 +147,10 @@ export const sendInvoiceToUser = async (userId: any, bookingId: any) => {
 
   console.log("📧 Sending invoice to user:", fileUrl);
 
-  await bookingModel.findByIdAndUpdate(bookingId,{invoiceLink: fileUrl})
-
-
-  // ✅ Mark invoice as sent
-  await bookingModel.updateOne(
-    { _id: bookingId },
-    { $set: { invoiceSent: true } }
-  );
+  await bookingModel.findByIdAndUpdate(bookingId, {
+    invoiceLink: fileUrl,
+    invoiceSent: true,
+  });
 
   return;
 };
@@ -164,8 +166,9 @@ export const generateInvoiceNumber = async (): Promise<string> => {
   const lastBooking = await bookingModel
     .findOne({
       invoiceNumber: { $regex: `^${prefix}-${year}-` },
+      invoiceSent: true,
     })
-    .sort({ createdAt: -1 }) // latest first
+    .sort({ bookingDate: -1 }) // latest first
     .lean();
 
   let nextNumber = 1;

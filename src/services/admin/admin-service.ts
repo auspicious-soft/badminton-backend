@@ -2530,111 +2530,109 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     "December",
   ];
 
-  const pipeline = [
-    {
-      $match: {
-        createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
-        isWebhookVerified: true,
-        text: "Court Booking",
-      },
-    },
-    {
-      $addFields: {
-        firstBookingId: { $arrayElemAt: ["$bookingId", 0] },
-      },
-    },
-    {
-      $lookup: {
-        from: bookingModel.collection.name,
-        localField: "firstBookingId",
-        foreignField: "_id",
-        as: "booking",
-      },
-    },
-    { $unwind: "$booking" },
-    {
-      $match: {
-        "booking.venueId": venueObjectId,
-      },
-    },
-    {
-      $lookup: {
-        from: usersModel.collection.name,
-        localField: "userId",
-        foreignField: "_id",
-        as: "user",
-      },
-    },
-    { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: venueModel.collection.name,
-        localField: "booking.venueId",
-        foreignField: "_id",
-        as: "venue",
-      },
-    },
-    { $unwind: { path: "$venue", preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: courtModel.collection.name,
-        localField: "booking.courtId",
-        foreignField: "_id",
-        as: "court",
-      },
-    },
-    { $unwind: { path: "$court", preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        invoiceNumber: "$booking.invoiceNumber",
-        fullName: "$user.fullName",
-        amount: 1,
-        currency: 1,
-        method: 1,
-        createdAt: 1,
-        razorpayOrderId: 1,
-        razorpayPaymentId: 1,
-        playcoinsUsed: 1,
-        venueName: "$venue.name",
-        venueState: "$venue.state",
-        courtName: "$court.name",
-        razorPayAmount: {
-          $subtract: ["$amount", { $ifNull: ["$playcoinsUsed", 0] }],
-        },
-      },
-    },
-  ];
+  // const pipeline = [
+  //   {
+  //     $match: {
+  //       createdAt: { $gte: startOfMonth, $lt: startOfNextMonth },
+  //       isWebhookVerified: true,
+  //       text: "Court Booking",
+  //     },
+  //   },
+  //   {
+  //     $addFields: {
+  //       firstBookingId: { $arrayElemAt: ["$bookingId", 0] },
+  //     },
+  //   },
+  //   {
+  //     $lookup: {
+  //       from: bookingModel.collection.name,
+  //       localField: "firstBookingId",
+  //       foreignField: "_id",
+  //       as: "booking",
+  //     },
+  //   },
+  //   { $unwind: "$booking" },
+  //   {
+  //     $match: {
+  //       "booking.venueId": venueObjectId,
+  //     },
+  //   },
+  //   {
+  //     $lookup: {
+  //       from: usersModel.collection.name,
+  //       localField: "userId",
+  //       foreignField: "_id",
+  //       as: "user",
+  //     },
+  //   },
+  //   { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+  //   {
+  //     $lookup: {
+  //       from: venueModel.collection.name,
+  //       localField: "booking.venueId",
+  //       foreignField: "_id",
+  //       as: "venue",
+  //     },
+  //   },
+  //   { $unwind: { path: "$venue", preserveNullAndEmptyArrays: true } },
+  //   {
+  //     $lookup: {
+  //       from: courtModel.collection.name,
+  //       localField: "booking.courtId",
+  //       foreignField: "_id",
+  //       as: "court",
+  //     },
+  //   },
+  //   { $unwind: { path: "$court", preserveNullAndEmptyArrays: true } },
+  //   {
+  //     $project: {
+  //       invoiceNumber: "$booking.invoiceNumber",
+  //       fullName: "$user.fullName",
+  //       amount: 1,
+  //       currency: 1,
+  //       method: 1,
+  //       createdAt: 1,
+  //       razorpayOrderId: 1,
+  //       razorpayPaymentId: 1,
+  //       playcoinsUsed: 1,
+  //       venueName: "$venue.name",
+  //       venueState: "$venue.state",
+  //       courtName: "$court.name",
+  //       razorPayAmount: {
+  //         $subtract: ["$amount", { $ifNull: ["$playcoinsUsed", 0] }],
+  //       },
+  //     },
+  //   },
+  // ];
 
-  const transactions = await transactionModel.aggregate(pipeline).exec();
+  const bookingData = (await bookingModel
+    .find({
+      venueId: id,
+      bookingDate: { $gte: startOfMonth, $lt: startOfNextMonth },
+    })
+    .populate("venueId")
+    .populate("courtId")
+    .populate("userId")
+    .lean()) as any;
+  // const transactions = await transactionModel.aggregate(pipeline).exec();
 
-  const venueName =
-    transactions?.[0]?.venueName ||
-    (await venueModel
-      .findById(venueObjectId)
-      .lean()
-      .then((v) => v?.name)) ||
-    id;
+  const venueName = bookingData.length ? bookingData[0]?.venueId?.name : "";
 
   const monthName = monthNames[Number(month) - 1];
   const safeVenueName = venueName.replace(/[\/\\?%*:|"<>]/g, "_");
   const fileName = `${monthName}-${safeVenueName}-Transactions.csv`;
 
   const headers = [
-    "InvoiceNumber",
-    "VenueName",
-    "CourtName",
-    "UserFullName",
-    "CreatedAt",
-    "RazorpayOrderId",
-    "RazorpayPaymentId",
-    "Method",
-    "Currency",
-    "Amount",
-    "PlaycoinsUsed",
-    "RazorPayAmount",
-    "BookingAmountWithoutGST",
+    "Invoice Number",
+    "Invoice Link",
+    "Venue Name",
+    "Court Name",
+    "User Name",
+    "Booking Date",
+    "Booking Amount",
     "CGST",
-    "SGST_or_UTGST",
+    "SGST/UTGST",
+    "Total Amount",
   ];
 
   const escape = (value: any) => {
@@ -2650,13 +2648,13 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
   // Stream CSV
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-
   res.write(headers.join(",") + "\n");
 
-  for (const tx of transactions) {
+  for (const tx of bookingData) {
     // GST calculations
-    const bookingAmountWithoutGST = Number(tx.amount) / 1.18;
-    const gst = Number(tx.amount) - bookingAmountWithoutGST;
+    const bookingAmountWithoutGST =
+      Number(tx.bookingAmount) / Number(process.env.gst);
+    const gst = Number(tx.bookingAmount) - bookingAmountWithoutGST;
     const cgst = gst / 2;
     const sgstOrUtgst = gst / 2;
     const gstLabel =
@@ -2664,20 +2662,15 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
 
     const row = [
       tx.invoiceNumber || "",
-      tx.venueName || "",
-      tx.courtName || "",
-      tx.fullName || "",
-      tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
-      tx.razorpayOrderId || "",
-      tx.razorpayPaymentId || "",
-      tx.method,
-      tx.currency,
-      tx.amount,
-      tx.playcoinsUsed ?? 0,
-      tx.razorPayAmount ?? "",
+      tx.invoiceLink || "",
+      tx.venueId.name || "",
+      tx.courtId.name || "",
+      tx.userId.fullName || "",
+      tx.bookingDate || "",
       bookingAmountWithoutGST.toFixed(2),
       cgst.toFixed(2),
       `${sgstOrUtgst.toFixed(2)}`,
+      tx.bookingAmount,
     ].map(escape);
 
     res.write(row.join(",") + "\n");
