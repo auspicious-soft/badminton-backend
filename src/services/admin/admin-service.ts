@@ -1241,15 +1241,8 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
     throw new Error("Invalid slot hour: " + slotHour);
   }
 
-  let base;
-  if (typeof rawDate === "string") {
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+/.test(rawDate)) {
-      const isoish = rawDate.replace(" ", "T").replace(/(\.\d{3})\d+$/, "$1"); // drop microseconds beyond ms
-      base = new Date(isoish); // interpreted as local
-    } else {
-      base = new Date(rawDate); // ISO (with Z or without)
-    }
-  } else if (rawDate instanceof Date) {
+  let base: Date;
+  if (typeof rawDate === "string" || rawDate instanceof Date) {
     base = new Date(rawDate);
   } else {
     throw new Error("Unsupported date input: " + rawDate);
@@ -1259,16 +1252,19 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
     throw new Error("Failed to parse bookingDate: " + rawDate);
   }
 
-  // Compute the date components in IST
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // +5:30
-  const istEquivalent = new Date(base.getTime() + IST_OFFSET_MS);
-  const year = istEquivalent.getFullYear();
-  const month = istEquivalent.getMonth(); // zero-based
-  const day = istEquivalent.getDate();
-  const utcForIstSlot = Date.UTC(year, month, day, hour, 0, 0); // this is YYYY-MM-DD hour:00 UTC
-  const adjusted = new Date(utcForIstSlot - IST_OFFSET_MS); // subtract offset to align to IST wall time
+  // Extract IST year-month-day without shifting
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const utcTime = base.getTime() - IST_OFFSET_MS; // interpret as IST midnight
+  const istBase = new Date(utcTime);
 
-  return adjusted;
+  const year = istBase.getUTCFullYear();
+  const month = istBase.getUTCMonth();
+  const day = istBase.getUTCDate();
+
+  // Create UTC date that matches desired IST slot time
+  const utcDate = Date.UTC(year, month, day, hour - 5.5, 0, 0);
+
+  return new Date(utcDate);
 }
 
 export const createMatchService = async (payload: any, res: Response) => {
@@ -1440,7 +1436,7 @@ export const createMatchService = async (payload: any, res: Response) => {
     bookingData.bookingAmount = result[i].price;
     bookingData.expectedPayment = result[i].price;
     bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
-    bookingData.invoiceNumber = await generateInvoiceNumber();
+    bookingData.invoiceNumber = "";
     const data = await bookingModel.create(bookingData);
     finalBookingData.push(data);
   }
