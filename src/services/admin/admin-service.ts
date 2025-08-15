@@ -1241,30 +1241,48 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
     throw new Error("Invalid slot hour: " + slotHour);
   }
 
-  let base: Date;
-  if (typeof rawDate === "string" || rawDate instanceof Date) {
-    base = new Date(rawDate);
+  let y: number, m: number, d: number;
+
+  // Normalize input date to y, m, d
+  if (rawDate instanceof Date) {
+    y = rawDate.getFullYear();
+    m = rawDate.getMonth();
+    d = rawDate.getDate();
+  } else if (typeof rawDate === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      const parts = rawDate.split("-").map(Number);
+      y = parts[0];
+      m = parts[1] - 1;
+      d = parts[2];
+    } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(rawDate)) {
+      const parts = rawDate.split("/").map(Number);
+      d = parts[0];
+      m = parts[1] - 1;
+      y = parts[2];
+    } else {
+      const tmp = new Date(rawDate);
+      if (isNaN(tmp.getTime())) {
+        throw new Error("Invalid date string: " + rawDate);
+      }
+      y = tmp.getFullYear();
+      m = tmp.getMonth();
+      d = tmp.getDate();
+    }
   } else {
     throw new Error("Unsupported date input: " + rawDate);
   }
 
-  if (isNaN(base.getTime())) {
-    throw new Error("Failed to parse bookingDate: " + rawDate);
-  }
+  // Build UTC datetime corresponding to that IST slot
+  const IST_OFFSET_HOURS = 5.5;
+  const utcDate = new Date(Date.UTC(y, m, d, hour - IST_OFFSET_HOURS, 0, 0));
 
-  // Extract IST year-month-day without shifting
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-  const utcTime = base.getTime() - IST_OFFSET_MS; // interpret as IST midnight
-  const istBase = new Date(utcTime);
+  return utcDate;
+}
 
-  const year = istBase.getUTCFullYear();
-  const month = istBase.getUTCMonth();
-  const day = istBase.getUTCDate();
-
-  // Create UTC date that matches desired IST slot time
-  const utcDate = Date.UTC(year, month, day, hour - 5.5, 0, 0);
-
-  return new Date(utcDate);
+function getTodayISTDateString() {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000); // shift to IST
+  return istNow.toISOString().slice(0, 10); // "YYYY-MM-DD"
 }
 
 export const createMatchService = async (payload: any, res: Response) => {
@@ -1280,19 +1298,21 @@ export const createMatchService = async (payload: any, res: Response) => {
     bookingSlots,
   } = payload.body;
 
-  const today = new Date().toISOString();
-  const todayEndDate = new Date(
-    new Date().setHours(23, 59, 59, 999)
-  ).toISOString();
+  const todayIST = getTodayISTDateString();
+  // Start of the day in IST
+  const startOfDayIST = new Date(`${todayIST}T00:00:00+05:30`).toISOString();
 
-  console.log(makeBookingDateInIST(today, bookingSlots[0]));
+  // End of the day in IST
+  const endOfDayIST = new Date(
+    `${todayIST}T23:59:59.999+05:30`
+  ).toISOString();
 
   const checkBookings = await bookingModel
     .find({
       bookingSlots: { $in: bookingSlots },
       bookingDate: {
-        $gte: today,
-        $lte: todayEndDate,
+        $gte: startOfDayIST,
+        $lte: endOfDayIST,
       },
       bookingPaymentStatus: true,
       bookingType: { $ne: "Cancelled" },
@@ -1309,13 +1329,13 @@ export const createMatchService = async (payload: any, res: Response) => {
   }
 
   const dayType = (today: string) => {
-    const day = new Date(today).getDay();
+    const day = new Date(today + "T00:00:00+05:30").getDay();
     return day === 0 || day === 6 ? "weekend" : "weekday";
   };
 
   const dynamicPrices = await priceModel
     .findOne({
-      dayType: dayType(today),
+      dayType: dayType(todayIST),
     })
     .select("slotPricing")
     .lean();
@@ -1422,7 +1442,7 @@ export const createMatchService = async (payload: any, res: Response) => {
     bookingAmount: 0,
     expectedPayment: 0,
     courtId,
-    bookingDate: makeBookingDateInIST(today, bookingSlots[0]),
+    bookingDate: makeBookingDateInIST(todayIST, bookingSlots[0]),
     bookingPaymentStatus: true,
     bookingSlots: null,
     invoiceNumber: "",
@@ -1435,7 +1455,7 @@ export const createMatchService = async (payload: any, res: Response) => {
     bookingData.team1[0].playerPayment = result[i].price;
     bookingData.bookingAmount = result[i].price;
     bookingData.expectedPayment = result[i].price;
-    bookingData.bookingDate = makeBookingDateInIST(today, result[i].slot);
+    bookingData.bookingDate = makeBookingDateInIST(todayIST, result[i].slot);
     bookingData.invoiceNumber = "";
     const data = await bookingModel.create(bookingData);
     finalBookingData.push(data);

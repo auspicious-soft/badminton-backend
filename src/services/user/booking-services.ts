@@ -25,31 +25,44 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
     throw new Error("Invalid slot hour: " + slotHour);
   }
 
-  let base: Date;
-  if (typeof rawDate === "string" || rawDate instanceof Date) {
-    base = new Date(rawDate);
+  let y: number, m: number, d: number;
+
+  // Normalize input date to y, m, d
+  if (rawDate instanceof Date) {
+    y = rawDate.getFullYear();
+    m = rawDate.getMonth();
+    d = rawDate.getDate();
+  } else if (typeof rawDate === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      const parts = rawDate.split("-").map(Number);
+      y = parts[0];
+      m = parts[1] - 1;
+      d = parts[2];
+    } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(rawDate)) {
+      const parts = rawDate.split("/").map(Number);
+      d = parts[0];
+      m = parts[1] - 1;
+      y = parts[2];
+    } else {
+      const tmp = new Date(rawDate);
+      if (isNaN(tmp.getTime())) {
+        throw new Error("Invalid date string: " + rawDate);
+      }
+      y = tmp.getFullYear();
+      m = tmp.getMonth();
+      d = tmp.getDate();
+    }
   } else {
     throw new Error("Unsupported date input: " + rawDate);
   }
 
-  if (isNaN(base.getTime())) {
-    throw new Error("Failed to parse bookingDate: " + rawDate);
-  }
+  // Build UTC datetime corresponding to that IST slot
+  const IST_OFFSET_HOURS = 5.5;
+  const utcDate = new Date(Date.UTC(y, m, d, hour - IST_OFFSET_HOURS, 0, 0));
 
-  // Extract IST year-month-day without shifting
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-  const utcTime = base.getTime() - IST_OFFSET_MS; // interpret as IST midnight
-  const istBase = new Date(utcTime);
-
-  const year = istBase.getUTCFullYear();
-  const month = istBase.getUTCMonth();
-  const day = istBase.getUTCDate();
-
-  // Create UTC date that matches desired IST slot time
-  const utcDate = Date.UTC(year, month, day, hour - 5.5, 0, 0);
-
-  return new Date(utcDate);
+  return utcDate;
 }
+
 
 
 export const bookCourtServices = async (req: Request, res: Response) => {
