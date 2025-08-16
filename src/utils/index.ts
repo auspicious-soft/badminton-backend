@@ -167,31 +167,38 @@ const getInitials = (name: string): string => {
 };
 
 export const generateInvoiceNumber = async (bookingId: any): Promise<string> => {
-  const year = new Date().getFullYear().toString().slice(-2); // e.g. "25"
+  const year = new Date().getFullYear().toString().slice(-2);
   const padding = 5;
 
-  const originalBooking = await bookingModel.findById(bookingId).populate("venueId").lean() as any
+  const originalBooking = await bookingModel
+    .findById(bookingId)
+    .populate("venueId")
+    .lean() as any;
 
-  // Find the last invoice for this year
+  if (!originalBooking) throw new Error("Booking not found");
+
+  // Find the last invoice up to this game date
   const lastBooking = await bookingModel
     .findOne({
       invoiceSent: true,
-      venueId: originalBooking?.venueId._id
+      venueId: originalBooking?.venueId._id,
+      bookingDate: { $lte: originalBooking.bookingDate }
     })
-    .sort({ bookingDate: -1 }) // latest first
+    .sort({ bookingDate: -1 }) // most recent game first
     .lean();
 
   let nextNumber = 1;
 
   if (lastBooking && lastBooking.invoiceNumber) {
-    // Extract numeric part from "PPINV-25-00001"
     const parts = lastBooking.invoiceNumber.split("-");
-    const lastNumber = parseInt(parts[2], 10);
+    const lastNumber = parseInt(parts[3], 10); // index 3 since format is INV-PP-25-00001
     nextNumber = lastNumber + 1;
   }
-  let prefix = getInitials(originalBooking?.venueId.name || "")
+
+  const prefix = getInitials(originalBooking?.venueId.name || "");
   return `INV-${prefix}-${year}-${String(nextNumber).padStart(padding, "0")}`;
 };
+
 
 // const booking = await bookingModel
 //   .findById(bookingId)

@@ -100,14 +100,12 @@ export const sendInvoiceUpdate = async () => {
     });
 
     for (const booking of bookings) {
-      try {
-        await sendInvoiceToUser(booking.userId, booking._id);
-      } catch (error) {
-        console.error(
-          `❌ Error sending invoice for booking ${booking._id}:`,
-          error
-        );
-      }
+      // small randomized delay (0–300ms) to avoid race conditions
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.floor(Math.random() * 300))
+      );
+
+      await sendInvoiceToUser(booking.userId, booking._id);
     }
   } catch (error) {
     console.error("❌ Error in invoice update service:", error);
