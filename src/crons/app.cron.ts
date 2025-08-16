@@ -33,10 +33,11 @@ export const startWeatherCron = () => {
   });
 };
 
+
 export const startInvoiceCron = () => {
-  //every 24 hours
+  // Every hour at :40, from 01:40 to 16:40 UTC (07:10–22:10 IST)
   cron.schedule(
-    "50 6-22 * * *", // Run every hour at HH:50 UTC, from 06:50 to 22:50 UTC
+    "40 1-16 * * *",
     () => {
       console.log(
         `🧾 Running scheduled invoice update at ${getCurrentISTTime().toISOString()} IST...`
@@ -46,7 +47,8 @@ export const startInvoiceCron = () => {
       );
     },
     {
-      timezone: "UTC", 
+      timezone: "UTC",
     }
   );
 };
+

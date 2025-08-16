@@ -20,7 +20,7 @@ const InvoiceEmail: React.FC<Readonly<InvoiceEmailProps>> = (props) => {
         <p style={{ color: "black" }}>Hello {username},</p>
         <p style={{ color: "black" }}>
           Your invoice <strong>#{invoiceNumber}</strong> for{" "}
-          <strong>{amount}</strong> has been generated.
+          ₹<strong>{amount}</strong> has been generated.
         </p>
         <p style={{ color: "black" }}>
           Please find the PDF copy of your invoice attached to this email.

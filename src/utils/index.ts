@@ -112,7 +112,8 @@ export const getWinnerTeam = (
 };
 
 export const sendInvoiceToUser = async (userId: any, bookingId: any) => {
-  const bookingInvoiceNumber = await generateInvoiceNumber();
+
+  const bookingInvoiceNumber = await generateInvoiceNumber(bookingId);
 
   const booking = await bookingModel
     .findOneAndUpdate(
@@ -157,16 +158,25 @@ export const sendInvoiceToUser = async (userId: any, bookingId: any) => {
 
 // utils/invoiceNumber.ts
 
-export const generateInvoiceNumber = async (): Promise<string> => {
-  const prefix = "PPINV";
+const getInitials = (name: string): string => {
+  return name
+    .split(/\s+/)              // split by spaces
+    .map(word => word[0])      // take first letter of each word
+    .join("")                  // join together
+    .toUpperCase();            // make uppercase
+};
+
+export const generateInvoiceNumber = async (bookingId: any): Promise<string> => {
   const year = new Date().getFullYear().toString().slice(-2); // e.g. "25"
   const padding = 5;
+
+  const originalBooking = await bookingModel.findById(bookingId).populate("venueId").lean() as any
 
   // Find the last invoice for this year
   const lastBooking = await bookingModel
     .findOne({
-      invoiceNumber: { $regex: `^${prefix}-${year}-` },
       invoiceSent: true,
+      venueId: originalBooking?.venueId._id
     })
     .sort({ bookingDate: -1 }) // latest first
     .lean();
@@ -179,8 +189,8 @@ export const generateInvoiceNumber = async (): Promise<string> => {
     const lastNumber = parseInt(parts[2], 10);
     nextNumber = lastNumber + 1;
   }
-
-  return `${prefix}-${year}-${String(nextNumber).padStart(padding, "0")}`;
+  let prefix = getInitials(originalBooking?.venueId.name || "")
+  return `INV-${prefix}-${year}-${String(nextNumber).padStart(padding, "0")}`;
 };
 
 // const booking = await bookingModel
