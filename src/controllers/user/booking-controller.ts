@@ -32,7 +32,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
       );
     }
 
-    const currentDate = new Date().toUTCString()
+    const currentDate = new Date().toISOString()
 
     const baseMatchFilter: any = {
       $or: [
@@ -124,7 +124,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
         });
 
         const status =
-          booking.bookingDate.toUTCString() < currentDate
+          booking.bookingDate.toISOString() < currentDate
             ? "previous"
             : "upcoming";
 
