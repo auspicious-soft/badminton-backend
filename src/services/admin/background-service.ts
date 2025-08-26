@@ -94,7 +94,10 @@ export const sendInvoiceUpdate = async () => {
     // Fetch bookings whose bookingDate is within last hour
     const bookings = await bookingModel.find({
       bookingPaymentStatus: true,
-      bookingType: "Complete",
+      $or: [
+        { bookingType: "Complete" },
+        { bookingType: "Cancelled", refundPlayCoin: { $gt: 0 } },
+      ],
       invoiceSent: false,
       bookingDate: { $gte: oneHourAgo, $lt: now },
     });

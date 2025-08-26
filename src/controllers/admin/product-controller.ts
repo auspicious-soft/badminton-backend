@@ -1256,22 +1256,426 @@ const INR = (n: any) => `₹${n ?? 0}`;
 //   });
 // };
 
+// export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
+//   return new Promise((resolve, reject) => {
+//     const doc = new PDFDocument({ margin: 40, size: "A4" });
+//     const stream = new PassThrough();
+//     const chunks: Buffer[] = [];
+//     const gstPercentage = Number(process.env.GST);
+//     const companyName = process.env.COMPANYNAME;
+//     const companyAddress = `#${process.env.COMPANYADDRESS}`;
+
+//     const refund = Number(booking.refundPlayCoin || 0)
+
+//     // Payment Calculations
+//     const bookingAmount = (
+//       Number(booking.bookingAmount) / Number(gstPercentage)
+//     ).toFixed(2);
+//     const gst = Number(booking.bookingAmount) - Number(bookingAmount);
+//     const cgst = (gst / 2).toFixed(2);
+//     const sgstOrUtgst = (gst / 2).toFixed(2);
+//     const isUT = booking?.venueId?.state?.toLowerCase() === "chandigarh";
+//     const gstLabel = isUT ? "UTGST" : "SGST";
+
+//     doc.pipe(stream);
+//     stream.on("data", (chunk) => chunks.push(chunk));
+//     stream.on("end", () => resolve(Buffer.concat(chunks)));
+//     stream.on("error", (err) => reject(err));
+
+//     // Fonts
+//     const fontPath = path.resolve("src/assets/fonts");
+//     try {
+//       doc.registerFont("Roboto-Bold", path.join(fontPath, "Roboto-Bold.ttf"));
+//       doc.registerFont(
+//         "Roboto-Medium",
+//         path.join(fontPath, "Roboto-Medium.ttf")
+//       );
+//       doc.registerFont(
+//         "Roboto-Regular",
+//         path.join(fontPath, "Roboto-Regular.ttf")
+//       );
+//     } catch (e) {
+//       console.error("Font registration failed, falling back:", e);
+//       doc.font("Helvetica-Bold");
+//     }
+
+//     // Helpers
+//     const sanitize = (s: any) =>
+//       String(s ?? "")
+//         .replace(/\s+/g, " ")
+//         .trim();
+//     const formatBookingDate = (raw: any) => {
+//       try {
+//         return new Date(raw)
+//           .toLocaleDateString("en-US", {
+//             weekday: "long",
+//             year: "numeric",
+//             month: "long",
+//             day: "numeric",
+//           })
+//           .replace(/\n/g, " ");
+//       } catch {
+//         return sanitize(raw);
+//       }
+//     };
+//     const getFirstPlayerName = async (playerId: string): Promise<string> => {
+//       try {
+//         const user = await usersModel
+//           .findById(playerId)
+//           .select("fullName")
+//           .exec();
+//         return user?.fullName || "Unknown Player";
+//       } catch (err) {
+//         console.error("Error fetching player:", err);
+//         return "Unknown Player";
+//       }
+//     };
+//     const drawKeyValueRow = (opts: {
+//       label: string;
+//       value: string;
+//       x: number;
+//       y: number;
+//       labelWidth: number;
+//       valueWidth: number;
+//       boldValue?: boolean;
+//     }): number => {
+//       const { label, value, x, y, labelWidth, valueWidth, boldValue } = opts;
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(12)
+//         .fillColor("#0e2642")
+//         .text(`${label}:`, x, y, { width: labelWidth });
+//       const cleanValue = sanitize(value);
+//       if (boldValue) doc.font("Roboto-Medium");
+//       else doc.font("Roboto-Regular");
+//       doc
+//         .fontSize(12)
+//         .text(cleanValue, x + labelWidth + 10, y, { width: valueWidth });
+//       const labelHeight = doc.heightOfString(`${label}:`, {
+//         width: labelWidth,
+//       });
+//       const valueHeight = doc.heightOfString(cleanValue, { width: valueWidth });
+//       return y + Math.max(labelHeight, valueHeight) + 6;
+//     };
+
+//     // Header
+//     const drawHeader = async () => {
+//       const top = 30;
+
+//       // ==== LOGO (LEFT) ====
+//       try {
+//         const logoPath = path.resolve("src/assets/fonts/appLogo.png");
+//         if (fs.existsSync(logoPath)) {
+//           doc.image(logoPath, 40, top, { width: 100, height: 50 });
+//         } else {
+//           throw new Error("Logo not found");
+//         }
+//       } catch (e) {
+//         console.error("Logo load error:", e);
+//         doc.rect(40, top, 100, 50).fillAndStroke("#E5E5E5", "#0e2642");
+//         doc
+//           .font("Roboto-Regular")
+//           .fontSize(10)
+//           .fillColor("#0e2642")
+//           .text("Logo Not Found", 40, top + 18, {
+//             width: 100,
+//             align: "center",
+//           });
+//       }
+
+//       // ==== COMPANY DETAILS (RIGHT) ====
+//       const rightX = 300;
+//       let currentY = top;
+
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(14)
+//         .fillColor("#0e2642")
+//         .text(companyName || "Company Name", rightX, currentY, {
+//           align: "right",
+//         });
+
+//       currentY += 16;
+//       doc
+//         .font("Roboto-Regular")
+//         .fontSize(10)
+//         .fillColor("#0e2642")
+//         .text(companyAddress || "Company Address", rightX, currentY, {
+//           align: "right",
+//         });
+
+//       currentY += 14;
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(12)
+//         .fillColor("#0e2642")
+//         .text(`GST: ${booking.venueId?.gstNumber || "N/A"}`, rightX, currentY, {
+//           align: "right",
+//         });
+
+//       currentY += 14;
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(12)
+//         .fillColor("#0e2642")
+//         .text(`SAC: 999652`, rightX, currentY, { align: "right" });
+
+//       // ==== BUYER INFO (LEFT BELOW LOGO) ====
+//       const buyerY = top + 60;
+//       const firstPlayerName =
+//         booking.team1 && Array.isArray(booking.team1) && booking.team1[0]
+//           ? await getFirstPlayerName(String(booking.team1[0].playerId))
+//           : "Unknown Player";
+
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(14)
+//         .fillColor("#0e2642")
+//         .text("Issued To:", 40, buyerY, { continued: true })
+//         .font("Roboto-Regular")
+//         .text(` ${firstPlayerName}`);
+
+//       // ==== DIVIDER LINE ====
+//       const dividerY = Math.max(currentY, buyerY) + 20;
+//       doc
+//         .strokeColor("#E5E5E5")
+//         .lineWidth(1)
+//         .moveTo(40, dividerY)
+//         .lineTo(555, dividerY)
+//         .stroke();
+
+//       return dividerY + 10;
+//     };
+
+//     // Draw Payment Table
+//     const drawPaymentTable = (x: number, y: number) => {
+//       const col1Width = 200;
+//       const col2Width = 150;
+//       const rowHeight = 20;
+
+//       // Header row
+//       doc.font("Roboto-Bold").fontSize(12).fillColor("#0e2642");
+//       doc.text("Description", x, y, { width: col1Width });
+//       doc.text("Amount (INR)", x + col1Width + 20, y, {
+//         width: col2Width,
+//         align: "right",
+//       });
+
+//       y += rowHeight;
+//       doc
+//         .strokeColor("#E5E5E5")
+//         .moveTo(x, y - 4)
+//         .lineTo(x + col1Width + col2Width + 20, y - 4)
+//         .stroke();
+
+//       // Booking Amount
+//       doc
+//         .font("Roboto-Regular")
+//         .text("Booking Amount", x, y, { width: col1Width });
+//       doc.text(Number(bookingAmount).toFixed(2), x + col1Width + 20, y, {
+//         width: col2Width,
+//         align: "right",
+//       });
+//       y += rowHeight;
+
+//       // CGST
+//       doc.text("CGST (9%)", x, y, { width: col1Width });
+//       doc.text(Number(cgst).toFixed(2), x + col1Width + 20, y, {
+//         width: col2Width,
+//         align: "right",
+//       });
+//       y += rowHeight;
+
+//       // SGST or UTGST
+//       doc.text(`${gstLabel} (9%)`, x, y, { width: col1Width });
+//       doc.text(Number(sgstOrUtgst).toFixed(2), x + col1Width + 20, y, {
+//         width: col2Width,
+//         align: "right",
+//       });
+//       y += rowHeight;
+
+//       // Divider before total
+//       doc
+//         .strokeColor("#0e2642")
+//         .moveTo(x, y - 4)
+//         .lineTo(x + col1Width + col2Width + 20, y - 4)
+//         .stroke();
+
+//       // Total
+//       doc.font("Roboto-Bold").text("Total", x, y, { width: col1Width });
+//       doc.text(
+//         Number(booking.bookingAmount).toFixed(2),
+//         x + col1Width + 20,
+//         y,
+//         { width: col2Width, align: "right" }
+//       );
+//       return y + rowHeight;
+//     };
+
+//     // Sections
+//     const drawSections = async () => {
+//       let y = await drawHeader();
+
+//       // Booking Summary
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(16)
+//         .fillColor("#0e2642")
+//         .text("Booking Summary", 40, y, { underline: true });
+//       y += 24;
+//       const sectionX = 40;
+//       const labelWidth = 140;
+//       const valueWidth = 515 - labelWidth - 10;
+//       y = drawKeyValueRow({
+//         label: "Invoice Number",
+//         value: String(booking.invoiceNumber || "N/A"),
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Game Type",
+//         value: `${booking.gameType || "N/A"}${
+//           booking.askToJoin ? " (Ask to Join)" : ""
+//         }`,
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Competitive",
+//         value: booking.isCompetitive ? "Yes" : "No",
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Skill Level Required",
+//         value: `${booking.skillRequired ?? 0}/100`,
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Date",
+//         value: formatBookingDate(booking.bookingDate),
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Time Slot",
+//         value: sanitize(booking.bookingSlots),
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+
+//       // Venue Details
+//       y += 4;
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(16)
+//         .fillColor("#0e2642")
+//         .text("Venue Details", 40, y, { underline: true });
+//       y += 24;
+//       const rawAddress = `${booking.venueId?.address || ""}, ${
+//         booking.venueId?.city || ""
+//       }, ${booking.venueId?.state || ""}`;
+//       const normalizedAddress = sanitize(rawAddress);
+//       y = drawKeyValueRow({
+//         label: "Venue",
+//         value: booking.venueId?.name || "N/A",
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Address",
+//         value: normalizedAddress,
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+//       y = drawKeyValueRow({
+//         label: "Court",
+//         value: booking.courtId?.name || "N/A",
+//         x: sectionX,
+//         y,
+//         labelWidth,
+//         valueWidth,
+//       });
+
+//       // Payment Summary Table
+//       y += 4;
+//       doc
+//         .font("Roboto-Bold")
+//         .fontSize(16)
+//         .fillColor("#0e2642")
+//         .text("Payment Summary", 40, y, { underline: true });
+//       y += 24;
+//       y = drawPaymentTable(40, y);
+//     };
+
+//     // Footer
+//     const drawFooter = () => {
+//       const bottomY = doc.page.height - 80;
+//       doc.font("Roboto-Regular").fontSize(10).fillColor("#808080");
+//       const footerText = "Thank you for booking with us!";
+//       const generatedOn = `Generated on: ${new Date().toLocaleString("en-US", {
+//         dateStyle: "medium",
+//         timeStyle: "short",
+//         timeZone: "Asia/Kolkata",
+//       })}`;
+//       doc.text(footerText, 40, bottomY, { align: "center", width: 515 });
+//       doc.text(generatedOn, 40, bottomY + 15, { align: "center", width: 515 });
+//     };
+
+//     // Compose
+//     drawSections()
+//       .then(() => {
+//         drawFooter();
+//         doc.end();
+//       })
+//       .catch((err) => {
+//         console.error("Rendering error:", err);
+//         reject(err);
+//       });
+//   });
+// };
+
 export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: "A4" });
     const stream = new PassThrough();
     const chunks: Buffer[] = [];
-    const gstPercentage = Number(process.env.gst);
-    const companyName = process.env.companyName;
-    const companyAddress = `#${process.env.companyAddress}`;
+    const gstMultiplier = Number(process.env.GST || 1.18); // e.g. 1.18
+    const companyName = process.env.COMPANYNAME;
+    const companyAddress = `#${process.env.COMPANYADDRESS}`;
 
-    // Payment Calculations
-    const bookingAmount = (
-      Number(booking.bookingAmount) / Number(gstPercentage)
-    ).toFixed(2);
-    const gst = Number(booking.bookingAmount) - Number(bookingAmount);
-    const cgst = (gst / 2).toFixed(2);
-    const sgstOrUtgst = (gst / 2).toFixed(2);
+    // Refund
+    const refund = Number(booking.refundPlayCoin || 0);
+
+    // Gross Amount (original inclusive of GST)
+    const grossAmount = Number(booking.bookingAmount) || 0;
+
+    // Remaining gross after refund
+    const adjustedGross = grossAmount - refund;
+
+    // Calculate Net + GST from adjustedGross
+    const taxableValue = +(adjustedGross / gstMultiplier).toFixed(2);
+    const gst = +(adjustedGross - taxableValue).toFixed(2);
+    const cgst = +(gst / 2).toFixed(2);
+    const sgstOrUtgst = +(gst / 2).toFixed(2);
+
     const isUT = booking?.venueId?.state?.toLowerCase() === "chandigarh";
     const gstLabel = isUT ? "UTGST" : "SGST";
 
@@ -1392,7 +1796,6 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
         .text(companyName || "Company Name", rightX, currentY, {
           align: "right",
         });
-
       currentY += 16;
       doc
         .font("Roboto-Regular")
@@ -1401,7 +1804,6 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
         .text(companyAddress || "Company Address", rightX, currentY, {
           align: "right",
         });
-
       currentY += 14;
       doc
         .font("Roboto-Bold")
@@ -1410,7 +1812,6 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
         .text(`GST: ${booking.venueId?.gstNumber || "N/A"}`, rightX, currentY, {
           align: "right",
         });
-
       currentY += 14;
       doc
         .font("Roboto-Bold")
@@ -1451,7 +1852,6 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
       const col2Width = 150;
       const rowHeight = 20;
 
-      // Header row
       doc.font("Roboto-Bold").fontSize(12).fillColor("#0e2642");
       doc.text("Description", x, y, { width: col1Width });
       doc.text("Amount (INR)", x + col1Width + 20, y, {
@@ -1466,11 +1866,29 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
         .lineTo(x + col1Width + col2Width + 20, y - 4)
         .stroke();
 
-      // Booking Amount
+      // Original Gross
       doc
         .font("Roboto-Regular")
-        .text("Booking Amount", x, y, { width: col1Width });
-      doc.text(Number(bookingAmount).toFixed(2), x + col1Width + 20, y, {
+        .text("Original Booking Amount", x, y, { width: col1Width });
+      doc.text(grossAmount.toFixed(2), x + col1Width + 20, y, {
+        width: col2Width,
+        align: "right",
+      });
+      y += rowHeight;
+
+      // Refund
+      if (refund > 0) {
+        doc.text("Refund", x, y, { width: col1Width });
+        doc.text(`- ${refund.toFixed(2)}`, x + col1Width + 20, y, {
+          width: col2Width,
+          align: "right",
+        });
+        y += rowHeight;
+      }
+
+      // Net Taxable Value
+      doc.text("Taxable Value", x, y, { width: col1Width });
+      doc.text(taxableValue.toFixed(2), x + col1Width + 20, y, {
         width: col2Width,
         align: "right",
       });
@@ -1478,35 +1896,34 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
 
       // CGST
       doc.text("CGST (9%)", x, y, { width: col1Width });
-      doc.text(Number(cgst).toFixed(2), x + col1Width + 20, y, {
+      doc.text(cgst.toFixed(2), x + col1Width + 20, y, {
         width: col2Width,
         align: "right",
       });
       y += rowHeight;
 
-      // SGST or UTGST
+      // SGST / UTGST
       doc.text(`${gstLabel} (9%)`, x, y, { width: col1Width });
-      doc.text(Number(sgstOrUtgst).toFixed(2), x + col1Width + 20, y, {
+      doc.text(sgstOrUtgst.toFixed(2), x + col1Width + 20, y, {
         width: col2Width,
         align: "right",
       });
       y += rowHeight;
 
-      // Divider before total
+      // Divider
       doc
         .strokeColor("#0e2642")
         .moveTo(x, y - 4)
         .lineTo(x + col1Width + col2Width + 20, y - 4)
         .stroke();
 
-      // Total
-      doc.font("Roboto-Bold").text("Total", x, y, { width: col1Width });
-      doc.text(
-        Number(booking.bookingAmount).toFixed(2),
-        x + col1Width + 20,
-        y,
-        { width: col2Width, align: "right" }
-      );
+      // Final Total (matches adjustedGross)
+      doc.font("Roboto-Bold").text("Total Payable", x, y, { width: col1Width });
+      doc.text(adjustedGross.toFixed(2), x + col1Width + 20, y, {
+        width: col2Width,
+        align: "right",
+      });
+
       return y + rowHeight;
     };
 
@@ -1612,7 +2029,7 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
         valueWidth,
       });
 
-      // Payment Summary Table
+      // Payment Summary
       y += 4;
       doc
         .font("Roboto-Bold")
@@ -1637,7 +2054,6 @@ export const downloadBookingReceipt = async (booking: any): Promise<Buffer> => {
       doc.text(generatedOn, 40, bottomY + 15, { align: "center", width: 515 });
     };
 
-    // Compose
     drawSections()
       .then(() => {
         drawFooter();

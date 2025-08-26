@@ -1623,86 +1623,85 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
 
   await Promise.all(
     transactionIds?.map(async (ids: any) => {
-      return async () => {
-        try {
-          const userTransaction = await transactionModel.findById(ids).lean();
+      try {
+        const userTransaction = await transactionModel.findById(ids).lean();
 
-          if (userTransaction) {
-            if (userTransaction?.playcoinsUsed > 0) {
-              let refactorCoin = Math.floor(
-                (userTransaction?.playcoinsUsed * percentage) / 100
-              );
-              await additionalUserInfoModel.findOneAndUpdate(
-                { userId: userTransaction.userId },
-                { $inc: { playCoins: refactorCoin } },
-                { session }
-              );
-            }
-
-            // Refund via Razorpay if applicable
-            let refund = null;
-            const actualRefundAmount =
-              userTransaction.amount - userTransaction.playcoinsUsed;
-            if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
-              refund = await razorpayInstance.payments.refund(
-                userTransaction.razorpayPaymentId,
-                {
-                  amount: Math.floor(
-                    ((actualRefundAmount * percentage) / 100) * 100
-                  ),
-                  notes: {
-                    bookingId: checkExist._id.toString(),
-                    userId: userTransaction.userId.toString(),
-                    reason: "Booking creator cancelled booking",
-                    CancelByAdmin: "true",
-                  },
-                }
-              );
-            }
-
-            await transactionModel.create(
-              [
-                {
-                  userId: userTransaction?.userId,
-                  bookingId: checkExist._id,
-                  text: `Booking cancelled by the Admin`,
-                  amount: Math.floor(
-                    (userTransaction.amount * percentage) / 100
-                  ),
-                  playcoinsUsed: Math.floor(
-                    (userTransaction.playcoinsUsed * percentage) / 100
-                  ),
-                  method: userTransaction?.method,
-                  status: "refunded",
-                  isWebhookVerified: true,
-                  razorpayRefundId: refund?.id || null,
-                  transactionDate: new Date(),
-                },
-              ],
+        if (userTransaction) {
+          if (userTransaction?.playcoinsUsed > 0) {
+            let refactorCoin = Math.floor(
+              (userTransaction?.playcoinsUsed * percentage) / 100
+            );
+            await bookingModel.findByIdAndUpdate(id, {
+              $set: { refundPlayCoin: refactorCoin },
+            });
+            await additionalUserInfoModel.findOneAndUpdate(
+              { userId: userTransaction.userId },
+              { $inc: { playCoins: refactorCoin } },
               { session }
             );
-
-            await notifyUser({
-              recipientId: userTransaction.userId,
-              type: "BOOKING_CANCELLED",
-              title: "Booking Cancelled",
-              message: `The booking scheduled for ${checkExist?.bookingDate.toLocaleDateString()} at ${
-                checkExist?.bookingSlots
-              } has been cancelled by the Admin with ${percentage}% refund due to ${reason}.`,
-              category: "BOOKING",
-              priority: "HIGH",
-              referenceId: checkExist?._id
-                ? new mongoose.Types.ObjectId(checkExist._id.toString())
-                : id,
-              referenceType: "bookings",
-              notificationType: "BOTH", // Send both in-app and push notification
-              session,
-            });
           }
-        } catch (err) {
-          console.error(`Error updating transaction ${id}:`, err);
+
+          // Refund via Razorpay if applicable
+          let refund = null;
+          const actualRefundAmount =
+            userTransaction.amount - userTransaction.playcoinsUsed;
+          if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
+            refund = await razorpayInstance.payments.refund(
+              userTransaction.razorpayPaymentId,
+              {
+                amount: Math.floor(
+                  ((actualRefundAmount * percentage) / 100) * 100
+                ),
+                notes: {
+                  bookingId: checkExist._id.toString(),
+                  userId: userTransaction.userId.toString(),
+                  reason: "Booking creator cancelled booking",
+                  CancelByAdmin: "true",
+                },
+              }
+            );
+          }
+
+          await transactionModel.create(
+            [
+              {
+                userId: userTransaction?.userId,
+                bookingId: checkExist._id,
+                text: `Booking cancelled by the Admin`,
+                amount: Math.floor((userTransaction.amount * percentage) / 100),
+                playcoinsUsed: Math.floor(
+                  (userTransaction.playcoinsUsed * percentage) / 100
+                ),
+                method: userTransaction?.method,
+                status: "refunded",
+                isWebhookVerified: true,
+                razorpayRefundId: refund?.id || null,
+                transactionDate: new Date(),
+              },
+            ],
+            { session }
+          );
+
+          await notifyUser({
+            recipientId: userTransaction.userId,
+            type: "BOOKING_CANCELLED",
+            title: "Booking Cancelled",
+            message: `The booking scheduled for ${checkExist?.bookingDate.toLocaleDateString()} at ${
+              checkExist?.bookingSlots
+            } has been cancelled by the Admin with ${percentage}% refund due to ${reason}.`,
+            category: "BOOKING",
+            priority: "HIGH",
+            referenceId: checkExist?._id
+              ? new mongoose.Types.ObjectId(checkExist._id.toString())
+              : id,
+            referenceType: "bookings",
+            notificationType: "BOTH", // Send both in-app and push notification
+            session,
+          });
         }
-      };
+      } catch (err) {
+        console.error(`Error updating transaction ${id}:`, err);
+      }
     })
   );
 
@@ -2621,6 +2620,10 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     .find({
       venueId: id,
       bookingDate: { $gte: startOfMonth, $lt: startOfNextMonth },
+      $or: [
+        { bookingType: "Complete" },
+        { bookingType: "Cancelled", refundPlayCoin: { $gt: 0 } },
+      ],
     })
     .populate("venueId")
     .populate("courtId")
@@ -2641,10 +2644,11 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     "Court Name",
     "User Name",
     "Booking Date",
+    "Total Amount",
+    "Refund",
     "Booking Amount",
     "CGST",
     "SGST/UTGST",
-    "Total Amount",
   ];
 
   const escape = (value: any) => {
@@ -2665,8 +2669,13 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
   for (const tx of bookingData) {
     // GST calculations
     const bookingAmountWithoutGST =
-      Number(tx.bookingAmount) / Number(process.env.gst);
-    const gst = Number(tx.bookingAmount) - bookingAmountWithoutGST;
+      (Number(tx.bookingAmount) - Number(tx.refundPlayCoin)) /
+      Number(process.env.GST);
+
+    const gst =
+      Number(tx.bookingAmount) -
+      Number(tx.refundPlayCoin) -
+      bookingAmountWithoutGST;
     const cgst = gst / 2;
     const sgstOrUtgst = gst / 2;
     const gstLabel =
@@ -2679,10 +2688,11 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
       tx.courtId.name || "",
       tx.userId.fullName || "",
       tx.bookingDate || "",
+      Number(tx.bookingAmount),
+      tx.refundPlayCoin || 0,
       bookingAmountWithoutGST.toFixed(2),
       cgst.toFixed(2),
       `${sgstOrUtgst.toFixed(2)}`,
-      tx.bookingAmount,
     ].map(escape);
 
     res.write(row.join(",") + "\n");

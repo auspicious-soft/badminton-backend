@@ -24,6 +24,7 @@ export interface BookingDocument extends Document {
   invoiceNumber?: string;
   invoiceSent?: boolean;
   invoiceLink?: string;
+  refundPlayCoin?: number;
   createdBy?: mongoose.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
@@ -202,6 +203,10 @@ const bookingSchema = new Schema(
     invoiceLink:{
       type: String,
       default:""
+    },
+    refundPlayCoin:{
+      type: Number,
+      default: 0
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
