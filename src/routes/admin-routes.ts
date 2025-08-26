@@ -144,7 +144,7 @@ router.get("/get-venues", getVenues);
 router.get("/get-courts", getCourts);
 
 router.post("/test", async (req: Request, res: Response)=> {
-  sendInvoiceToUser("68526d3538c503d8b574a521", "68a024aa1acd347e27fb0569")
+  sendInvoiceToUser(req.body.userId, req.body.bookingId)
   return{}
 })
 

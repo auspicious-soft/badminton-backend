@@ -27,7 +27,6 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
 
   let y: number, m: number, d: number;
 
-  // Normalize input date to y, m, d
   if (rawDate instanceof Date) {
     y = rawDate.getFullYear();
     m = rawDate.getMonth();
@@ -56,14 +55,11 @@ function makeBookingDateInIST(rawDate: any, slotHour: any) {
     throw new Error("Unsupported date input: " + rawDate);
   }
 
-  // Build UTC datetime corresponding to that IST slot
-  const IST_OFFSET_HOURS = 5.5;
-  const utcDate = new Date(Date.UTC(y, m, d, hour - IST_OFFSET_HOURS, 0, 0));
+  // Instead of 5.5, handle 5h 30m separately
+  const utcDate = new Date(Date.UTC(y, m, d, hour - 5, -30, 0));
 
   return utcDate;
 }
-
-
 
 export const bookCourtServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -201,7 +197,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
           })),
           bookingSlots: slot,
           bookingDate: makeBookingDateInIST(bookingDate, slot),
-          invoiceNumber:"",
+          invoiceNumber: "",
           bookingAmount: pricePerSlot[indx],
           expectedPayment: pricePerSlot[indx],
         };
