@@ -10,6 +10,7 @@ import { adminSettingModel } from "src/models/admin/admin-settings";
 import { notificationModel } from "src/models/notification/notification-schema";
 import { usersModel } from "src/models/user/user-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
+import { playcoinModel } from "src/models/admin/playcoin-schema";
 
 // Create or update pricing
 export const createUpdatePricing = async (req: Request, res: Response) => {
@@ -325,6 +326,7 @@ export const rewardsSettings = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
 export const updateRewardsSettings = async (req: Request, res: Response) => {
   try {
     let settings: any = await adminSettingModel.findOne();
@@ -355,6 +357,114 @@ export const updateRewardsSettings = async (req: Request, res: Response) => {
       success: true,
       message: "Rewards settings retrieved successfully",
       data: type ? settings[type] : settings,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const createPackage = async (req: Request, res: Response) => {
+  try {
+    const { amount, coinReceivable } = req.body;
+
+    const extraCoins = Math.abs(Number(amount) - Number(coinReceivable));
+
+    const data = await playcoinModel.create({
+      amount,
+      coinReceivable,
+      extraCoins,
+    });
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Success",
+      data,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const getPackage = async (req: Request, res: Response) => {
+  try {
+    const data = await playcoinModel.find({ isActive: true });
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Rewards settings retrieved successfully",
+      data: data,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const updatePackage = async (req: Request, res: Response) => {
+  try {
+    const { _id, amount, coinReceivable } = req.body;
+
+    const data = await playcoinModel.findById(_id);
+
+    if (!data) {
+      return errorResponseHandler(
+        "Invalid package id",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const extraCoins = Math.abs(Number(amount) - Number(coinReceivable));
+
+    const updatedData = await playcoinModel.findByIdAndUpdate(
+      _id,
+      {
+        $set: {
+          amount,
+          coinReceivable,
+          extraCoins,
+        },
+      },
+      { new: true }
+    );
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Package updated successfully",
+      data: updatedData,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const deletePackage = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.query;
+    const data = await playcoinModel.findById(_id);
+
+    if (!data) {
+      return errorResponseHandler(
+        "No package found",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+    await playcoinModel.findByIdAndDelete(_id);
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Package deleted successfully",
+      data: {},
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
@@ -550,6 +660,7 @@ export const sendPushToUsers = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
 export const getUsersForPush = async (req: Request, res: Response) => {
   try {
     const users = await usersModel

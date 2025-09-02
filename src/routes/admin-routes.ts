@@ -37,15 +37,19 @@ import {
   updateProduct,
 } from "src/controllers/admin/product-controller";
 import {
+  createPackage,
   createUpdateAdminSettings,
   createUpdatePricing,
+  deletePackage,
   getAdminSettings,
   getAllPricing,
   getNotifications,
+  getPackage,
   getUsersForPush,
   readNotification,
   rewardsSettings,
   sendPushToUsers,
+  updatePackage,
   updateRewardsSettings,
 } from "src/controllers/admin/settings-controller";
 import {
@@ -132,6 +136,8 @@ router
   .route("/reward-settings/:type")
   .get(rewardsSettings)
   .put(updateRewardsSettings);
+router.route("/packages").get(getPackage).post(createPackage).put(updatePackage).delete(deletePackage)
+
 //Orders
 router.route("/orders").get(getOrders).put(updateOrderStatus);
 router.route("/notifications").get(getNotifications).post(readNotification);
