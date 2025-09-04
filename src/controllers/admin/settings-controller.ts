@@ -678,3 +678,43 @@ export const getUsersForPush = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
+export const getTemplates = async (req: Request, res: Response) => {
+  try {
+    const { currentUser } = req as any;
+    let data = [] as any;
+    const templates = [
+      {
+        Title: `${currentUser.venueName} Closed Due to Bad Weather`,
+        Description: `We regret to inform you that games at ${currentUser.venueName} are suspended until further notice due to bad weather. Please stay tuned for updates on resumption.`,
+      },
+      {
+        Title: "Venue Resumed – Open for Bookings",
+        Description: `Good news! ${currentUser.venueName} has resumed operations and is now open for games and bookings. Thank you for your patience.`,
+      },
+      {
+        Title: `${currentUser.venueName} Court Under Maintenance`,
+        Description: `[Court Name] is temporarily closed for essential maintenance until further updates. We appreciate your patience and understanding.`,
+      },
+      {
+        Title: `${currentUser.venueName} Maintenance Completed`,
+        Description: `We are happy to announce that maintenance work at [Court Name] court has been completed. The venue is now open for play.`,
+      },
+    ];
+
+    if (currentUser.role === "employee") {
+      data = templates;
+    }
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Success",
+      data,
+    });
+  } catch (error: any) {
+    const { code, message } = error;
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};

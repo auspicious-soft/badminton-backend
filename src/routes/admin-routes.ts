@@ -45,6 +45,7 @@ import {
   getAllPricing,
   getNotifications,
   getPackage,
+  getTemplates,
   getUsersForPush,
   readNotification,
   rewardsSettings,
@@ -145,6 +146,8 @@ router
   .route("/custome-notification")
   .get(getUsersForPush)
   .post(sendPushToUsers);
+
+router.route("/get-templates").get(getTemplates)
 
 router.get("/get-venues", getVenues);
 router.get("/get-courts", getCourts);
