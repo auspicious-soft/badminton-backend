@@ -56,7 +56,7 @@ const router = Router();
 router.get("/get-user", getUser);
 router.put("/update-user", updateUser);
 router.get("/user-home-screen", userHome);
-router.get("/submit-phone", submitPhone)
+router.post("/submit-phone", submitPhone)
 router.post("/verify-phone", verifyPhoneNumber)
 router.post("/club-status", clubStatus);
 

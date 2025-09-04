@@ -36,6 +36,7 @@ export interface UserDocument {
     coordinates: [number, number]; // [longitude, latitude]
   };
   isBlocked?: boolean;
+  coinEarned?: number;
   permanentBlackAfter?: Date;
 }
 
