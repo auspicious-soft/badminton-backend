@@ -52,6 +52,7 @@ export const submitPhone = async (req: Request, res: Response) => {
     const checkExist = await usersModel.findOne({
       _id: { $ne: new mongoose.Types.ObjectId(userData.id) },
       phoneNumber,
+      phoneVerified: true,
     });
 
     if (checkExist) {
@@ -62,7 +63,10 @@ export const submitPhone = async (req: Request, res: Response) => {
       );
     }
 
-    await usersModel.findByIdAndUpdate(userData.id, { phoneNumber });
+    await usersModel.findByIdAndUpdate(userData.id, {
+      phoneNumber,
+      phoneVerified: false,
+    });
 
     await generateAndSendOTP("Phone", { phoneNumber });
 

@@ -153,10 +153,14 @@ const usersSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    permanentBlackAfter:{
+    coinEarned: {
+      type: Number,
+      default: 0,
+    },
+    permanentBlackAfter: {
       type: Date,
       default: null,
-    }
+    },
   },
   { timestamps: true }
 );

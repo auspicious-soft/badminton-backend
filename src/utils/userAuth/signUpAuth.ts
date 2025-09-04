@@ -32,8 +32,8 @@ export const getSignUpQueryByAuthType = (
   } else {
     return {
       $or: [
-        { email: userData.email?.toLowerCase() },
-        { phoneNumber: userData.phoneNumber },
+        { email: userData.email?.toLowerCase(), emailVerified: true },
+        { phoneNumber: userData.phoneNumber, phoneVerified: true },
       ],
     };
   }
