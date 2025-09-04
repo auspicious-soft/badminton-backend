@@ -1165,11 +1165,15 @@ export const getMatchesService = async (payload: any, res: Response) => {
           booking.team1.map(async (player: any) => {
             const userData = await usersModel
               .findById(player.playerId)
-              .select("fullName profilePic")
+              .select("fullName profilePic phoneNumber")
               .lean();
             return {
               ...player,
-              userData: userData || { fullName: "Unknown", profilePic: null },
+              userData: userData || {
+                fullName: "Unknown",
+                profilePic: null,
+                phoneNumber: null,
+              },
             };
           })
         );
@@ -1179,11 +1183,15 @@ export const getMatchesService = async (payload: any, res: Response) => {
           booking.team2.map(async (player: any) => {
             const userData = await usersModel
               .findById(player.playerId)
-              .select("fullName profilePic")
+              .select("fullName profilePic phoneNumber")
               .lean();
             return {
               ...player,
-              userData: userData || { fullName: "Unknown", profilePic: null },
+              userData: userData || {
+                fullName: "Unknown",
+                profilePic: null,
+                phoneNumber: null,
+              },
             };
           })
         );
@@ -1294,6 +1302,8 @@ export const createMatchService = async (payload: any, res: Response) => {
     venueId,
     courtId,
     bookingSlots,
+    rackets = 0,
+    balls = 0
   } = payload.body;
 
   const todayIST = getTodayISTDateString();
@@ -1410,6 +1420,8 @@ export const createMatchService = async (payload: any, res: Response) => {
         paymentStatus: "Paid",
         paidBy: "Self",
         playerPayment: 0,
+        rackets,
+        balls
       },
       {
         playerId: createdUsers[1]._id,

@@ -41,9 +41,11 @@ import {
   joinOpenCourt,
   modifyBooking,
   readUserNotifications,
+  submitPhone,
   updateUser,
   userHome,
   userNotifications,
+  verifyPhoneNumber,
 } from "src/controllers/user/user-home-controller";
 import { validateBookingRequest } from "src/middleware/booking-validation";
 import { uploadUserImageController } from "src/controllers/user/user-controller";
@@ -54,6 +56,8 @@ const router = Router();
 router.get("/get-user", getUser);
 router.put("/update-user", updateUser);
 router.get("/user-home-screen", userHome);
+router.get("/submit-phone", submitPhone)
+router.post("/verify-phone", verifyPhoneNumber)
 router.post("/club-status", clubStatus);
 
 router.get("/get-venues", getVenues);

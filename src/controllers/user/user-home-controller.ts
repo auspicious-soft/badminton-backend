@@ -1,11 +1,37 @@
 import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
-import { errorParser } from "../../lib/errors/error-response-handler";
-import {clubResponseServices, createGuestServices, getCourtsServices, getOpenMatchesByIdServices, getOpenMatchesServices, getVenuesServices, userHomeServices } from "src/services/user/home-services";
-import { bookCourtServices, cancelBookingServices, getDynamicPriceServices, joinOpenBookingServices, modifyBookingServices, paymentBookingServices, readUserNotificationServices, userNotificationServices } from "src/services/user/booking-services";
-import { getAppInfoServices, getUserServices, updateUserServices } from "src/services/user/user-service";
-
-
+import {
+  errorParser,
+  errorResponseHandler,
+} from "../../lib/errors/error-response-handler";
+import {
+  clubResponseServices,
+  createGuestServices,
+  getCourtsServices,
+  getOpenMatchesByIdServices,
+  getOpenMatchesServices,
+  getVenuesServices,
+  userHomeServices,
+} from "src/services/user/home-services";
+import {
+  bookCourtServices,
+  cancelBookingServices,
+  getDynamicPriceServices,
+  joinOpenBookingServices,
+  modifyBookingServices,
+  paymentBookingServices,
+  readUserNotificationServices,
+  userNotificationServices,
+} from "src/services/user/booking-services";
+import {
+  generateAndSendOTP,
+  getAppInfoServices,
+  getUserServices,
+  updateUserServices,
+  verifyOTPService,
+} from "src/services/user/user-service";
+import { usersModel } from "src/models/user/user-schema";
+import mongoose from "mongoose";
 
 export const userHome = async (req: Request, res: Response) => {
   try {
@@ -18,6 +44,58 @@ export const userHome = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
+export const submitPhone = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber } = req.body;
+    const userData = req.user as any;
+    const checkExist = await usersModel.findOne({
+      _id: { $ne: new mongoose.Types.ObjectId(userData.id) },
+      phoneNumber,
+    });
+
+    if (checkExist) {
+      return errorResponseHandler(
+        "Number already exist",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    await usersModel.findByIdAndUpdate(userData.id, { phoneNumber });
+
+    await generateAndSendOTP("Phone", { phoneNumber });
+
+    const response = {
+      success: true,
+      message: "Otp send successfully",
+      data: {},
+    };
+
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const verifyPhoneNumber = async (req: Request, res: Response) => {
+  try {
+    const { otp: phoneOtp } = req.body;
+    const userData = req.user as any;
+    const response = await verifyOTPService({ phoneOtp }, req, res);
+
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
 export const clubStatus = async (req: Request, res: Response) => {
   try {
     const response = await clubResponseServices(req, res);
@@ -76,8 +154,8 @@ export const getCourts = async (req: Request, res: Response) => {
 };
 export const createGuest = async (req: Request, res: Response) => {
   try {
-    if(!req.body.fullName){
-      throw new Error("Fullname is required")
+    if (!req.body.fullName) {
+      throw new Error("Fullname is required");
     }
     const response = await createGuestServices(req, res);
     return res.status(httpStatusCode.OK).json(response);
@@ -212,4 +290,4 @@ export const getAppInfo = async (req: Request, res: Response) => {
       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: message || "An error occurred" });
   }
-}
+};
