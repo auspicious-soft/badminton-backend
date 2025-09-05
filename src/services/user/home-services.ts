@@ -13,6 +13,7 @@ import { additionalUserInfoModel } from "src/models/user/additional-info-schema"
 import { friendsModel } from "src/models/user/friends-schema";
 import { end } from "pdfkit";
 import { user } from "src/routes";
+import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
 
 export const userHomeServices = async (req: Request, res: Response) => {
   const userData = req.user as any;
@@ -412,9 +413,11 @@ export const getCourtsServices = async (req: Request, res: Response) => {
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     const dayType = isWeekend ? "weekend" : "weekday";
 
+    const indiaToday = `${date}T00:00:00.000+00:00`;
+
     // Fetch pricing and bookings in parallel
     const [pricing, allBookings] = await Promise.all([
-      priceModel.findOne({ dayType, isActive: true }).lean(),
+      dynamicPrizeModel.find({ date: indiaToday }).lean(),
       bookingModel
         .find({
           venueId,
@@ -468,13 +471,19 @@ export const getCourtsServices = async (req: Request, res: Response) => {
         let isDiscounted = false;
         let isPremium = false;
 
-        if (pricing?.slotPricing?.length) {
-          const match = pricing.slotPricing.find((s: any) => s.slot === slot);
-          if (match) {
-            price = match.price;
-            isDiscounted = price < baseRate;
-            isPremium = price > baseRate;
-          }
+        const courtSlots = pricing.find((p) => String(p.courtId) === courtId);
+
+        if (courtSlots) {
+          const match = courtSlots?.slotPricing?.find(
+            (s: any) => s.slot === slot
+          );
+          price = match?.price || baseRate;
+          isDiscounted = price < baseRate;
+          isPremium = price > baseRate;
+        } else {
+          price = baseRate;
+          isDiscounted = price < baseRate;
+          isPremium = price > baseRate;
         }
 
         return {

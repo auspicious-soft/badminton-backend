@@ -32,6 +32,7 @@ import razorpayInstance from "src/config/razorpay";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { priceModel } from "src/models/admin/price-schema";
 import invoices from "razorpay/dist/types/invoices";
+import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -1303,7 +1304,7 @@ export const createMatchService = async (payload: any, res: Response) => {
     courtId,
     bookingSlots,
     rackets = 0,
-    balls = 0
+    balls = 0,
   } = payload.body;
 
   const todayIST = getTodayISTDateString();
@@ -1421,7 +1422,7 @@ export const createMatchService = async (payload: any, res: Response) => {
         paidBy: "Self",
         playerPayment: 0,
         rackets,
-        balls
+        balls,
       },
       {
         playerId: createdUsers[1]._id,
@@ -1508,6 +1509,12 @@ export const availableCourtSlotServices = async (
   res: Response
 ) => {
   const { courtId } = payload.query;
+  const now = new Date();
+  const istString = now.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  const indiaToday = `${istString}T00:00:00.000+00:00`;
+
   const today = new Date().toISOString();
   const todayEndDate = new Date(
     new Date().setHours(23, 59, 59, 999)
@@ -1551,9 +1558,12 @@ export const availableCourtSlotServices = async (
     return day === 0 || day === 6 ? "weekend" : "weekday";
   };
 
-  const dynamicPrices = await priceModel
+  console.log(indiaToday);
+
+  const dynamicPrices = await dynamicPrizeModel
     .findOne({
-      dayType: dayType(today),
+      date: indiaToday,
+      courtId,
     })
     .select("slotPricing")
     .lean();
@@ -1563,7 +1573,9 @@ export const availableCourtSlotServices = async (
   slots.forEach((slot: any) => {
     const slotPrice =
       dynamicPrices?.slotPricing?.find((price: any) => price.slot === slot)
-        ?.price || 0;
+        ?.price ||
+      venue.hourlyRate ||
+      1200;
     result.push({
       slot,
       price: slotPrice,

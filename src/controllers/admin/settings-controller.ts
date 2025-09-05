@@ -82,40 +82,40 @@ export const getAllPricing = async (req: Request, res: Response) => {
 };
 
 // Get pricing by ID
-export const getPricingById = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
+// export const getPricingById = async (req: Request, res: Response) => {
+//   try {
+//     const { id } = req.params;
 
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      return errorResponseHandler(
-        "Valid pricing ID is required",
-        httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
+//     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+//       return errorResponseHandler(
+//         "Valid pricing ID is required",
+//         httpStatusCode.BAD_REQUEST,
+//         res
+//       );
+//     }
 
-    const pricing = await priceModel.findById(id);
+//     const pricing = await priceModel.findById(id);
 
-    if (!pricing) {
-      return errorResponseHandler(
-        "Pricing not found",
-        httpStatusCode.NOT_FOUND,
-        res
-      );
-    }
+//     if (!pricing) {
+//       return errorResponseHandler(
+//         "Pricing not found",
+//         httpStatusCode.NOT_FOUND,
+//         res
+//       );
+//     }
 
-    return res.status(httpStatusCode.OK).json({
-      success: true,
-      message: "Pricing retrieved successfully",
-      data: pricing,
-    });
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
-  }
-};
+//     return res.status(httpStatusCode.OK).json({
+//       success: true,
+//       message: "Pricing retrieved successfully",
+//       data: pricing,
+//     });
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res
+//       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+//       .json({ success: false, message: message || "An error occurred" });
+//   }
+// };
 
 // Delete pricing
 export const deletePricing = async (req: Request, res: Response) => {

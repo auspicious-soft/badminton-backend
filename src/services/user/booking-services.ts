@@ -18,6 +18,8 @@ import { notifyUser } from "src/utils/FCM/FCM";
 import { venueModel } from "src/models/venue/venue-schema";
 import { fillAndStroke } from "pdfkit";
 import { generateInvoiceNumber, sendInvoiceToUser } from "src/utils";
+import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
+import { courtModel } from "src/models/venue/court-schema";
 
 function makeBookingDateInIST(rawDate: any, slotHour: any) {
   const hour = parseInt(slotHour, 10);
@@ -82,10 +84,11 @@ export const bookCourtServices = async (req: Request, res: Response) => {
   // ********************Validations****************************
 
   // Get the current date and determine if it's a weekday or weekend
+
+  const courtData = await courtModel.findById(courtId).lean();
   const dateCheck = makeBookingDateInIST(bookingDate, bookingSlots[0]);
-  const dayOfWeek = dateCheck.getDay();
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  const dayType = isWeekend ? "weekend" : "weekday";
+  console.log("Booking Date in IST:", makeBookingDateInIST(bookingDate, 6));
+  const dateString = dateCheck.toISOString().split("T")[0];
 
   // Calculate total payment by summing prices for all slots
   let totalSlotPayment = 0;
@@ -93,7 +96,14 @@ export const bookCourtServices = async (req: Request, res: Response) => {
   // Get price for each booking slot
   const pricePerSlot = [] as number[];
   for (const slot of bookingSlots) {
-    const slotPrice = await priceModel.findPriceForSlot(dayType, slot);
+    const dynamicCheck = await dynamicPrizeModel
+      .findOne({ courtId, date: `${dateString}T00:00:00.000+00:00` })
+      .lean();
+    let priceObject = dynamicCheck?.slotPricing.find(
+      (s) => s.slot === slot
+    )?.price;
+
+    const slotPrice = priceObject || courtData?.hourlyRate || 1200;
     if (!slotPrice) {
       return errorResponseHandler(
         `Price configuration not found for slot ${slot}`,
@@ -112,8 +122,6 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       res
     );
   }
-
-  const completeCourtPrice: number = totalSlotPayment / bookingSlots.length; // For full court
 
   // Process all players to set payment information and collect player IDs for paidFor
   [...team1, ...team2].forEach((item) => {
