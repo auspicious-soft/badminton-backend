@@ -149,7 +149,17 @@ export const validateBookingRequest = async (
       );
     }
 
-    if (!bookingSlots.every((slot) => VENUE_TIME_SLOTS.includes(slot))) {
+    // Venue validation
+    const venue = await venueModel.findById(venueId).lean();
+    if (!venue) {
+      return errorResponseHandler(
+        "Venue not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    if (!bookingSlots.every((slot) => venue?.timeslots.includes(slot))) {
       return errorResponseHandler(
         "Invalid booking slot format",
         httpStatusCode.BAD_REQUEST,
@@ -228,16 +238,6 @@ export const validateBookingRequest = async (
       return errorResponseHandler(
         "Maximum 4 players are allowed",
         httpStatusCode.BAD_REQUEST,
-        res
-      );
-    }
-
-    // Venue validation
-    const venue = await venueModel.findById(venueId);
-    if (!venue) {
-      return errorResponseHandler(
-        "Venue not found",
-        httpStatusCode.NOT_FOUND,
         res
       );
     }
