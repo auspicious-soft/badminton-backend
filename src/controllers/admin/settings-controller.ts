@@ -5,7 +5,7 @@ import {
   errorResponseHandler,
 } from "src/lib/errors/error-response-handler";
 import mongoose, { PipelineStage } from "mongoose";
-import { priceModel } from "src/models/admin/price-schema";
+// import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { notificationModel } from "src/models/notification/notification-schema";
 import { usersModel } from "src/models/user/user-schema";

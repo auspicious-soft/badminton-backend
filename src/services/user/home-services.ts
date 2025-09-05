@@ -7,7 +7,7 @@ import { usersModel } from "src/models/user/user-schema";
 import mongoose from "mongoose";
 import { courtModel } from "src/models/venue/court-schema";
 import { getCurrentISTTime, isDateTodayInIST } from "../../utils";
-import { priceModel } from "src/models/admin/price-schema";
+// import { priceModel } from "src/models/admin/price-schema";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { friendsModel } from "src/models/user/friends-schema";

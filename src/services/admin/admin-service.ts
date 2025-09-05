@@ -30,7 +30,7 @@ import { match } from "assert";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import razorpayInstance from "src/config/razorpay";
 import { notifyUser } from "src/utils/FCM/FCM";
-import { priceModel } from "src/models/admin/price-schema";
+// import { priceModel } from "src/models/admin/price-schema";
 import invoices from "razorpay/dist/types/invoices";
 import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
 
@@ -1307,6 +1307,12 @@ export const createMatchService = async (payload: any, res: Response) => {
     balls = 0,
   } = payload.body;
 
+  const now = new Date();
+  const istString = now.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  const indiaToday = `${istString}T00:00:00.000+00:00`;
+
   const todayIST = getTodayISTDateString();
   // Start of the day in IST
   const startOfDayIST = new Date(`${todayIST}T00:00:00+05:30`).toISOString();
@@ -1335,14 +1341,10 @@ export const createMatchService = async (payload: any, res: Response) => {
     );
   }
 
-  const dayType = (today: string) => {
-    const day = new Date(today + "T00:00:00+05:30").getDay();
-    return day === 0 || day === 6 ? "weekend" : "weekday";
-  };
-
-  const dynamicPrices = await priceModel
+  const dynamicPrices = await dynamicPrizeModel
     .findOne({
-      dayType: dayType(todayIST),
+      date: indiaToday,
+      courtId,
     })
     .select("slotPricing")
     .lean();
@@ -1615,9 +1617,9 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
       res
     );
   }
-  if (percentage < 10 || percentage > 100) {
+  if (percentage < 0 || percentage > 100) {
     return errorResponseHandler(
-      "Percentage should be between 10 to 100",
+      "Percentage should be between 0 to 100",
       httpStatusCode.BAD_REQUEST,
       res
     );

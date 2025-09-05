@@ -33,7 +33,7 @@ import {
   createGuest,
   getAppInfo,
   getCourts,
-  getDynamicPrice,
+  // getDynamicPrice,
   getOpenMatches,
   getOpenMatchesById,
   getUser,
@@ -67,7 +67,7 @@ router.post("/create-guest", createGuest)
 router.post("/book-court", validateBookingRequest, bookCourt);
 router.put("/modify-booking/:id", modifyBooking);
 router.post("/booking-payment", bookingPayment);
-router.get("/get-dynamic-price", getDynamicPrice);
+// router.get("/get-dynamic-price", getDynamicPrice);
 router.post("/cancel-booking", cancelBooking);
 
 router.get("/get-open-matches", getOpenMatches);

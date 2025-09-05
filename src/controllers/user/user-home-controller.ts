@@ -16,7 +16,7 @@ import {
 import {
   bookCourtServices,
   cancelBookingServices,
-  getDynamicPriceServices,
+  // getDynamicPriceServices,
   joinOpenBookingServices,
   modifyBookingServices,
   paymentBookingServices,
@@ -204,17 +204,18 @@ export const bookingPayment = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-export const getDynamicPrice = async (req: Request, res: Response) => {
-  try {
-    const response = await getDynamicPriceServices(req, res);
-    return res.status(httpStatusCode.OK).json(response);
-  } catch (error: any) {
-    const { code, message } = errorParser(error);
-    return res
-      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-      .json({ success: false, message: message || "An error occurred" });
-  }
-};
+
+// export const getDynamicPrice = async (req: Request, res: Response) => {
+//   try {
+//     const response = await getDynamicPriceServices(req, res);
+//     return res.status(httpStatusCode.OK).json(response);
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res
+//       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+//       .json({ success: false, message: message || "An error occurred" });
+//   }
+// };
 
 export const cancelBooking = async (req: Request, res: Response) => {
   try {
