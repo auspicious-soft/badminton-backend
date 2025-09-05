@@ -41,6 +41,7 @@ import {
   createUpdateAdminSettings,
   createUpdatePricing,
   deletePackage,
+  deletePricing,
   getAdminSettings,
   getAllPricing,
   getNotifications,
@@ -118,7 +119,7 @@ router
   .delete(deleteInventory);
 
 //Dynamic Pricing routes
-router.route("/dynamic-pricing").post(createUpdatePricing).get(getAllPricing);
+router.route("/dynamic-pricing").post(createUpdatePricing).get(getAllPricing).delete(deletePricing);
 
 //Maintenance routes
 router.post("/maintenance-booking", createMaintenanceBooking);
