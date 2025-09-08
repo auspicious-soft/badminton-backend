@@ -60,7 +60,7 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
 export const getAllPricing = async (req: Request, res: Response) => {
   try {
     const { courtId, date } = req.query;
-    const findIt = {};
+    const findIt = {} as any;
     if (courtId) {
       Object.assign(findIt, { courtId });
     }
@@ -68,9 +68,20 @@ export const getAllPricing = async (req: Request, res: Response) => {
       Object.assign(findIt, { date: new Date(`${date}T00:00:00.000Z`) });
     }
 
+    const todayDateInUTC = new Date();
+    todayDateInUTC.setUTCHours(0, 0, 0, 0);
+
+    findIt["date"] = { $gte: todayDateInUTC };
+
+    console.log(todayDateInUTC);
+
     const pricingPlans = await dynamicPrizeModel
       .find(findIt)
-      .populate("courtId", "name games venueId");
+      .populate({
+        path: "courtId",
+        select: "name games venueId",
+        populate: { path: "venueId", select: "name address image" },
+      });
 
     const venues = await venueModel
       .find({ isActive: true })

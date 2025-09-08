@@ -32,7 +32,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
       );
     }
 
-    const currentDate = new Date().toISOString()
+    const currentDate = new Date().toISOString();
 
     const baseMatchFilter: any = {
       $or: [
@@ -408,11 +408,6 @@ export const uploadScore = async (req: Request, res: Response) => {
         (settings?.loyaltyPoints?.limit || 2000) /
         (settings?.loyaltyPoints?.perMatch || 200);
 
-      const milestone = Array.from(
-        { length: 30 },
-        (_, index) => (index + 1) * freeGameAfter
-      );
-
       const { player_A1, player_A2, player_B1, player_B2 } = restData;
       const inc = settings?.loyaltyPoints?.perMatch || 200;
 
@@ -422,28 +417,72 @@ export const uploadScore = async (req: Request, res: Response) => {
         // Fixed: Corrected the updateOne syntax and added proper error handling
         const points = await additionalUserInfoModel.findOneAndUpdate(
           { userId: id },
-          { $inc: { loyaltyPoints: inc } },
+          {
+            $inc: {
+              [courtData?.games === "Padel"
+                ? "padelLoyalty"
+                : "pickleballLoyalty"]: inc,
+            },
+          },
           { new: true, upsert: true }
         );
 
         // Fixed: Check if points reached the limit after increment
         if (
           points &&
-          points.loyaltyPoints >= (settings?.loyaltyPoints?.limit || 2000)
+          points[
+            courtData?.games === "Padel" ? "padelLoyalty" : "pickleballLoyalty"
+          ] >= (settings?.loyaltyPoints?.limit || 2000)
         ) {
+          //25% of last 10 game bookings
+          const last10Bookings = await gameScoreModel
+            .find(
+              {
+                $or: [
+                  { player_A1: id },
+                  { player_A2: id },
+                  { player_B1: id },
+                  { player_B2: id },
+                ],
+                gameType: courtData?.games,
+              },
+              {},
+              { sort: { createdAt: -1 }, limit: 10 }
+            )
+            .populate("bookingId", "bookingAmount")
+            .lean();
+
+          const totalAmount = last10Bookings.reduce((sum, game) => {
+            const bookingAmount = (game.bookingId as any)?.bookingAmount || 0;
+            return sum + bookingAmount;
+          }, 0);
+
+          const rewardAmount = (totalAmount / freeGameAfter) * 0.25;
+
           await additionalUserInfoModel.updateOne(
             { userId: id },
             {
-              $inc: { freeGameCount: 1 },
-              $set: { loyaltyPoints: 0 },
+              $inc: {
+                playCoins: Math.round(rewardAmount),
+                freeGameCount: Math.round(rewardAmount),
+              },
+              $set: {
+                [courtData?.games === "Padel"
+                  ? "padelLoyalty"
+                  : "pickleballLoyalty"]: 0,
+              },
             }
           );
 
           await notifyUser({
             recipientId: id,
-            type: "FREE_GAME_EARNED",
-            title: "Congrats! You have earned a free game",
-            message: `You have earned a free game after successfully completing milestone of ${freeGameAfter} games`,
+            type: "REFUND_COMPLETED",
+            title: "Congrats! You have earned milestone reward",
+            message: `You have earned ${Math.round(
+              rewardAmount
+            )} playcoins on successful completion of ${freeGameAfter} ${
+              courtData?.games
+            } games`,
             category: "SYSTEM",
             notificationType: "BOTH",
             referenceId: bookingId,

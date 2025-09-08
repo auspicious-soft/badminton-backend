@@ -22,6 +22,8 @@ export interface AdditionalUserInfoDocument extends Document {
   playCoins: number;
   referrals: ReferralInfo;
   loyaltyPoints: number;
+  padelLoyalty: number;
+  pickleballLoyalty: number;
   loyaltyTier: string;
   notificationPreferences: NotificationPreferences;
   clubMember: boolean;
@@ -73,6 +75,19 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
       default: 0,
       min: 0,
     },
+
+    padelLoyalty:{
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    pickleballLoyalty:{
+      type: Number,
+      default: 0,
+      min: 0, 
+    },
+
     loyaltyTier: {
       type: String,
       enum: ["Bronze", "Silver", "Gold", "Platinum", "Diamond"],
