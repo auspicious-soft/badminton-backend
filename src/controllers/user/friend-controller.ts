@@ -52,7 +52,7 @@ export const searchFriend = async (req: Request, res: Response) => {
         { fullName: { $regex: new RegExp(String(search), "i") } },
         { email: { $regex: new RegExp(String(search), "i") } },
         { phoneNumber: { $regex: new RegExp(String(search), "i") } },
-        { isBlocked: false }
+        { isBlocked: false },
       ];
     }
 
@@ -625,25 +625,31 @@ export const getFriends = async (req: Request, res: Response) => {
         .lean();
 
       // Map user details to relationships
-      let friendsWithDetails = friendRelationships.map((rel) => {
-        const friendId =
-          rel.userId.toString() === userData.id.toString()
-            ? rel.friendId
-            : rel.userId;
+      let friendsWithDetails = friendRelationships
+        .map((rel) => {
+          const friendId =
+            rel.userId.toString() === userData.id.toString()
+              ? rel.friendId
+              : rel.userId;
 
-        const userDetails =
-          friendUsers.find(
+          const userDetails = friendUsers.find(
             (user) => user._id.toString() === friendId.toString()
-          ) || {};
+          );
 
-        return {
-          relationshipId: rel._id,
-          friendId: friendId,
-          status: rel.status,
-          updatedAt: rel.updatedAt,
-          ...userDetails,
-        };
-      });
+          if (!userDetails) {
+            // user deleted, skip this entry
+            return null;
+          }
+
+          return {
+            relationshipId: rel._id,
+            friendId,
+            status: rel.status,
+            updatedAt: rel.updatedAt,
+            ...userDetails,
+          };
+        })
+        .filter(Boolean); // remove nulls
 
       // Apply search filter to friends if search parameter is provided
       if (search) {
