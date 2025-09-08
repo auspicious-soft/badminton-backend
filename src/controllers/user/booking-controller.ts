@@ -67,7 +67,7 @@ export const getMyMatches = async (req: Request, res: Response) => {
     const bookings = await bookingModel
       .find(baseMatchFilter)
       .populate("venueId", "name city state address")
-      .populate("courtId", "games")
+      .populate("courtId", "games name")
       .sort({ bookingDate: -1 })
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
