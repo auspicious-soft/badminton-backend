@@ -115,12 +115,38 @@ export const userHomeServices = async (req: Request, res: Response) => {
     .select("clubResponse")
     .lean();
 
+  const padelResponse = {
+    games:
+      (userLoyalty?.padelLoyalty || 0) /
+      (banners?.loyaltyPoints?.perMatch || 200),
+    gamesLeft:
+      (banners?.loyaltyPoints?.limit || 2000) /
+        (banners?.loyaltyPoints?.perMatch || 200) -
+      (userLoyalty?.padelLoyalty || 0) /
+        (banners?.loyaltyPoints?.perMatch || 200),
+    plancoinEarned: userLoyalty?.freeGameCount || 0,
+    totalLevels: totalLevel,
+  };
+  const pickleballResponse = {
+    games:
+      (userLoyalty?.pickleballLoyalty || 0) /
+      (banners?.loyaltyPoints?.perMatch || 200),
+    gamesLeft:
+      (banners?.loyaltyPoints?.limit || 2000) /
+        (banners?.loyaltyPoints?.perMatch || 200) -
+      (userLoyalty?.pickleballLoyalty || 0) /
+        (banners?.loyaltyPoints?.perMatch || 200),
+    plancoinEarned: userLoyalty?.freeGameCount || 0,
+    totalLevels: totalLevel,
+  };
   const data = {
     banners: banners?.banners || [],
     upcomingMatches: allMatches,
     venueNearby: nearbyVenues,
     playersRanking: [], // Can be fetched in parallel too if added later
     clubResponse: clubResponse?.clubResponse ? true : false,
+    padelResponse,
+    pickleballResponse,
     loyaltyPoints: {
       points: userLoyalty?.loyaltyPoints || 0,
       level,
