@@ -12,6 +12,8 @@ import { usersModel } from "src/models/user/user-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { playcoinModel } from "src/models/admin/playcoin-schema";
 import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
+import { courtModel } from "src/models/venue/court-schema";
+import { venueModel } from "src/models/venue/venue-schema";
 
 // Create or update pricing
 export const createUpdatePricing = async (req: Request, res: Response) => {
@@ -66,12 +68,43 @@ export const getAllPricing = async (req: Request, res: Response) => {
       Object.assign(findIt, { date: new Date(`${date}T00:00:00.000Z`) });
     }
 
-    const pricingPlans = await dynamicPrizeModel.find(findIt);
+    const pricingPlans = await dynamicPrizeModel
+      .find(findIt)
+      .populate("courtId", "name games venueId");
+
+    const venues = await venueModel
+      .find({ isActive: true })
+      .select("name address image")
+      .lean();
+
+    const courts = await courtModel
+      .find({ isActive: true })
+      .select("name games venueId hourlyRate")
+      .lean();
+
+    const courtsWithVenue = {} as any;
+
+    venues.forEach((venue: any) => {
+      courts.forEach((court: any) => {
+        if (court.venueId.toString() === venue._id.toString()) {
+          if (!courtsWithVenue[venue._id]) {
+            courtsWithVenue[venue._id] = {
+              venueId: venue._id,
+              venueName: venue.name,
+              address: venue.address,
+              image: venue.image,
+              courts: [],
+            };
+          }
+          courtsWithVenue[venue._id].courts.push(court);
+        }
+      });
+    });
 
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Pricing plans retrieved successfully",
-      data: pricingPlans,
+      data: { pricingPlans, courtsWithVenue: Object.values(courtsWithVenue) },
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
