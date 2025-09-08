@@ -33,6 +33,8 @@ export interface VenueDocument extends Document {
     temperature: number;
     lastUpdated: Date;
   };
+  rain?: boolean;
+  hour?: Date;
   contactInfo?: string;
 }
 
@@ -147,6 +149,14 @@ const venueSchema = new Schema<VenueDocument>(
       icon: { type: String, default: null },
       temperature: { type: Number, default: null },
       lastUpdated: { type: Date, default: null },
+    },
+    rain: {
+      type: Boolean,
+      default: false,
+    },
+    hour: {
+      type: Date,
+      default: null,
     },
     contactInfo: {
       type: String,

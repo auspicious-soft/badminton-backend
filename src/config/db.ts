@@ -1,8 +1,12 @@
 import { configDotenv } from "dotenv";
 import mongoose from "mongoose";
-import { startInvoiceCron, startWeatherCron } from "src/crons/app.cron";
+import {
+  startInvoiceCron,
+  startWeatherCron,
+  venueRainCron,
+} from "src/crons/app.cron";
 
-configDotenv(); 
+configDotenv();
 
 const connectDB = async () => {
   const maxRetries = 5; // Number of retry attempts
@@ -13,18 +17,21 @@ const connectDB = async () => {
       await mongoose.connect(process.env.MONGO_URL as string);
       console.log("MongoDB connected 🚀");
       startWeatherCron();
-      startInvoiceCron()
+      startInvoiceCron();
+      venueRainCron();
       console.log("Weather cron started 🚀");
-
     } catch (error: any) {
       attempt += 1;
-      console.error(`MongoDB connection attempt ${attempt} failed: ${error.message}`);
- 
+      console.error(
+        `MongoDB connection attempt ${attempt} failed: ${error.message}`
+      );
+
       if (attempt < maxRetries) {
-        console.log(`Retrying in 5 seconds... (Attempt ${attempt + 1} of ${maxRetries})`);
+        console.log(
+          `Retrying in 5 seconds... (Attempt ${attempt + 1} of ${maxRetries})`
+        );
         setTimeout(connectWithRetry, 5000); // Retry after 5 seconds
-      } 
-      else {
+      } else {
         console.error("Max retry attempts reached. Exiting...");
         process.exit(1);
       }

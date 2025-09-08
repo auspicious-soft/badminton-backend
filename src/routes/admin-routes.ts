@@ -58,8 +58,10 @@ import {
   createMaintenanceBooking,
   deleteMaintenanceBooking,
   getMaintenanceBookings,
+  getToggle,
   listOfCourts,
   listOfVenues,
+  postToggle,
   updateMaintenanceBooking,
 } from "src/controllers/admin/maintenance-controller";
 
@@ -128,6 +130,10 @@ router.put("/maintenance-booking/:id", updateMaintenanceBooking);
 router.delete("/maintenance-booking/:id", deleteMaintenanceBooking);
 router.get("/venue-list", listOfVenues);
 router.get("/court-list", listOfCourts);
+
+//Rain Toggle routes
+
+router.route("/rain-toggle").get(getToggle).post(postToggle);
 
 //Admin Settings routes
 router

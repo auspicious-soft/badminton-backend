@@ -4,6 +4,7 @@ import {
   updateVenueWeather,
 } from "src/services/admin/background-service";
 import { getCurrentISTTime } from "../utils";
+import { venueModel } from "src/models/venue/venue-schema";
 
 // Runs every 2 hours (120 minutes)
 export const startWeatherCron = () => {
@@ -33,7 +34,6 @@ export const startWeatherCron = () => {
   });
 };
 
-
 export const startInvoiceCron = () => {
   // Every hour at :40, from 01:40 to 16:40 UTC (07:10–22:10 IST)
   cron.schedule(
@@ -52,3 +52,24 @@ export const startInvoiceCron = () => {
   );
 };
 
+export const venueRainCron = async () => {
+  cron.schedule("58 * * * *", async () => {
+    try {
+      const now = new Date();
+
+      const result = await venueModel.updateMany(
+        {
+          rain: true,
+          hour: { $gt: now }, // assuming "hours" is a Date field
+        },
+        { $set: { rain: false } }
+      );
+
+      console.log(
+        `✅ Ran at ${now.toISOString()} | Updated: ${result.modifiedCount}`
+      );
+    } catch (err) {
+      console.error("❌ Cron error:", err);
+    }
+  });
+};

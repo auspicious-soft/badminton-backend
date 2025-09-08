@@ -8,6 +8,8 @@ import { bookingModel } from "src/models/venue/booking-schema";
 import { courtModel } from "src/models/venue/court-schema";
 import { venueModel } from "src/models/venue/venue-schema";
 import mongoose from "mongoose";
+import { getCurrentISTTime } from "src/utils";
+import { cancelMatchServices } from "src/services/admin/admin-service";
 
 export const createMaintenanceBooking = async (req: Request, res: Response) => {
   try {
@@ -71,7 +73,7 @@ export const createMaintenanceBooking = async (req: Request, res: Response) => {
       },
       bookingPaymentStatus: true,
       // isMaintenance: false, // Only check for regular bookings
-      bookingType: {$ne:"Cancelled"}
+      bookingType: { $ne: "Cancelled" },
     });
 
     if (existingBookings.length > 0) {
@@ -291,7 +293,10 @@ export const deleteMaintenanceBooking = async (req: Request, res: Response) => {
 
 export const listOfVenues = async (req: Request, res: Response) => {
   try {
-    const venues = await venueModel.find({ isActive: true }).select("name _id timeslots").lean();
+    const venues = await venueModel
+      .find({ isActive: true })
+      .select("name _id timeslots")
+      .lean();
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Venues retrieved successfully",
@@ -316,11 +321,172 @@ export const listOfCourts = async (req: Request, res: Response) => {
         res
       );
     }
-    const courts = await courtModel.find({ venueId, isActive: true }).select("name _id games").lean();
+    const courts = await courtModel
+      .find({ venueId, isActive: true })
+      .select("name _id games")
+      .lean();
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Courts retrieved successfully",
       data: courts,
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: message || "An error occurred",
+    });
+  }
+};
+
+export const getToggle = async (req: Request, res: Response) => {
+  try {
+    const { venueId } = req.query;
+    const match = {} as any;
+
+    if (venueId) {
+      match._id = venueId;
+    }
+
+    const venueData = await venueModel
+      .find(match)
+      .select("rain hour name image");
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Toggle turned on",
+      data: venueData,
+    });
+
+    return;
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: message || "An error occurred",
+    });
+  }
+};
+
+export const postToggle = async (req: Request, res: Response) => {
+  try {
+    const { venueId, hour } = req.body;
+    const adminData = req.user as any;
+    const checkExist = await venueModel.findById(venueId).lean();
+    if (!checkExist) {
+      return errorResponseHandler(
+        "Venue not found",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+    if (hour < 1 || hour > 12) {
+      return errorResponseHandler(
+        "Hour must be between 1 and 12",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const nowIST = getCurrentISTTime();
+    const now = new Date();
+    const istString = now.toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata",
+    });
+    const todayStart = `${istString}T00:00:00.000+00:00`;
+    const todayEnd = `${istString}T23:59:59.999+00:00`;
+
+    const arrayOfhours = [] as any;
+    for (let i = 0; i < hour; i++) {
+      const slotHour = new Date(
+        nowIST.getTime() + i * 60 * 60 * 1000
+      ).setMinutes(0);
+      arrayOfhours.push(
+        new Date(slotHour + 60 * 60 * 1000).toTimeString().slice(0, 5)
+      );
+    }
+
+    const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+    const plus5Time = new Date(utcTime + hour * 60 * 60000);
+    const closingTime = plus5Time.toISOString();
+
+    const bookings = await bookingModel
+      .find({
+        bookingDate: {
+          $gte: todayStart,
+          $lte: todayEnd,
+        },
+        venueId: venueId,
+        bookingPaymentStatus: true,
+        bookingSlots: { $in: arrayOfhours },
+        cancellationReason: null,
+        bookingType: "Complete",
+      })
+      .lean();
+
+    Promise.all(
+      bookings.map(async (booking) => {
+        const payload = {
+          body: { percentage: 100, reason: "Rain", id: booking._id.toString() },
+        };
+        await cancelMatchServices(payload, res);
+      })
+    );
+
+    const allCourts = await courtModel.find({ venueId }).lean();
+
+    const promises: Promise<any>[] = [];
+
+    for (const court of allCourts) {
+      for (const slot of arrayOfhours) {
+        const p = bookingModel.findOneAndUpdate(
+          {
+            bookingDate: {
+              $gte: todayStart,
+              $lte: todayEnd,
+            },
+            venueId: venueId,
+            bookingSlots: slot,
+            courtId: new mongoose.Types.ObjectId(court?._id as any),
+            bookingPaymentStatus: true,
+          },
+          {
+            userId: adminData.id, // Using admin ID as the user ID
+            venueId: new mongoose.Types.ObjectId(venueId),
+            courtId: new mongoose.Types.ObjectId(court?._id as any),
+            gameType: "Private", // Default value
+            bookingType: "Booking", // Default value
+            bookingAmount: 0, // No charge for maintenance
+            bookingPaymentStatus: true, // Mark as paid to block the slot
+            bookingDate: todayStart,
+            bookingSlots: slot,
+            isMaintenance: true,
+            maintenanceReason: "Rain",
+            createdBy: new mongoose.Types.ObjectId(adminData.id),
+          },
+          { upsert: true }
+        );
+
+        promises.push(p);
+      }
+    }
+
+    // Run all updates in parallel
+    await Promise.all(promises);
+
+    console.log("✅ All maintenance bookings updated successfully");
+
+    await venueModel.findByIdAndUpdate(venueId, {
+      rain: true,
+      hour: closingTime,
+    });
+
+    //book all courts for maintanance
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Toggle turned on",
+      data: {},
     });
   } catch (error: any) {
     const { code, message } = errorParser(error);
