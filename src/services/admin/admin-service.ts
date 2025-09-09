@@ -1653,9 +1653,9 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
         const userTransaction = await transactionModel.findById(ids).lean();
 
         if (userTransaction) {
-          if (userTransaction?.playcoinsUsed > 0) {
+          if (userTransaction?.amount > 0) {
             let refactorCoin = Math.floor(
-              (userTransaction?.playcoinsUsed * percentage) / 100
+              (userTransaction?.amount * percentage) / 100
             );
             await bookingModel.findByIdAndUpdate(id, {
               $set: { refundPlayCoin: refactorCoin },
@@ -1668,25 +1668,25 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
           }
 
           // Refund via Razorpay if applicable
-          let refund = null;
-          const actualRefundAmount =
-            userTransaction.amount - userTransaction.playcoinsUsed;
-          if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
-            refund = await razorpayInstance.payments.refund(
-              userTransaction.razorpayPaymentId,
-              {
-                amount: Math.floor(
-                  ((actualRefundAmount * percentage) / 100) * 100
-                ),
-                notes: {
-                  bookingId: checkExist._id.toString(),
-                  userId: userTransaction.userId.toString(),
-                  reason: "Booking creator cancelled booking",
-                  CancelByAdmin: "true",
-                },
-              }
-            );
-          }
+          // let refund = null;
+          // const actualRefundAmount =
+          //   userTransaction.amount - userTransaction.playcoinsUsed;
+          // if (userTransaction.razorpayPaymentId && actualRefundAmount > 0) {
+          //   refund = await razorpayInstance.payments.refund(
+          //     userTransaction.razorpayPaymentId,
+          //     {
+          //       amount: Math.floor(
+          //         ((actualRefundAmount * percentage) / 100) * 100
+          //       ),
+          //       notes: {
+          //         bookingId: checkExist._id.toString(),
+          //         userId: userTransaction.userId.toString(),
+          //         reason: "Booking creator cancelled booking",
+          //         CancelByAdmin: "true",
+          //       },
+          //     }
+          //   );
+          // }
 
           await transactionModel.create(
             [
@@ -1701,7 +1701,7 @@ export const cancelMatchServices = async (payload: any, res: Response) => {
                 method: userTransaction?.method,
                 status: "refunded",
                 isWebhookVerified: true,
-                razorpayRefundId: refund?.id || null,
+                razorpayRefundId: null,
                 transactionDate: new Date(),
               },
             ],
