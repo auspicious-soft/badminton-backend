@@ -448,6 +448,7 @@ export const postToggle = async (req: Request, res: Response) => {
             bookingSlots: slot,
             courtId: new mongoose.Types.ObjectId(court?._id as any),
             bookingPaymentStatus: true,
+            bookingType: "Complete",
           },
           {
             userId: adminData.id, // Using admin ID as the user ID
