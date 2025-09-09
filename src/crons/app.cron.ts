@@ -53,7 +53,7 @@ export const startInvoiceCron = () => {
 };
 
 export const venueRainCron = async () => {
-  cron.schedule("58 * * * *", async () => {
+  cron.schedule("30 * * * *", async () => {
     try {
       console.warn("⚠️ Running venue rain update...");
       const now = new Date();
