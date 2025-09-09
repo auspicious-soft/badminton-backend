@@ -438,34 +438,20 @@ export const postToggle = async (req: Request, res: Response) => {
 
     for (const court of allCourts) {
       for (const slot of arrayOfhours) {
-        const p = bookingModel.findOneAndUpdate(
-          {
-            bookingDate: {
-              $gte: todayStart,
-              $lte: todayEnd,
-            },
-            venueId: venueId,
-            bookingSlots: slot,
-            courtId: new mongoose.Types.ObjectId(court?._id as any),
-            bookingPaymentStatus: true,
-            bookingType: "Complete",
-          },
-          {
-            userId: adminData.id, // Using admin ID as the user ID
-            venueId: new mongoose.Types.ObjectId(venueId),
-            courtId: new mongoose.Types.ObjectId(court?._id as any),
-            gameType: "Private", // Default value
-            bookingType: "Booking", // Default value
-            bookingAmount: 0, // No charge for maintenance
-            bookingPaymentStatus: true, // Mark as paid to block the slot
-            bookingDate: todayStart,
-            bookingSlots: slot,
-            isMaintenance: true,
-            maintenanceReason: "Rain",
-            createdBy: new mongoose.Types.ObjectId(adminData.id),
-          },
-          { upsert: true }
-        );
+        const p = bookingModel.create({
+          userId: adminData.id, // Using admin ID as the user ID
+          venueId: new mongoose.Types.ObjectId(venueId),
+          courtId: new mongoose.Types.ObjectId(court?._id as any),
+          gameType: "Private", // Default value
+          bookingType: "Booking", // Default value
+          bookingAmount: 0, // No charge for maintenance
+          bookingPaymentStatus: true, // Mark as paid to block the slot
+          bookingDate: todayStart,
+          bookingSlots: slot,
+          isMaintenance: true,
+          maintenanceReason: "Rain",
+          createdBy: new mongoose.Types.ObjectId(adminData.id),
+        });
 
         promises.push(p);
       }
