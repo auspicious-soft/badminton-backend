@@ -405,10 +405,8 @@ export const postToggle = async (req: Request, res: Response) => {
         new Date(slotHour + 60 * 60 * 1000).toTimeString().slice(0, 5)
       );
     }
-
-    const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
-    const plus5Time = new Date(utcTime + hour * 60 * 60000);
-    const closingTime = plus5Time.toISOString();
+    const newNow = new Date();
+    const closingTime = new Date(newNow.getTime() + hour * 60 * 60 * 1000);
 
     const bookings = await bookingModel
       .find({
@@ -420,6 +418,7 @@ export const postToggle = async (req: Request, res: Response) => {
         bookingPaymentStatus: true,
         bookingSlots: { $in: arrayOfhours },
         cancellationReason: null,
+        isMaintenance: false,
         bookingType: "Complete",
       })
       .lean();
