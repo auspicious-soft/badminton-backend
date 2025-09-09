@@ -342,10 +342,11 @@ export const listOfCourts = async (req: Request, res: Response) => {
 export const getToggle = async (req: Request, res: Response) => {
   try {
     const { venueId } = req.query;
-    const match = {} as any;
+    const match = {hour : {$ne: null}} as any;
 
     if (venueId) {
       match._id = venueId;
+    
     }
 
     const venueData = await venueModel
@@ -358,7 +359,6 @@ export const getToggle = async (req: Request, res: Response) => {
       data: venueData,
     });
 
-    return;
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
