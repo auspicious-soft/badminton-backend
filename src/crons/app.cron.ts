@@ -55,14 +55,15 @@ export const startInvoiceCron = () => {
 export const venueRainCron = async () => {
   cron.schedule("58 * * * *", async () => {
     try {
+      console.warn("⚠️ Running venue rain update...");
       const now = new Date();
 
       const result = await venueModel.updateMany(
         {
           rain: true,
-          hour: { $gt: now }, // assuming "hours" is a Date field
+          hour: { $lte: now }, // assuming "hours" is a Date field
         },
-        { $set: { rain: false } }
+        { $set: { rain: false, hour: null } }
       );
 
       console.log(
