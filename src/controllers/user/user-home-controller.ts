@@ -53,12 +53,12 @@ export const submitPhone = async (req: Request, res: Response) => {
       _id: { $ne: new mongoose.Types.ObjectId(userData.id) },
       phoneNumber,
       phoneVerified: true,
-    });
+    }).lean();
 
     if (checkExist) {
       return errorResponseHandler(
         "Number already exist",
-        httpStatusCode.NOT_FOUND,
+        httpStatusCode.BAD_REQUEST,
         res
       );
     }

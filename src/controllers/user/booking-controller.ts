@@ -373,7 +373,7 @@ export const uploadScore = async (req: Request, res: Response) => {
     // Check if score already exists for this booking
     const checkScoreExist = await gameScoreModel.findOne({ bookingId });
 
-    const winner = getWinnerTeam(restData.gameType, restData);
+    const winner = getWinnerTeam(restData.gameType as any, restData) as any;
 
     let data;
     let message = "Score uploaded successfully";
@@ -464,7 +464,8 @@ export const uploadScore = async (req: Request, res: Response) => {
             {
               $inc: {
                 playCoins: Math.round(rewardAmount),
-                freeGameCount: Math.round(rewardAmount),
+                earnedPadel: courtData?.games === "Padel" ? Math.round(rewardAmount) : 0,
+                earnedPickleball: courtData?.games === "Pickleball" ? Math.round(rewardAmount) : 0,
               },
               $set: {
                 [courtData?.games === "Padel"

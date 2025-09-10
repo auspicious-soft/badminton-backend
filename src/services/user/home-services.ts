@@ -124,7 +124,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
         (banners?.loyaltyPoints?.perMatch || 200) -
       (userLoyalty?.padelLoyalty || 0) /
         (banners?.loyaltyPoints?.perMatch || 200),
-    plancoinEarned: userLoyalty?.freeGameCount || 0,
+    plancoinEarned: userLoyalty?.earnedPadel || 0,
     totalLevels: totalLevel,
   };
   const pickleballResponse = {
@@ -136,7 +136,7 @@ export const userHomeServices = async (req: Request, res: Response) => {
         (banners?.loyaltyPoints?.perMatch || 200) -
       (userLoyalty?.pickleballLoyalty || 0) /
         (banners?.loyaltyPoints?.perMatch || 200),
-    plancoinEarned: userLoyalty?.freeGameCount || 0,
+    plancoinEarned: userLoyalty?.earnedPickleball || 0,
     totalLevels: totalLevel,
   };
   const data = {
@@ -147,12 +147,6 @@ export const userHomeServices = async (req: Request, res: Response) => {
     clubResponse: clubResponse?.clubResponse ? true : false,
     padelResponse,
     pickleballResponse,
-    loyaltyPoints: {
-      points: userLoyalty?.loyaltyPoints || 0,
-      level,
-      totalLevels: totalLevel,
-      freeGames: userLoyalty?.freeGameCount || 0,
-    },
   };
 
   return {

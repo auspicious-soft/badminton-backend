@@ -28,6 +28,8 @@ export interface AdditionalUserInfoDocument extends Document {
   notificationPreferences: NotificationPreferences;
   clubMember: boolean;
   freeGameCount: number;
+  earnedPadel: number;
+  earnedPickleball: number;
   playerRating: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -120,6 +122,16 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
       },
     },
     freeGameCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    earnedPadel: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    earnedPickleball: {
       type: Number,
       default: 0,
       min: 0,
