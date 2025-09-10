@@ -44,6 +44,7 @@ export const searchFriend = async (req: Request, res: Response) => {
     // Build search query
     const searchQuery: any = {
       _id: { $ne: userData.id }, // Exclude current user
+      isBlocked: false,
     };
 
     // Add search term if provided
@@ -52,7 +53,6 @@ export const searchFriend = async (req: Request, res: Response) => {
         { fullName: { $regex: new RegExp(String(search), "i") } },
         { email: { $regex: new RegExp(String(search), "i") } },
         { phoneNumber: { $regex: new RegExp(String(search), "i") } },
-        { isBlocked: false },
       ];
     }
 
@@ -103,6 +103,7 @@ export const searchFriend = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
 export const sendRequest = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
