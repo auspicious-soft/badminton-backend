@@ -90,9 +90,9 @@ jobs:
               -e RAZORPAY_KEY_SECRET='${{ secrets.RAZORPAY_KEY_SECRET }}' \
               -e RAZORPAY_WEBHOOK_SECRET='${{ secrets.RAZORPAY_WEBHOOK_SECRET }}' \
               -e Two_Factor_Key='${{ secrets.Two_Factor_Key }}' \
-              -e TWILIO_ACCOUNT_SID='${{ secrets.TWILIO_ACCOUNT_SID }}' \
-              -e TWILIO_AUTH_TOKEN='${{ secrets.TWILIO_AUTH_TOKEN }}' \
-              -e TWILIO_PHONE_NUMBER='${{ secrets.TWILIO_PHONE_NUMBER }}' \
+              -e COMPANYNAME='${{ secrets.COMPANYNAME }}' \
+              -e COMPANYADDRESS='${{ secrets.COMPANYADDRESS }}' \
+              -e GST='${{ secrets.GST }}' \
               ${{ secrets.DOCKER_USERNAME }}/playapp-backend:latest || { echo 'Docker run failed'; exit 1; }
 
             echo 'Container running successfully'
