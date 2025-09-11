@@ -342,11 +342,10 @@ export const listOfCourts = async (req: Request, res: Response) => {
 export const getToggle = async (req: Request, res: Response) => {
   try {
     const { venueId } = req.query;
-    const match = {hour : {$ne: null}} as any;
+    const match = { hour: { $ne: null } } as any;
 
     if (venueId) {
       match._id = venueId;
-    
     }
 
     const venueData = await venueModel
@@ -358,7 +357,6 @@ export const getToggle = async (req: Request, res: Response) => {
       message: "Toggle turned on",
       data: venueData,
     });
-
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
@@ -369,9 +367,31 @@ export const getToggle = async (req: Request, res: Response) => {
 };
 
 export const postToggle = async (req: Request, res: Response) => {
+  // Retry configuration
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 100; // milliseconds
+
+  const executeWithRetry = async (operation: () => Promise<any>, retries = MAX_RETRIES): Promise<any> => {
+    try {
+      return await operation();
+    } catch (error: any) {
+      if (
+        (error.code === 112 || error.code === 251 || error.errorLabels?.includes('TransientTransactionError')) &&
+        retries > 0
+      ) {
+        console.log(`Retrying operation, ${retries} attempts left...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return executeWithRetry(operation, retries - 1);
+      }
+      throw error;
+    }
+  };
+
   try {
     const { venueId, hour } = req.body;
     const adminData = req.user as any;
+
+    // Validate venue exists
     const checkExist = await venueModel.findById(venueId).lean();
     if (!checkExist) {
       return errorResponseHandler(
@@ -380,6 +400,8 @@ export const postToggle = async (req: Request, res: Response) => {
         res
       );
     }
+
+    // Validate hour range
     if (hour < 1 || hour > 12) {
       return errorResponseHandler(
         "Hour must be between 1 and 12",
@@ -396,6 +418,7 @@ export const postToggle = async (req: Request, res: Response) => {
     const todayStart = `${istString}T00:00:00.000+00:00`;
     const todayEnd = `${istString}T23:59:59.999+00:00`;
 
+    // Generate array of hours
     const arrayOfhours = [] as any;
     for (let i = 0; i < hour; i++) {
       const slotHour = new Date(
@@ -405,9 +428,11 @@ export const postToggle = async (req: Request, res: Response) => {
         new Date(slotHour + 60 * 60 * 1000).toTimeString().slice(0, 5)
       );
     }
+
     const newNow = new Date();
     const closingTime = new Date(newNow.getTime() + hour * 60 * 60 * 1000);
 
+    // Step 1: Find bookings to cancel
     const bookings = await bookingModel
       .find({
         bookingDate: {
@@ -423,62 +448,117 @@ export const postToggle = async (req: Request, res: Response) => {
       })
       .lean();
 
-    Promise.all(
-      bookings.map(async (booking) => {
-        const payload = {
-          body: { percentage: 100, reason: "Rain", id: booking._id.toString() },
-        };
-        await cancelMatchServices(payload, res);
-      })
-    );
+    console.log(`Found ${bookings.length} bookings to cancel`);
 
-    const allCourts = await courtModel.find({ venueId }).lean();
-
-    const promises: Promise<any>[] = [];
-
-    for (const court of allCourts) {
-      for (const slot of arrayOfhours) {
-        const p = bookingModel.create({
-          userId: adminData.id, // Using admin ID as the user ID
-          venueId: new mongoose.Types.ObjectId(venueId),
-          courtId: new mongoose.Types.ObjectId(court?._id as any),
-          gameType: "Private", // Default value
-          bookingType: "Booking", // Default value
-          bookingAmount: 0, // No charge for maintenance
-          bookingPaymentStatus: true, // Mark as paid to block the slot
-          bookingDate: todayStart,
-          bookingSlots: slot,
-          isMaintenance: true,
-          maintenanceReason: "Rain",
-          createdBy: new mongoose.Types.ObjectId(adminData.id),
+    // Step 2: Cancel bookings sequentially to avoid conflicts
+    for (const booking of bookings) {
+      try {
+        await executeWithRetry(async () => {
+          const payload = {
+            body: { percentage: 100, reason: "Rain", id: booking._id.toString() },
+          };
+          await cancelMatchServices(payload, res);
         });
-
-        promises.push(p);
+        console.log(`Cancelled booking: ${booking._id}`);
+      } catch (error: any) {
+        console.error(`Failed to cancel booking ${booking._id}:`, error.message);
+        // Continue with other bookings even if one fails
       }
     }
 
-    // Run all updates in parallel
-    await Promise.all(promises);
+    // Step 3: Get all courts
+    const allCourts = await courtModel.find({ venueId }).lean();
+    console.log(`Found ${allCourts.length} courts`);
+
+    // Step 4: Create maintenance bookings in smaller batches to avoid conflicts
+    const BATCH_SIZE = 10;
+    const maintenanceOps = allCourts.flatMap((court: any) =>
+      arrayOfhours.map((slot: any) => ({
+        updateOne: {
+          filter: {
+            venueId: new mongoose.Types.ObjectId(venueId),
+            courtId: new mongoose.Types.ObjectId(court._id),
+            bookingDate: todayStart,
+            bookingSlots: slot,
+            isMaintenance: true,
+          },
+          update: {
+            $set: {
+              userId: adminData.id,
+              gameType: "Private",
+              bookingType: "Booking",
+              bookingAmount: 0,
+              bookingPaymentStatus: true,
+              isMaintenance: true,
+              maintenanceReason: "Rain",
+              createdBy: new mongoose.Types.ObjectId(adminData.id),
+            },
+          },
+          upsert: true,
+        },
+      }))
+    );
+
+    // Process maintenance operations in batches with retry logic
+    for (let i = 0; i < maintenanceOps.length; i += BATCH_SIZE) {
+      const batch = maintenanceOps.slice(i, i + BATCH_SIZE);
+      
+      await executeWithRetry(async () => {
+        await bookingModel.bulkWrite(batch, { 
+          ordered: false,
+          // Disable transactions for bulk operations to avoid conflicts
+          session: undefined 
+        });
+      });
+      
+      console.log(`Processed maintenance batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(maintenanceOps.length / BATCH_SIZE)}`);
+    }
 
     console.log("✅ All maintenance bookings updated successfully");
 
-    await venueModel.findByIdAndUpdate(venueId, {
-      rain: true,
-      hour: closingTime,
+    // Step 5: Update venue with retry logic
+    await executeWithRetry(async () => {
+      await venueModel.findByIdAndUpdate(
+        venueId,
+        {
+          rain: true,
+          hour: closingTime,
+        },
+        { 
+          // Add options to handle potential conflicts
+          runValidators: false,
+          strict: false
+        }
+      );
     });
 
-    //book all courts for maintanance
+    console.log("✅ Venue updated successfully");
 
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: "Toggle turned on",
-      data: {},
+      message: "Toggle turned on successfully",
+      data: {
+        cancelledBookings: bookings.length,
+        maintenanceSlots: maintenanceOps.length,
+        closingTime: closingTime,
+      },
     });
+
   } catch (error: any) {
+    console.error("Error in postToggle:", error);
+    
+    // Handle specific MongoDB errors
+    if (error.code === 112) {
+      console.error("Write conflict occurred - operation may have partially completed");
+    } else if (error.code === 251) {
+      console.error("Transaction was aborted - operation may have partially completed");
+    }
+
     const { code, message } = errorParser(error);
     return res.status(code || httpStatusCode.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: message || "An error occurred",
+      message: message || "An error occurred during toggle operation",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
