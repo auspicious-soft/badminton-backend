@@ -1020,7 +1020,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
     limit,
     city,
     type = "upcoming",
-    game = "all",
+    game,
     date,
     venueId,
   } = payload.query;
@@ -1116,23 +1116,27 @@ export const getMatchesService = async (payload: any, res: Response) => {
     }
 
     // Add search query if provided
-    if (city) {
-      // We need to first find venues with matching city
-      const venues = await venueModel
-        .find({
-          city: { $regex: city, $options: "i" },
-        })
-        .select("_id")
-        .lean();
+    // if (city) {
+    //   // We need to first find venues with matching city
+    //   const venues = await venueModel
+    //     .find({
+    //       city: { $regex: city, $options: "i" },
+    //     })
+    //     .select("_id")
+    //     .lean();
 
-      // Then use those venue IDs in our booking query
-      const venueIds = venues.map((venue) => venue._id);
-      matchQuery.venueId = { $in: venueIds };
-    }
+    //   // Then use those venue IDs in our booking query
+    //   const venueIds = venues.map((venue) => venue._id);
+    //   matchQuery.venueId = { $in: venueIds };
+    // }
 
     if (venueId) {
       // If venueId is provided, filter by that specific venue
       matchQuery.venueId = new mongoose.Types.ObjectId(venueId);
+    }
+
+    if(game){
+      matchQuery.courtId = new mongoose.Types.ObjectId(game);
     }
 
     // First, get all bookings without game filtering
@@ -1145,11 +1149,6 @@ export const getMatchesService = async (payload: any, res: Response) => {
 
     // Filter by game type if specified
     let filteredBookings = bookings;
-    if (game !== "all") {
-      filteredBookings = bookings.filter(
-        (booking) => booking.courtId && (booking.courtId as any).games === game // Use the game parameter for filtering
-      );
-    }
 
     // Apply pagination after filtering
     const totalMatches = filteredBookings.length;
