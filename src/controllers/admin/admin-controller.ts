@@ -27,8 +27,12 @@ import {
   availableCourtSlotServices,
   addRentedItemsServices,
 } from "../../services/admin/admin-service";
-import { errorParser, formatErrorResponse } from "../../lib/errors/error-response-handler";
+import {
+  errorParser,
+  formatErrorResponse,
+} from "../../lib/errors/error-response-handler";
 import { httpStatusCode } from "../../lib/constant";
+import { usersModel } from "src/models/user/user-schema";
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -68,7 +72,10 @@ export const newPassswordAfterOTPVerified = async (
 
 // ******************** Handle Employees **************************
 
-export const createEmployee = async (req: Request, res: Response): Promise<Response> => {
+export const createEmployee = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
   try {
     const response = await createEmployeeService(req.body, res);
     return res.status(httpStatusCode.CREATED).json(response);
@@ -111,27 +118,27 @@ export const getEmployeesById = async (req: Request, res: Response) => {
 };
 
 export const getAdminDetails = async (req: Request, res: Response) => {
-    try {
-      const response = await getAdminDetailsService(req, res);
-      return res.status(httpStatusCode.OK).json(response);
-    } catch (error: any) {
-      const { code, message } = errorParser(error);
-      return res
-        .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-        .json({ success: false, message: message || "An error occurred" });
-    }
+  try {
+    const response = await getAdminDetailsService(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
 };
 
 export const updateAdminDetails = async (req: Request, res: Response) => {
-    try {
-      const response = await updateAdminDetailsServices(req, res);
-      return res.status(httpStatusCode.OK).json(response);
-    } catch (error: any) {
-      const { code, message } = errorParser(error);
-      return res
-        .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-        .json({ success: false, message: message || "An error occurred" });
-    }
+  try {
+    const response = await updateAdminDetailsServices(req, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
 };
 
 export const logoutEmployee = async (req: Request, res: Response) => {
@@ -148,55 +155,53 @@ export const logoutEmployee = async (req: Request, res: Response) => {
 
 // ******************** Handle Venue **************************
 
-
 export const createVenue = async (req: Request, res: Response) => {
-    try {
-      const response = await createVenueService(req.body, res);
-      return res.status(httpStatusCode.CREATED).json(response);
-    } catch (error: any) {
-      const { code, message } = errorParser(error);
-      return res
-        .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-        .json({ success: false, message: message || "An error occurred" });
-    }
-  };
+  try {
+    const response = await createVenueService(req.body, res);
+    return res.status(httpStatusCode.CREATED).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
 
-  export const updateVenue = async (req: Request, res: Response) => {
-    try {
-      const response = await updateVenueService(req.body, res);
-      return res.status(httpStatusCode.OK).json(response);
-    } catch (error: any) {
-      const { code, message } = errorParser(error);
-      return res
-        .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-        .json({ success: false, message: message || "An error occurred" });
-    }
-  };
+export const updateVenue = async (req: Request, res: Response) => {
+  try {
+    const response = await updateVenueService(req.body, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
 
-  export const getVenue = async (req: Request, res: Response) => {
-    try {
-      const response = await getVenueService(req.query, res);
-      return res.status(httpStatusCode.OK).json(response);
-    } catch (error: any) {
-      const { code, message } = errorParser(error);
-      return res
-        .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-        .json({ success: false, message: message || "An error occurred" });
-    }
-  };
+export const getVenue = async (req: Request, res: Response) => {
+  try {
+    const response = await getVenueService(req.query, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
 
 export const getVenueById = async (req: Request, res: Response) => {
-    try {
-      const response = await getVenueByIdService(req.query, res);
-      return res.status(httpStatusCode.OK).json(response);
-    } catch (error: any) {
-      const { code, message } = errorParser(error);
-      return res
-        .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
-        .json({ success: false, message: message || "An error occurred" });
-    }
-  };
-
+  try {
+    const response = await getVenueByIdService(req.query, res);
+    return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
 
 //******************** Handle Users ************************* */
 
@@ -216,6 +221,31 @@ export const getUsersById = async (req: Request, res: Response) => {
   try {
     const response = await getUsersByIdService(req, res);
     return res.status(httpStatusCode.OK).json(response);
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
+export const blockUserById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const user = await usersModel.findById(id);
+
+    await usersModel.findByIdAndUpdate(
+      id,
+      { isBlocked: !user?.isBlocked, permanentBlackAfter: new Date() },
+      { new: true }
+    );
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "User block status updated successfully",
+      data: [],
+    });
   } catch (error: any) {
     const { code, message } = errorParser(error);
     return res
@@ -249,8 +279,6 @@ export const addRentedItems = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-
-
 
 export const createMatch = async (req: Request, res: Response) => {
   try {
@@ -330,6 +358,3 @@ export const venueBookingFile = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
-
-
-

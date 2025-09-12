@@ -189,6 +189,7 @@ export const deleteAccount = async (req: Request, res: Response) => {
     });
   }
 };
+
 export const getTutorialLink = async (req: Request, res: Response) => {
   try {
     const adminSettings = await adminSettingModel.findOne({ isActive: true });

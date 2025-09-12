@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   addRentedItems,
   availableCourtSlot,
+  blockUserById,
   cancelMatch,
   createEmployee,
   createMatch,
@@ -95,7 +96,7 @@ router.get("/get-venue-by-id", getVenueById);
 
 //Users routes
 router.get("/get-users", getUsers);
-router.get("/get-users/:id", getUsersById);
+router.route("/get-users/:id").get(getUsersById).put(blockUserById);
 
 //Matches routes
 router.get("/get-matches", getMatches);
@@ -123,7 +124,11 @@ router
   .delete(deleteInventory);
 
 //Dynamic Pricing routes
-router.route("/dynamic-pricing").post(createUpdatePricing).get(getAllPricing).delete(deletePricing);
+router
+  .route("/dynamic-pricing")
+  .post(createUpdatePricing)
+  .get(getAllPricing)
+  .delete(deletePricing);
 
 //Maintenance routes
 router.post("/maintenance-booking", createMaintenanceBooking);
@@ -146,7 +151,12 @@ router
   .route("/reward-settings/:type")
   .get(rewardsSettings)
   .put(updateRewardsSettings);
-router.route("/packages").get(getPackage).post(createPackage).put(updatePackage).delete(deletePackage)
+router
+  .route("/packages")
+  .get(getPackage)
+  .post(createPackage)
+  .put(updatePackage)
+  .delete(deletePackage);
 
 //Orders
 router.route("/orders").get(getOrders).put(updateOrderStatus);
@@ -156,15 +166,15 @@ router
   .get(getUsersForPush)
   .post(sendPushToUsers);
 
-router.route("/get-templates").get(getTemplates)
+router.route("/get-templates").get(getTemplates);
 
 router.get("/get-venues", getVenues);
 router.get("/get-courts", getCourts);
 
-router.post("/test", async (req: Request, res: Response)=> {
-  sendInvoiceToUser(req.body.userId, req.body.bookingId)
-  return{}
-})
+router.post("/test", async (req: Request, res: Response) => {
+  sendInvoiceToUser(req.body.userId, req.body.bookingId);
+  return {};
+});
 
 //Test Route to create playcoin plans
 
