@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  addRentedItems,
   availableCourtSlot,
   cancelMatch,
   createEmployee,
@@ -98,6 +99,7 @@ router.get("/get-users/:id", getUsersById);
 
 //Matches routes
 router.get("/get-matches", getMatches);
+router.post("/add-rented-items", addRentedItems);
 router.post("/create-match", createMatch);
 router.get("/available-court-slots", availableCourtSlot);
 router.get("/get-cities", getCities);

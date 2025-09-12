@@ -1135,7 +1135,7 @@ export const getMatchesService = async (payload: any, res: Response) => {
       matchQuery.venueId = new mongoose.Types.ObjectId(venueId);
     }
 
-    if(game){
+    if (game) {
       matchQuery.courtId = new mongoose.Types.ObjectId(game);
     }
 
@@ -1241,6 +1241,52 @@ export const getMatchesService = async (payload: any, res: Response) => {
       res
     );
   }
+};
+
+export const addRentedItemsServices = async (payload: any, res: Response) => {
+  const {
+    bookingId,
+    player1 = { rackets: 0, balls: 0 },
+    player2 = { rackets: 0, balls: 0 },
+    player3 = { rackets: 0, balls: 0 },
+    player4 = { rackets: 0, balls: 0 },
+  } = payload.body;
+
+  const booking = await bookingModel.findById(bookingId);
+  if (!booking) {
+    return errorResponseHandler(
+      "Booking not found",
+      httpStatusCode.NOT_FOUND,
+      res
+    );
+  }
+
+  if (booking.team1[0]) {
+    booking.team1[0].rackets = player1.rackets || 0;
+    booking.team1[0].balls = player1.balls || 0;
+  }
+
+  if (booking.team1[1]) {
+    booking.team1[1].rackets = player2.rackets || 0;
+    booking.team1[1].balls = player2.balls || 0;
+  }
+
+  if (booking.team2[0]) {
+    booking.team2[0].rackets = player3.rackets || 0;
+    booking.team2[0].balls = player3.balls || 0;
+  }
+  if (booking.team2[1]) {
+    booking.team2[1].rackets = player4.rackets || 0;
+    booking.team2[1].balls = player4.balls || 0;
+  }
+
+  await booking.save();
+
+  return {
+    success: true,
+    message: "Rented items updated successfully",
+    data: booking,
+  };
 };
 
 function makeBookingDateInIST(rawDate: any, slotHour: any) {
@@ -1606,6 +1652,7 @@ export const getCitiesService = async (payload: any, res: Response) => {
     );
   }
 };
+
 export const cancelMatchServices = async (payload: any, res: Response) => {
   const { percentage, reason, id } = payload.body;
 
