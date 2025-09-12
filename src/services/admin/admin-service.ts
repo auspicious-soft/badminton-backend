@@ -852,6 +852,7 @@ export const getUsersService = async (payload: any, res: Response) => {
           email: 1,
           phoneNumber: 1,
           profilePic: 1,
+          isBlocked: 1,
           createdAt: 1,
           _id: 1,
         },
@@ -2704,7 +2705,6 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
   // const transactions = await transactionModel.aggregate(pipeline).exec();
 
   const venueName = bookingData.length ? bookingData[0]?.venueId?.name : "";
-
   const monthName = monthNames[Number(month) - 1];
   const safeVenueName = venueName.replace(/[\/\\?%*:|"<>]/g, "_");
   const fileName = `${monthName}-${safeVenueName}-Transactions.csv`;
@@ -2717,6 +2717,8 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     "User Name",
     "Booking Date",
     "Total Amount",
+    "Rackets Rented",
+    "Balls Rented",
     "Refund",
     "Booking Amount",
     "CGST",
@@ -2753,6 +2755,14 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
     const gstLabel =
       tx.venueState?.toLowerCase() === "chandigarh" ? "UTGST" : "SGST";
 
+    const racketsRented =
+      tx.team1.reduce((a: any, b: any) => a + (b.rackets || 0), 0) +
+      tx.team2.reduce((a: any, b: any) => a + (b.rackets || 0), 0);
+
+    const ballsRented =
+      tx.team1.reduce((a: any, b: any) => a + (b.balls || 0), 0) +
+      tx.team2.reduce((a: any, b: any) => a + (b.balls || 0), 0);
+
     const row = [
       tx.invoiceNumber || "",
       tx.invoiceLink || "",
@@ -2761,6 +2771,8 @@ export const venueBookingFileServices = async (req: any, res: Response) => {
       tx.userId.fullName || "",
       tx.bookingDate || "",
       Number(tx.bookingAmount),
+      racketsRented,
+      ballsRented,
       tx.refundPlayCoin || 0,
       bookingAmountWithoutGST.toFixed(2),
       cgst.toFixed(2),
