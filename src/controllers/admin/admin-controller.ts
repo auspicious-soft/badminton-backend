@@ -243,7 +243,7 @@ export const blockUserById = async (req: Request, res: Response) => {
 
     return res.status(httpStatusCode.OK).json({
       success: true,
-      message: "User block status updated successfully",
+      message: `User ${user?.isBlocked ? "unblocked" : "blocked"} successfully`,
       data: [],
     });
   } catch (error: any) {
