@@ -76,7 +76,7 @@ export const loginUserService = async (
     !user &&
     (authType === "Google" || authType === "Apple" || authType === "Facebook")
   ) {
-    user = await createNewUser(userData, authType); // You should implement the createNewUser function as per your needs
+    user = await createNewUser({...userData, emailVerified: true}, authType); // You should implement the createNewUser function as per your needs
   }
   const todayDate = new Date();
   const isDeleted =
@@ -199,6 +199,7 @@ const createNewUser = async (userData: any, authType: string) => {
     fcmToken: userData.fcmToken,
     profilePic: userData.profilePic,
     password: null,
+    emailVerified: userData.emailVerified || false,
     location: userData.location || { type: "Point", coordinates: [0, 0] },
     token: generateUserToken(userData, true),
   });
