@@ -200,7 +200,7 @@ export const getMatchesById = async (req: Request, res: Response) => {
       })
       .populate({
         path: "courtId",
-        select: "games",
+        select: "games name",
       })
       .lean();
 
