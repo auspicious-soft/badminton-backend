@@ -974,6 +974,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
   const totalMatches = await bookingModel.countDocuments({
     askToJoin: true,
     bookingDate: dateQuery,
+    bookingType: { $ne: "Cancelled" },
     $nor: [
       { "team1.playerId": userObjectId },
       { "team2.playerId": userObjectId },
@@ -985,6 +986,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     .find({
       askToJoin: true,
       bookingDate: dateQuery,
+      bookingType: { $ne: "Cancelled" },
       $nor: [
         { "team1.playerId": userObjectId },
         { "team2.playerId": userObjectId },
