@@ -33,8 +33,7 @@ const server = http.createServer(app);
 app.use(
   cors({
     origin: "*", // or "*" for all origins (not recommended for production)
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
@@ -46,12 +45,6 @@ var dir = path.join(__dirname, "static");
 app.use(express.static(dir));
 
 var uploadsDir = path.join(__dirname, "uploads");
-app.use("/uploads", (req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*"); // Or restrict to your frontend domain
-  res.header("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  next();
-});
 app.use("/uploads", express.static(uploadsDir));
 
 connectDB();
