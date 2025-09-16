@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import { httpStatusCode } from "../../lib/constant";
-import { errorParser, errorResponseHandler, formatErrorResponse } from "../../lib/errors/error-response-handler";
+import {
+  errorParser,
+  errorResponseHandler,
+  formatErrorResponse,
+} from "../../lib/errors/error-response-handler";
 import {
   createUserService,
   deleteUserService,
@@ -23,21 +27,18 @@ import {
 } from "../../services/user/user-service";
 import { getCurrentISTTime } from "../../utils";
 import { Readable } from "stream";
-import Busboy from 'busboy';
-
+import Busboy from "busboy";
 
 export const userSignup = async (req: Request, res: Response) => {
   try {
     const authType =
       req.body.email && req.body.phoneNumber ? "Email-Phone" : null;
     if (authType == null) {
-      return res
-        .status(httpStatusCode.BAD_REQUEST)
-        .json({
-          success: false,
-          message: "Both Email and Phone number is required",
-          timestamp: new Date().toISOString()
-        });
+      return res.status(httpStatusCode.BAD_REQUEST).json({
+        success: false,
+        message: "Both Email and Phone number is required",
+        timestamp: new Date().toISOString(),
+      });
     }
     const user = await signUpService(req.body, authType, res);
     return res.status(httpStatusCode.OK).json(user);
@@ -65,7 +66,7 @@ export const socialLogin = async (req: Request, res: Response) => {
           .status(httpStatusCode.BAD_REQUEST)
           .json({ success: false, message: "Invalid Auth Type" })
       : null;
-      
+
     const loginResponse = await socialLoginService(
       req.body,
       req.body.authType,
@@ -123,7 +124,7 @@ export const verifyOtpPasswordForget = async (req: Request, res: Response) => {
     const response = await verifyOtpPasswordForgetService(otp, phoneNumber);
     return res.status(httpStatusCode.OK).json({
       ...response,
-      verifiedAt: getCurrentISTTime().toISOString() // Use IST time for verification timestamp
+      verifiedAt: getCurrentISTTime().toISOString(), // Use IST time for verification timestamp
     });
   } catch (error: any) {
     return formatErrorResponse(res, error);
@@ -246,7 +247,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
     const response = await verifyOTPService(req.body, req, res);
     return res.status(httpStatusCode.OK).json({
       ...response,
-      verifiedAt: getCurrentISTTime().toISOString() // Use IST time for verification timestamp
+      verifiedAt: getCurrentISTTime().toISOString(), // Use IST time for verification timestamp
     });
   } catch (error: any) {
     return formatErrorResponse(res, error);
@@ -292,75 +293,102 @@ export const updateCurrentUserDetails = async (req: Request, res: Response) => {
   }
 };
 
-export const uploadUserImageController = async (req: Request, res: Response) => {
+export const uploadUserImageController = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const userData = req.user as any;
-    const userEmail = userData.email || req.query.email as string;
-    
+    const userEmail = userData.email || (req.query.email as string);
+
     if (!userEmail) {
-      return errorResponseHandler('User email is required', httpStatusCode.BAD_REQUEST, res);
-    }
-    
-    // Check content type
-    if (!req.headers['content-type']?.includes('multipart/form-data')) {
-      return errorResponseHandler('Content-Type must be multipart/form-data', httpStatusCode.BAD_REQUEST, res);
-    }
-    
-    const busboy = Busboy({ headers: req.headers });
-    let uploadPromise: Promise<string> | null = null;
-    
-    busboy.on('file', async (fieldname: string, fileStream: any, fileInfo: any) => {
-      if (fieldname !== 'image') {
-        fileStream.resume(); // Skip this file
-        return;
-      }
-      
-      const { filename, mimeType } = fileInfo;
-      
-      // Create a readable stream from the file stream
-      const readableStream = new Readable();
-      readableStream._read = () => {}; // Required implementation
-      
-      fileStream.on('data', (chunk :any) => {
-        readableStream.push(chunk);
-      });
-      
-      fileStream.on('end', () => {
-        readableStream.push(null); // End of stream
-      });
-      
-      uploadPromise = uploadStreamToS3Service(
-        readableStream,
-        filename,
-        mimeType,
-        userEmail
+      return errorResponseHandler(
+        "User email is required",
+        httpStatusCode.BAD_REQUEST,
+        res
       );
+    }
+
+    // Check content type
+    if (!req.headers["content-type"]?.includes("multipart/form-data")) {
+      return errorResponseHandler(
+        "Content-Type must be multipart/form-data",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    const busboy = Busboy({
+      headers: req.headers,
+      limits: {
+        fileSize: 25 * 1024 * 1024, // 25 MB
+      },
     });
-    
-    busboy.on('finish', async () => {
+    let uploadPromise: Promise<string> | null = null;
+
+    busboy.on(
+      "file",
+      async (fieldname: string, fileStream: any, fileInfo: any) => {
+        if (fieldname !== "image") {
+          fileStream.resume(); // Skip this file
+          return;
+        }
+
+        fileStream.on("limit", () => {
+          return errorResponseHandler(
+            "File size exceeds 25MB limit",
+            httpStatusCode.BAD_REQUEST,
+            res
+          );
+        });
+
+        const { filename, mimeType } = fileInfo;
+
+        // Create a readable stream from the file stream
+        const readableStream = new Readable();
+        readableStream._read = () => {}; // Required implementation
+
+        fileStream.on("data", (chunk: any) => {
+          readableStream.push(chunk);
+        });
+
+        fileStream.on("end", () => {
+          readableStream.push(null); // End of stream
+        });
+
+        uploadPromise = uploadStreamToS3Service(
+          readableStream,
+          filename,
+          mimeType,
+          userEmail
+        );
+      }
+    );
+
+    busboy.on("finish", async () => {
       if (!uploadPromise) {
         return res.status(httpStatusCode.BAD_REQUEST).json({
           success: false,
-          message: 'No image file found in the request'
+          message: "No image file found in the request",
         });
       }
-      
+
       try {
         const imageKey = await uploadPromise;
         return res.status(httpStatusCode.OK).json({
           success: true,
-          message: 'Image uploaded successfully',
-          data: { imageKey }
+          message: "Image uploaded successfully",
+          data: { imageKey },
         });
       } catch (error) {
-        console.error('Upload error:', error);
+        console.error("Upload error:", error);
         return formatErrorResponse(res, error);
       }
     });
-    
+
     req.pipe(busboy);
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error("Upload error:", error);
     return formatErrorResponse(res, error);
   }
 };
