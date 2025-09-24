@@ -66,8 +66,8 @@ export const getMyMatches = async (req: Request, res: Response) => {
 
     const bookings = await bookingModel
       .find(baseMatchFilter)
-      .populate("venueId", "name city state address")
-      .populate("courtId", "games name")
+      .populate("venueId", "name city state address image")
+      .populate("courtId", "games name image")
       .sort({ bookingDate: -1 })
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
@@ -200,7 +200,7 @@ export const getMatchesById = async (req: Request, res: Response) => {
       })
       .populate({
         path: "courtId",
-        select: "games name",
+        select: "games name image",
       })
       .lean();
 

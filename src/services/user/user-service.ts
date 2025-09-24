@@ -80,7 +80,7 @@ export const loginUserService = async (
   }
   const todayDate = new Date();
   const isDeleted =
-    user.isBlocked &&
+    user?.isBlocked &&
     user?.permanentBlackAfter &&
     user.permanentBlackAfter < todayDate;
   if (!user || isDeleted) {
