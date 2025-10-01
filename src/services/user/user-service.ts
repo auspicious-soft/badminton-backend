@@ -782,12 +782,6 @@ export const verifyOTPService = async (
           referenceType: "User",
           metadata: { referralCode: user?.referralUsed },
         });
-      } else {
-        errorResponseHandler(
-          "Invalid referral code",
-          httpStatusCode.BAD_REQUEST,
-          res
-        );
       }
     }
     if (user) {
