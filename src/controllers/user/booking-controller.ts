@@ -464,8 +464,12 @@ export const uploadScore = async (req: Request, res: Response) => {
             {
               $inc: {
                 playCoins: Math.round(rewardAmount),
-                earnedPadel: courtData?.games === "Padel" ? Math.round(rewardAmount) : 0,
-                earnedPickleball: courtData?.games === "Pickleball" ? Math.round(rewardAmount) : 0,
+                earnedPadel:
+                  courtData?.games === "Padel" ? Math.round(rewardAmount) : 0,
+                earnedPickleball:
+                  courtData?.games === "Pickleball"
+                    ? Math.round(rewardAmount)
+                    : 0,
               },
               $set: {
                 [courtData?.games === "Padel"

@@ -234,7 +234,6 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 { $inc: { playCoins: +transaction?.playcoinsReceived } },
                 { session }
               );
-
             }
 
             if (transaction?.userId) {

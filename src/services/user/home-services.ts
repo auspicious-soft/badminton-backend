@@ -975,6 +975,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     askToJoin: true,
     bookingDate: dateQuery,
     bookingType: { $ne: "Cancelled" },
+    bookingPaymentStatus: true,
     $nor: [
       { "team1.playerId": userObjectId },
       { "team2.playerId": userObjectId },
@@ -987,6 +988,7 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
       askToJoin: true,
       bookingDate: dateQuery,
       bookingType: { $ne: "Cancelled" },
+      bookingPaymentStatus: true,
       $nor: [
         { "team1.playerId": userObjectId },
         { "team2.playerId": userObjectId },
