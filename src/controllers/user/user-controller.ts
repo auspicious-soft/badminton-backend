@@ -28,6 +28,7 @@ import {
 import { getCurrentISTTime } from "../../utils";
 import { Readable } from "stream";
 import Busboy from "busboy";
+import { usersModel } from "src/models/user/user-schema";
 
 export const userSignup = async (req: Request, res: Response) => {
   try {
@@ -40,6 +41,14 @@ export const userSignup = async (req: Request, res: Response) => {
         timestamp: new Date().toISOString(),
       });
     }
+    
+    await usersModel.findOneAndDelete({
+      $or: [
+        { email: req.body.email?.toLowerCase(), emailVerified: false, phoneVerified: false },
+        { phoneNumber: req.body.phoneNumber, phoneVerified: false, emailVerified: false },
+      ],
+    });
+
     const user = await signUpService(req.body, authType, res);
     return res.status(httpStatusCode.OK).json(user);
   } catch (error: any) {
