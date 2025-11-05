@@ -34,6 +34,7 @@ export const userSignup = async (req: Request, res: Response) => {
   try {
     const authType =
       req.body.email && req.body.phoneNumber ? "Email-Phone" : null;
+      
     if (authType == null) {
       return res.status(httpStatusCode.BAD_REQUEST).json({
         success: false,
