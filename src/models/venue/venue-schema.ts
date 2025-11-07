@@ -166,6 +166,13 @@ const venueSchema = new Schema<VenueDocument>(
   { timestamps: true }
 );
 
-venueSchema.index({ location: "2dsphere" });
+// Speeds up isActive lookups
+venueSchema.index({ isActive: 1 });
+
+// Speeds up city-based queries (if used later for filtering)
+venueSchema.index({ city: 1, isActive: 1 });
+
+// Optional: speeds up state-level filtering
+venueSchema.index({ state: 1, isActive: 1 });
 
 export const venueModel = mongoose.model<VenueDocument>("venues", venueSchema);

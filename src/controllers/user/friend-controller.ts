@@ -725,11 +725,220 @@ export const getFriends = async (req: Request, res: Response) => {
   }
 };
 
+// export const getFriendsById = async (req: Request, res: Response) => {
+//   try {
+//     const userData = req.user as any;
+//     const { id } = req.params;
+//     const { page = 1, limit = 10 } = req.query;
+//     const pageNumber = Number(page);
+//     const limitNumber = Number(limit);
+
+//     if (!id) {
+//       return errorResponseHandler(
+//         "User ID is required",
+//         httpStatusCode.BAD_REQUEST,
+//         res
+//       );
+//     }
+
+//     const user = await usersModel
+//       .findById(id)
+//       .select("fullName profilePic")
+//       .lean();
+
+//     if (!user || user.isBlocked) {
+//       return errorResponseHandler(
+//         "User not found",
+//         httpStatusCode.NOT_FOUND,
+//         res
+//       );
+//     }
+
+//     const friendship = await friendsModel
+//       .findOne({
+//         $or: [
+//           { userId: userData.id, friendId: id },
+//           { userId: id, friendId: userData.id },
+//         ],
+//       })
+//       .lean();
+
+//     if (
+//       friendship &&
+//       friendship.status === "blocked" &&
+//       friendship.userId.toString() === id.toString()
+//     ) {
+//       return errorResponseHandler(
+//         "User not found",
+//         httpStatusCode.NOT_FOUND,
+//         res
+//       );
+//     }
+
+//     let friendshipStatus = null;
+//     let isFriend = false;
+
+//     if (friendship) {
+//       if (friendship.status === "accepted") {
+//         friendshipStatus = "friends";
+//         isFriend = true;
+//       } else if (friendship.status === "pending") {
+//         friendshipStatus =
+//           friendship.userId.toString() === userData.id.toString()
+//             ? "request_sent"
+//             : "request_received";
+//       } else if (friendship.status === "rejected") {
+//         friendshipStatus = "rejected";
+//       } else if (
+//         friendship.status === "blocked" &&
+//         friendship.userId.toString() === userData.id.toString()
+//       ) {
+//         friendshipStatus = "blocked_by_me";
+//       }
+//     }
+
+//     const currentDate = new Date().toISOString();
+
+//     const baseMatchFilter: any = {
+//       $or: [
+//         {
+//           team1: {
+//             $elemMatch: {
+//               playerId: new mongoose.Types.ObjectId(id),
+//               paymentStatus: "Paid",
+//             },
+//           },
+//         },
+//         {
+//           team2: {
+//             $elemMatch: {
+//               playerId: new mongoose.Types.ObjectId(id),
+//               paymentStatus: "Paid",
+//             },
+//           },
+//         },
+//       ],
+//       bookingDate: { $lt: currentDate }, // previous games only
+//       bookingPaymentStatus: true,
+//       // DO NOT exclude cancelled games
+//     };
+
+//     const totalCount = await bookingModel.countDocuments(baseMatchFilter);
+
+//     const previousMatches = await bookingModel
+//       .find(baseMatchFilter)
+//       .populate("venueId", "name city state address")
+//       .populate("courtId", "games")
+//       .sort({ bookingDate: -1 })
+//       .skip((pageNumber - 1) * limitNumber)
+//       .limit(limitNumber)
+//       .lean();
+
+//     const playerIds = new Set<string>();
+//     previousMatches.forEach((match) => {
+//       match.team1?.forEach((player: any) => {
+//         if (player.playerId) playerIds.add(player.playerId.toString());
+//       });
+//       match.team2?.forEach((player: any) => {
+//         if (player.playerId) playerIds.add(player.playerId.toString());
+//       });
+//     });
+
+//     const players = await usersModel
+//       .find({ _id: { $in: Array.from(playerIds) } })
+//       .select("_id fullName profilePic")
+//       .lean();
+
+//     const playerMap = players.reduce((map, player: any) => {
+//       map[player._id.toString()] = player;
+//       return map;
+//     }, {} as Record<string, any>);
+
+//     const matchIds = previousMatches.map((match) => match._id);
+//     const scores = await gameScoreModel
+//       .find({ bookingId: { $in: matchIds } })
+//       .lean();
+
+//     const scoreMap = scores.reduce((map, score: any) => {
+//       map[score.bookingId.toString()] = score;
+//       return map;
+//     }, {} as Record<string, any>);
+
+//     const processedMatches = previousMatches.map((match) => {
+//       const team1WithDetails = (match.team1 || []).map((player: any) => {
+//         const playerId = player.playerId?.toString();
+//         return {
+//           ...player,
+//           playerData: playerId ? playerMap[playerId] : null,
+//         };
+//       });
+
+//       const team2WithDetails = (match.team2 || []).map((player: any) => {
+//         const playerId = player.playerId?.toString();
+//         return {
+//           ...player,
+//           playerData: playerId ? playerMap[playerId] : null,
+//         };
+//       });
+
+//       const matchScore = scoreMap[match._id.toString()] || {};
+
+//       return {
+//         ...match,
+//         team1: team1WithDetails,
+//         team2: team2WithDetails,
+//         score: matchScore,
+//         status: "previous", // always previous
+//       };
+//     });
+
+//     const response = {
+//       success: true,
+//       message: "User data retrieved successfully",
+//       data: {
+//         ...user,
+//         stats: {
+//           totalMatches: 0,
+//           padlelMatches: 0,
+//           pickleballMatches: 0,
+//           loyaltyPoints: 0,
+//           level: 0,
+//           lastMonthLevel: 0,
+//           level6MonthsAgo: 0,
+//           level1YearAgo: 0,
+//           improvement: 0,
+//           confidence: "10%",
+//         },
+//         friendshipStatus,
+//         isFriend,
+//         relationshipId: friendship ? friendship._id : null,
+//         previousMatches: processedMatches,
+//         pagination: {
+//           totalCount,
+//           currentPage: pageNumber,
+//           totalPages: Math.ceil(totalCount / limitNumber),
+//           limit: limitNumber,
+//           hasNextPage: pageNumber * limitNumber < totalCount,
+//           hasPrevPage: pageNumber > 1,
+//         },
+//       },
+//     };
+
+//     return res.status(httpStatusCode.OK).json(response);
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res
+//       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+//       .json({ success: false, message: message || "An error occurred" });
+//   }
+// };
+
 export const getFriendsById = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
     const { id } = req.params;
     const { page = 1, limit = 10 } = req.query;
+
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
 
@@ -741,11 +950,19 @@ export const getFriendsById = async (req: Request, res: Response) => {
       );
     }
 
-    const user = await usersModel
-      .findById(id)
-      .select("fullName profilePic")
-      .lean();
+    const [user, friendship] = await Promise.all([
+      usersModel.findById(id).select("fullName profilePic isBlocked").lean(),
+      friendsModel
+        .findOne({
+          $or: [
+            { userId: userData.id, friendId: id },
+            { userId: id, friendId: userData.id },
+          ],
+        })
+        .lean(),
+    ]);
 
+    // Handle missing or blocked users
     if (!user || user.isBlocked) {
       return errorResponseHandler(
         "User not found",
@@ -753,15 +970,6 @@ export const getFriendsById = async (req: Request, res: Response) => {
         res
       );
     }
-
-    const friendship = await friendsModel
-      .findOne({
-        $or: [
-          { userId: userData.id, friendId: id },
-          { userId: id, friendId: userData.id },
-        ],
-      })
-      .lean();
 
     if (
       friendship &&
@@ -775,123 +983,105 @@ export const getFriendsById = async (req: Request, res: Response) => {
       );
     }
 
-    let friendshipStatus = null;
+    // Determine friendship status
+    let friendshipStatus: string | null = null;
     let isFriend = false;
 
     if (friendship) {
-      if (friendship.status === "accepted") {
-        friendshipStatus = "friends";
-        isFriend = true;
-      } else if (friendship.status === "pending") {
-        friendshipStatus =
-          friendship.userId.toString() === userData.id.toString()
-            ? "request_sent"
-            : "request_received";
-      } else if (friendship.status === "rejected") {
-        friendshipStatus = "rejected";
-      } else if (
-        friendship.status === "blocked" &&
-        friendship.userId.toString() === userData.id.toString()
-      ) {
-        friendshipStatus = "blocked_by_me";
+      const isMe = friendship.userId.toString() === userData.id.toString();
+      switch (friendship.status) {
+        case "accepted":
+          friendshipStatus = "friends";
+          isFriend = true;
+          break;
+        case "pending":
+          friendshipStatus = isMe ? "request_sent" : "request_received";
+          break;
+        case "rejected":
+          friendshipStatus = "rejected";
+          break;
+        case "blocked":
+          if (isMe) friendshipStatus = "blocked_by_me";
+          break;
       }
     }
 
-    const currentDate = new Date().toISOString();
+    // --- MATCHES SECTION ---
+    const now = new Date();
 
     const baseMatchFilter: any = {
       $or: [
         {
-          team1: {
-            $elemMatch: {
-              playerId: new mongoose.Types.ObjectId(id),
-              paymentStatus: "Paid",
-            },
-          },
+          "team1.playerId": new mongoose.Types.ObjectId(id),
+          "team1.paymentStatus": "Paid",
         },
         {
-          team2: {
-            $elemMatch: {
-              playerId: new mongoose.Types.ObjectId(id),
-              paymentStatus: "Paid",
-            },
-          },
+          "team2.playerId": new mongoose.Types.ObjectId(id),
+          "team2.paymentStatus": "Paid",
         },
       ],
-      bookingDate: { $lt: currentDate }, // previous games only
+      bookingDate: { $lt: now },
       bookingPaymentStatus: true,
-      // DO NOT exclude cancelled games
     };
 
-    const totalCount = await bookingModel.countDocuments(baseMatchFilter);
+    const [totalCount, previousMatches] = await Promise.all([
+      bookingModel.countDocuments(baseMatchFilter),
+      bookingModel
+        .find(baseMatchFilter)
+        .populate("venueId", "name city state address image")
+        .populate("courtId", "games name image")
+        .sort({ bookingDate: -1 })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber)
+        .lean(),
+    ]);
 
-    const previousMatches = await bookingModel
-      .find(baseMatchFilter)
-      .populate("venueId", "name city state address")
-      .populate("courtId", "games")
-      .sort({ bookingDate: -1 })
-      .skip((pageNumber - 1) * limitNumber)
-      .limit(limitNumber)
-      .lean();
-
+    // Collect unique player IDs
     const playerIds = new Set<string>();
-    previousMatches.forEach((match) => {
-      match.team1?.forEach((player: any) => {
-        if (player.playerId) playerIds.add(player.playerId.toString());
-      });
-      match.team2?.forEach((player: any) => {
-        if (player.playerId) playerIds.add(player.playerId.toString());
-      });
-    });
+    for (const match of previousMatches) {
+      for (const p of match.team1 || [])
+        if (p.playerId) playerIds.add(p.playerId.toString());
+      for (const p of match.team2 || [])
+        if (p.playerId) playerIds.add(p.playerId.toString());
+    }
 
-    const players = await usersModel
-      .find({ _id: { $in: Array.from(playerIds) } })
-      .select("_id fullName profilePic")
-      .lean();
+    // Fetch players + scores in parallel
+    const [players, scores] = await Promise.all([
+      usersModel
+        .find({ _id: { $in: [...playerIds] } })
+        .select("_id fullName profilePic")
+        .lean(),
+      gameScoreModel
+        .find({ bookingId: { $in: previousMatches.map((m) => m._id) } })
+        .lean(),
+    ]);
 
-    const playerMap = players.reduce((map, player: any) => {
-      map[player._id.toString()] = player;
-      return map;
-    }, {} as Record<string, any>);
+    // Create lookup maps
+    const playerMap = Object.fromEntries(
+      players.map((p) => [p._id.toString(), p])
+    );
+    const scoreMap = Object.fromEntries(
+      scores.map((s) => [s.bookingId.toString(), s])
+    );
 
-    const matchIds = previousMatches.map((match) => match._id);
-    const scores = await gameScoreModel
-      .find({ bookingId: { $in: matchIds } })
-      .lean();
-
-    const scoreMap = scores.reduce((map, score: any) => {
-      map[score.bookingId.toString()] = score;
-      return map;
-    }, {} as Record<string, any>);
-
+    // Process matches
     const processedMatches = previousMatches.map((match) => {
-      const team1WithDetails = (match.team1 || []).map((player: any) => {
-        const playerId = player.playerId?.toString();
-        return {
-          ...player,
-          playerData: playerId ? playerMap[playerId] : null,
-        };
-      });
-
-      const team2WithDetails = (match.team2 || []).map((player: any) => {
-        const playerId = player.playerId?.toString();
-        return {
-          ...player,
-          playerData: playerId ? playerMap[playerId] : null,
-        };
-      });
-
-      const matchScore = scoreMap[match._id.toString()] || {};
+      const enrichTeam = (team: any[]) =>
+        (team || []).map((p) => ({
+          ...p,
+          playerData: playerMap[p.playerId?.toString()] || null,
+        }));
 
       return {
         ...match,
-        team1: team1WithDetails,
-        team2: team2WithDetails,
-        score: matchScore,
-        status: "previous", // always previous
+        team1: enrichTeam(match.team1),
+        team2: enrichTeam(match.team2),
+        score: scoreMap[match._id.toString()] || {},
+        status: "previous",
       };
     });
 
+    // --- RESPONSE ---
     const response = {
       success: true,
       message: "User data retrieved successfully",

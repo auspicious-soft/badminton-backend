@@ -48,7 +48,8 @@ const courtSchema = new Schema<CourtDocument>(
 );
 
 // Compound index for efficient queries
-courtSchema.index({ venueId: 1, isActive: 1 });
-courtSchema.index({ venueId: 1, games: 1 });
+courtSchema.index({ venueId: 1, isActive: 1, games: 1 }); // main query pattern
+courtSchema.index({ venueId: 1, name: 1 }, { unique: true }); // optional for uniqueness
+courtSchema.index({ updatedAt: -1 }); // optional for sorting or recent updates
 
 export const courtModel = mongoose.model<CourtDocument>("courts", courtSchema);

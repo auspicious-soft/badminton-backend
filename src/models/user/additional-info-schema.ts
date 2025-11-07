@@ -31,6 +31,7 @@ export interface AdditionalUserInfoDocument extends Document {
   earnedPadel: number;
   earnedPickleball: number;
   playerRating: number;
+  deleteReason?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -139,6 +140,10 @@ const additionalUserInfoSchema = new Schema<AdditionalUserInfoDocument>(
     clubMember: {
       type: Boolean,
       default: false,
+    },
+    deleteReason: {
+      type: String,
+      default: null,
     },
     playerRating: {
       type: Number,

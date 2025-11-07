@@ -16,15 +16,158 @@ import { notificationModel } from "src/models/notification/notification-schema";
 import { notifyUser } from "src/utils/FCM/FCM";
 import { chatModel } from "src/models/chat/chat-schema";
 
+// export const getMyMatches = async (req: Request, res: Response) => {
+//   try {
+//     const userData = req.user as any;
+//     const { type, page = 1, limit = 10 } = req.query;
+
+//     const pageNumber = Number(page);
+//     const limitNumber = Number(limit);
+
+//     if (type !== "all" && type !== "upcoming" && type !== "previous") {
+//       return errorResponseHandler(
+//         "Invalid Type",
+//         httpStatusCode.BAD_REQUEST,
+//         res
+//       );
+//     }
+
+//     const currentDate = new Date().toISOString();
+
+//     const baseMatchFilter: any = {
+//       $or: [
+//         {
+//           team1: {
+//             $elemMatch: {
+//               playerId: new mongoose.Types.ObjectId(userData.id),
+//               paymentStatus: "Paid",
+//             },
+//           },
+//         },
+//         {
+//           team2: {
+//             $elemMatch: {
+//               playerId: new mongoose.Types.ObjectId(userData.id),
+//               paymentStatus: "Paid",
+//             },
+//           },
+//         },
+//       ],
+//       bookingPaymentStatus: true,
+//     };
+
+//     if (type === "upcoming") {
+//       baseMatchFilter.bookingDate = { $gte: currentDate };
+//     } else if (type === "previous") {
+//       baseMatchFilter.bookingDate = { $lt: currentDate };
+//     }
+
+//     const totalCount = await bookingModel.countDocuments(baseMatchFilter);
+
+//     const bookings = await bookingModel
+//       .find(baseMatchFilter)
+//       .populate("venueId", "name city state address image")
+//       .populate("courtId", "games name image")
+//       .sort({ bookingDate: -1 })
+//       .skip((pageNumber - 1) * limitNumber)
+//       .limit(limitNumber)
+//       .lean();
+
+//     // Collect all player IDs
+//     const playerIds = new Set<string>();
+//     bookings.forEach((booking) => {
+//       booking.team1?.forEach((player: any) => {
+//         if (player.playerId) playerIds.add(player.playerId.toString());
+//       });
+//       booking.team2?.forEach((player: any) => {
+//         if (player.playerId) playerIds.add(player.playerId.toString());
+//       });
+//     });
+
+//     const players = await mongoose
+//       .model("users")
+//       .find({ _id: { $in: Array.from(playerIds) } })
+//       .select("_id fullName profilePic")
+//       .lean();
+
+//     const playersMap = players.reduce((map, player: any) => {
+//       map[player._id.toString()] = player;
+//       return map;
+//     }, {} as Record<string, any>);
+
+//     const processedBookings = await Promise.all(
+//       bookings.map(async (booking) => {
+//         const score =
+//           (await gameScoreModel.findOne({ bookingId: booking._id }).lean()) ||
+//           {};
+
+//         const team1WithPlayerData = (booking.team1 || []).map((player: any) => {
+//           const playerId = player.playerId?.toString();
+//           return {
+//             ...player,
+//             playerId: playerId ?? "",
+//             rackets: player.rackets ?? 0,
+//             balls: player.balls ?? 0,
+//             playerData: playerId ? playersMap[playerId] : null,
+//           };
+//         });
+
+//         const team2WithPlayerData = (booking.team2 || []).map((player: any) => {
+//           const playerId = player.playerId?.toString();
+//           return {
+//             ...player,
+//             playerId: playerId ?? "",
+//             rackets: player.rackets ?? 0,
+//             balls: player.balls ?? 0,
+//             playerData: playerId ? playersMap[playerId] : null,
+//           };
+//         });
+
+//         const status =
+//           booking.bookingDate.toISOString() < currentDate
+//             ? "previous"
+//             : "upcoming";
+
+//         return {
+//           ...booking,
+//           team1: team1WithPlayerData,
+//           team2: team2WithPlayerData,
+//           score,
+//           status,
+//         };
+//       })
+//     );
+
+//     return res.status(httpStatusCode.OK).json({
+//       success: true,
+//       message: "Matches retrieved successfully",
+//       data: processedBookings,
+//       pagination: {
+//         totalCount,
+//         currentPage: pageNumber,
+//         totalPages: Math.ceil(totalCount / limitNumber),
+//         limit: limitNumber,
+//         hasNextPage: pageNumber * limitNumber < totalCount,
+//         hasPrevPage: pageNumber > 1,
+//       },
+//     });
+//   } catch (error: any) {
+//     const { code, message } = errorParser(error);
+//     return res
+//       .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+//       .json({ success: false, message: message || "An error occurred" });
+//   }
+// };
+
 export const getMyMatches = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any;
-    const { type, page = 1, limit = 10 } = req.query;
+    const { type = "all", page = 1, limit = 10 } = req.query;
 
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
 
-    if (type !== "all" && type !== "upcoming" && type !== "previous") {
+    if (!["all", "upcoming", "previous"].includes(type as string)) {
       return errorResponseHandler(
         "Invalid Type",
         httpStatusCode.BAD_REQUEST,
@@ -32,112 +175,101 @@ export const getMyMatches = async (req: Request, res: Response) => {
       );
     }
 
-    const currentDate = new Date().toISOString();
+    const userId = new mongoose.Types.ObjectId(userData.id);
+    const now = new Date();
 
-    const baseMatchFilter: any = {
+    // ---------- FILTER ----------
+    const baseFilter: any = {
       $or: [
-        {
-          team1: {
-            $elemMatch: {
-              playerId: new mongoose.Types.ObjectId(userData.id),
-              paymentStatus: "Paid",
-            },
-          },
-        },
-        {
-          team2: {
-            $elemMatch: {
-              playerId: new mongoose.Types.ObjectId(userData.id),
-              paymentStatus: "Paid",
-            },
-          },
-        },
+        { "team1.playerId": userId, "team1.paymentStatus": "Paid" },
+        { "team2.playerId": userId, "team2.paymentStatus": "Paid" },
       ],
       bookingPaymentStatus: true,
     };
 
-    if (type === "upcoming") {
-      baseMatchFilter.bookingDate = { $gte: currentDate };
-    } else if (type === "previous") {
-      baseMatchFilter.bookingDate = { $lt: currentDate };
+    if (type === "upcoming") baseFilter.bookingDate = { $gte: now };
+    else if (type === "previous") baseFilter.bookingDate = { $lt: now };
+
+    // ---------- FETCH IN PARALLEL ----------
+    const [totalCount, bookings] = await Promise.all([
+      bookingModel.countDocuments(baseFilter),
+      bookingModel
+        .find(baseFilter)
+        .populate("venueId", "name city state address image")
+        .populate("courtId", "games name image")
+        .sort({ bookingDate: -1 })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber)
+        .lean(),
+    ]);
+
+    if (!bookings.length) {
+      return res.status(httpStatusCode.OK).json({
+        success: true,
+        message: "Matches retrieved successfully",
+        data: [],
+        pagination: {
+          totalCount,
+          currentPage: pageNumber,
+          totalPages: Math.ceil(totalCount / limitNumber),
+          limit: limitNumber,
+          hasNextPage: false,
+          hasPrevPage: pageNumber > 1,
+        },
+      });
     }
 
-    const totalCount = await bookingModel.countDocuments(baseMatchFilter);
-
-    const bookings = await bookingModel
-      .find(baseMatchFilter)
-      .populate("venueId", "name city state address image")
-      .populate("courtId", "games name image")
-      .sort({ bookingDate: -1 })
-      .skip((pageNumber - 1) * limitNumber)
-      .limit(limitNumber)
-      .lean();
-
-    // Collect all player IDs
+    // ---------- COLLECT PLAYER IDS ----------
     const playerIds = new Set<string>();
-    bookings.forEach((booking) => {
-      booking.team1?.forEach((player: any) => {
-        if (player.playerId) playerIds.add(player.playerId.toString());
-      });
-      booking.team2?.forEach((player: any) => {
-        if (player.playerId) playerIds.add(player.playerId.toString());
-      });
-    });
+    for (const booking of bookings) {
+      for (const p of booking.team1 || [])
+        if (p.playerId) playerIds.add(p.playerId.toString());
+      for (const p of booking.team2 || [])
+        if (p.playerId) playerIds.add(p.playerId.toString());
+    }
 
-    const players = await mongoose
-      .model("users")
-      .find({ _id: { $in: Array.from(playerIds) } })
-      .select("_id fullName profilePic")
-      .lean();
+    // ---------- FETCH PLAYERS + SCORES PARALLEL ----------
+    const [players, scores] = await Promise.all([
+      mongoose
+        .model("users")
+        .find({ _id: { $in: [...playerIds] } })
+        .select("_id fullName profilePic")
+        .lean(),
+      gameScoreModel
+        .find({ bookingId: { $in: bookings.map((b) => b._id) } })
+        .lean(),
+    ]);
 
-    const playersMap = players.reduce((map, player: any) => {
-      map[player._id.toString()] = player;
-      return map;
-    }, {} as Record<string, any>);
-
-    const processedBookings = await Promise.all(
-      bookings.map(async (booking) => {
-        const score =
-          (await gameScoreModel.findOne({ bookingId: booking._id }).lean()) ||
-          {};
-
-        const team1WithPlayerData = (booking.team1 || []).map((player: any) => {
-          const playerId = player.playerId?.toString();
-          return {
-            ...player,
-            playerId: playerId ?? "",
-            rackets: player.rackets ?? 0,
-            balls: player.balls ?? 0,
-            playerData: playerId ? playersMap[playerId] : null,
-          };
-        });
-
-        const team2WithPlayerData = (booking.team2 || []).map((player: any) => {
-          const playerId = player.playerId?.toString();
-          return {
-            ...player,
-            playerId: playerId ?? "",
-            rackets: player.rackets ?? 0,
-            balls: player.balls ?? 0,
-            playerData: playerId ? playersMap[playerId] : null,
-          };
-        });
-
-        const status =
-          booking.bookingDate.toISOString() < currentDate
-            ? "previous"
-            : "upcoming";
-
-        return {
-          ...booking,
-          team1: team1WithPlayerData,
-          team2: team2WithPlayerData,
-          score,
-          status,
-        };
-      })
+    // ---------- MAPS FOR FAST ACCESS ----------
+    const playersMap = Object.fromEntries(
+      players.map((p: any) => [p._id.toString(), p])
+    );
+    const scoresMap = Object.fromEntries(
+      scores.map((s: any) => [s.bookingId.toString(), s])
     );
 
+    // ---------- MERGE DATA ----------
+    const processedBookings = bookings.map((booking) => {
+      const teamWithPlayers = (team: any[]) =>
+        (team || []).map((p) => ({
+          ...p,
+          playerId: p.playerId?.toString() ?? "",
+          rackets: p.rackets ?? 0,
+          balls: p.balls ?? 0,
+          playerData: playersMap[p.playerId?.toString()] || null,
+        }));
+
+      const isPrevious = booking.bookingDate < now;
+      return {
+        ...booking,
+        team1: teamWithPlayers(booking.team1),
+        team2: teamWithPlayers(booking.team2),
+        score: scoresMap[booking._id.toString()] || {},
+        status: isPrevious ? "previous" : "upcoming",
+      };
+    });
+
+    // ---------- RESPONSE ----------
     return res.status(httpStatusCode.OK).json({
       success: true,
       message: "Matches retrieved successfully",

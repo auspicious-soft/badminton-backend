@@ -111,7 +111,7 @@ router.route("/packages").get(getPackages).post(buyPackages);
 // router.post("/upload-image", upload.single('image'), uploadUserImageController);
 router.post("/upload-image", uploadUserImageController);
 router.post("/logout", logout);
-router.get("/delete-account", deleteAccount);
+router.post("/delete-account", deleteAccount);
 router.get("/get-tutorial", getTutorialLink);
 
 export { router };

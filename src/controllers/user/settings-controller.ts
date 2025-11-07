@@ -4,6 +4,7 @@ import { httpStatusCode } from "src/lib/constant";
 import { adminSettingModel } from "src/models/admin/admin-settings";
 import { playcoinModel } from "src/models/admin/playcoin-schema";
 import { transactionModel } from "src/models/admin/transaction-schema";
+import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { usersModel } from "src/models/user/user-schema";
 
 export const logout = async (req: Request, res: Response) => {
@@ -161,6 +162,7 @@ export const buyPackages = async (req: Request, res: Response) => {
 export const deleteAccount = async (req: Request, res: Response) => {
   try {
     const userData = req.user as any
+    const {reason} = req.body;
 
     const dateAfter30Days = new Date();
     dateAfter30Days.setDate(dateAfter30Days.getDate() + 30);
@@ -173,6 +175,12 @@ export const deleteAccount = async (req: Request, res: Response) => {
         fcmToken: [],
         profilePic: null
       },
+      { new: true }
+    );
+
+    await additionalUserInfoModel.findOneAndUpdate(
+      { userId: userData.id },
+      { deleteReason: reason || null },
       { new: true }
     );
     
