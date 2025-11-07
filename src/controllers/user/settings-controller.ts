@@ -164,14 +164,14 @@ export const deleteAccount = async (req: Request, res: Response) => {
     const userData = req.user as any
     const {reason} = req.body;
 
-    const dateAfter30Days = new Date();
-    dateAfter30Days.setDate(dateAfter30Days.getDate() + 30);
+    const dateAfter14Days = new Date();
+    dateAfter14Days.setDate(dateAfter14Days.getDate() + 14);
 
     await usersModel.findByIdAndUpdate(
       userData.id,
       {
         isBlocked: true,
-        permanentBlackAfter: dateAfter30Days,
+        permanentBlackAfter: dateAfter14Days,
         fcmToken: [],
         profilePic: null
       },
