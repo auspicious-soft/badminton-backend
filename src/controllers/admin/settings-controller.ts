@@ -56,6 +56,33 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
   }
 };
 
+export const updateBasePrice = async (req: Request, res: Response) => {
+  try {
+    const { courts = [] } = req.body;
+
+    Promise.all(
+      courts.map(async (court: any) => {
+        await courtModel.findByIdAndUpdate(court.courtId, {
+          hourlyRate: court.price,
+        });
+      })
+    );
+
+    console.log(courts);
+
+    return res.status(httpStatusCode.OK).json({
+      success: true,
+      message: "Price updated successfully",
+      data: {},
+    });
+  } catch (error: any) {
+    const { code, message } = errorParser(error);
+    return res
+      .status(code || httpStatusCode.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: message || "An error occurred" });
+  }
+};
+
 // Get all pricing plans
 export const getAllPricing = async (req: Request, res: Response) => {
   try {
@@ -75,13 +102,11 @@ export const getAllPricing = async (req: Request, res: Response) => {
 
     console.log(todayDateInUTC);
 
-    const pricingPlans = await dynamicPrizeModel
-      .find(findIt)
-      .populate({
-        path: "courtId",
-        select: "name games venueId",
-        populate: { path: "venueId", select: "name address image" },
-      });
+    const pricingPlans = await dynamicPrizeModel.find(findIt).populate({
+      path: "courtId",
+      select: "name games venueId",
+      populate: { path: "venueId", select: "name address image" },
+    });
 
     const venues = await venueModel
       .find({ isActive: true })

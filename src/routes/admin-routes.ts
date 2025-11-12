@@ -53,6 +53,7 @@ import {
   readNotification,
   rewardsSettings,
   sendPushToUsers,
+  updateBasePrice,
   updatePackage,
   updateRewardsSettings,
 } from "src/controllers/admin/settings-controller";
@@ -129,6 +130,8 @@ router
   .post(createUpdatePricing)
   .get(getAllPricing)
   .delete(deletePricing);
+
+router.post("/base-price", updateBasePrice)
 
 //Maintenance routes
 router.post("/maintenance-booking", createMaintenanceBooking);
