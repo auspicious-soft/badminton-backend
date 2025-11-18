@@ -18,6 +18,7 @@ import {
 import { Parser } from "json2csv";
 import { checkOTPAuth } from "src/middleware/check-auth";
 import { gameScoreModel } from "src/models/venue/game-score";
+import { getAppInfo } from "src/controllers/user/user-home-controller";
 
 const router = Router();
 
@@ -44,6 +45,9 @@ router.patch(
   checkOTPAuth,
   newPassswordAfterOTPVerifiedUser
 );
+
+router.get("/get-applicaiton-info", getAppInfo);
+
 
 // router.get("/test", async (req, res) => {
 //   // sendEmailVerficationMail("ya@yopmail.com", "777777", "eng")
