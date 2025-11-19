@@ -742,25 +742,52 @@ export const getCourtsServices = async (req: Request, res: Response) => {
 
     const venueTimeslots = venueData.timeslots || VENUE_TIME_SLOTS;
 
-    const courtsWithAvailability = courts.map((court) => {
+    const courtsWithAvailability = courts.map((court : any) => {
       const courtId = String(court._id);
       const confirmed = confirmedSlots.get(courtId) || [];
-      const baseRate = court.hourlyRate || 1200;
+      // const baseRate = court.hourlyRate || 1200;
       const courtSlots = pricingMap.get(courtId);
 
+      // const availableSlots = venueTimeslots.map((slot: string) => {
+      //   const slotHour = parseInt(slot.split(":")[0], 10);
+      //   const isPast = isRequestedDateToday && slotHour <= currentHour;
+      //   const isBooked = confirmed.includes(slot);
+      //   const isAvailable = !isBooked && !isPast;
+
+      //   const match = courtSlots?.slotPricing?.find(
+      //     (s: any) => s.slot === slot
+      //   );
+      //   const price = match?.price ?? baseRate;
+      //   return {
+      //     time: slot,
+      //     price,
+      //     isDiscounted: price < baseRate,
+      //     isPremium: price > baseRate,
+      //     isAvailable,
+      //     isConfirmedBooked: isBooked,
+      //     isPastSlot: isPast,
+      //   };
+      // });
       const availableSlots = venueTimeslots.map((slot: string) => {
         const slotHour = parseInt(slot.split(":")[0], 10);
+
         const isPast = isRequestedDateToday && slotHour <= currentHour;
         const isBooked = confirmed.includes(slot);
         const isAvailable = !isBooked && !isPast;
 
+        // NEW: slot-based base rate
+        const baseRate = court?.hourlyRate?.[slot] ?? 1200;
+
+        // dynamic price override
         const match = courtSlots?.slotPricing?.find(
           (s: any) => s.slot === slot
         );
         const price = match?.price ?? baseRate;
+
         return {
           time: slot,
-          price,
+          price, // ✔ final price
+          basePrice: baseRate, // optional: if you want to show base price
           isDiscounted: price < baseRate,
           isPremium: price > baseRate,
           isAvailable,
@@ -1204,7 +1231,6 @@ export const getOpenMatchesServices = async (req: Request, res: Response) => {
     },
   };
 };
-
 
 export const getOpenMatchesByIdServices = async (
   req: Request,
