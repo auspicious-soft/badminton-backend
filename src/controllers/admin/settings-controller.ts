@@ -58,12 +58,25 @@ export const createUpdatePricing = async (req: Request, res: Response) => {
 
 export const updateBasePrice = async (req: Request, res: Response) => {
   try {
-    const { courts = [] } = req.body;
+    const { courts = [], slotPricing = [] } = req.body;
+
+    if (!courts.length || !slotPricing.length) {
+      return errorResponseHandler(
+        "Courts and slotPricing are required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    } 
+
+    const priceMap: any = {};
+    slotPricing.forEach((slot: any) => {
+      priceMap[slot.slot] = slot.price;
+    });
 
     Promise.all(
-      courts.map(async (court: any) => {
-        await courtModel.findByIdAndUpdate(court.courtId, {
-          hourlyRate: court.price,
+      courts.map(async (court: any, index: number) => {
+        await courtModel.findByIdAndUpdate(courts[index], {
+          hourlyRate: priceMap,
         });
       })
     );

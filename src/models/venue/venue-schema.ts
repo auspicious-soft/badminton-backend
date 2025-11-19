@@ -106,6 +106,7 @@ const venueSchema = new Schema<VenueDocument>(
         "19:00",
         "20:00",
         "21:00",
+        "22:00",
       ],
     },
     openingHours: [

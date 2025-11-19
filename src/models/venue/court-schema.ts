@@ -15,16 +15,16 @@ export interface CourtDocument extends Document {
 
 const courtSchema = new Schema<CourtDocument>(
   {
-    name: { 
-      type: String, 
-      required: true, 
-      trim: true 
+    name: {
+      type: String,
+      required: true,
+      trim: true,
     },
     venueId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "venues",
       required: true,
-      index: true
+      index: true,
     },
     games: {
       type: String,
@@ -36,13 +36,13 @@ const courtSchema = new Schema<CourtDocument>(
       default: true,
     },
     hourlyRate: {
-      type: Number,
-      default: 1200
+      type: Object,
+      default: {},
     },
     image: {
       type: String,
       default: null,
-    }
+    },
   },
   { timestamps: true }
 );
