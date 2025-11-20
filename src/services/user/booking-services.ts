@@ -85,7 +85,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
   // Get the current date and determine if it's a weekday or weekend
 
-  const courtData = await courtModel.findById(courtId).lean();
+  const courtData = await courtModel.findById(courtId).lean() as any;
   const dateCheck = makeBookingDateInIST(bookingDate, bookingSlots[0]);
   console.log("Booking Date in IST:", makeBookingDateInIST(bookingDate, 6));
   const dateString = dateCheck.toISOString().split("T")[0];
@@ -103,7 +103,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
       (s) => s.slot === slot
     )?.price;
 
-    const slotPrice = priceObject || courtData?.hourlyRate || 1200;
+    const slotPrice = priceObject || courtData?.hourlyRate[slot] || 1200;
     if (!slotPrice) {
       return errorResponseHandler(
         `Price configuration not found for slot ${slot}`,
