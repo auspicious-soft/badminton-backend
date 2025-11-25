@@ -32,21 +32,23 @@ import { usersModel } from "src/models/user/user-schema";
 
 export const userSignup = async (req: Request, res: Response) => {
   try {
-    const authType =
-      req.body.email && req.body.phoneNumber ? "Email-Phone" : null;
-      
+    const authType = req.body.email ? "Email-Phone" : null;
+
     if (authType == null) {
       return res.status(httpStatusCode.BAD_REQUEST).json({
         success: false,
-        message: "Both Email and Phone number is required",
+        message: "Email is required",
         timestamp: new Date().toISOString(),
       });
     }
-    
+
     await usersModel.findOneAndDelete({
       $or: [
-        { email: req.body.email?.toLowerCase(), emailVerified: false, phoneVerified: false },
-        { phoneNumber: req.body.phoneNumber, phoneVerified: false, emailVerified: false },
+        {
+          email: req.body.email?.toLowerCase(),
+          emailVerified: false,
+          phoneVerified: false,
+        },
       ],
     });
 
@@ -69,6 +71,7 @@ export const loginUser = async (req: Request, res: Response) => {
     return formatErrorResponse(res, error);
   }
 };
+
 export const socialLogin = async (req: Request, res: Response) => {
   try {
     !["Google", "Apple", "Facebook"].includes(req.body.authType)

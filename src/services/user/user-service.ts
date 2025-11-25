@@ -76,7 +76,7 @@ export const loginUserService = async (
     !user &&
     (authType === "Google" || authType === "Apple" || authType === "Facebook")
   ) {
-    user = await createNewUser({...userData, emailVerified: true}, authType); // You should implement the createNewUser function as per your needs
+    user = await createNewUser({ ...userData, emailVerified: true }, authType); // You should implement the createNewUser function as per your needs
   }
   const todayDate = new Date();
   const isDeleted =
@@ -791,6 +791,7 @@ export const verifyOTPService = async (
       user.otp.emailCode = "";
     }
     if (user) {
+      user.token = generateUserToken(user as any, true);
       await user.save();
     }
     return { data: sanitizeUser(user), message: "Email verified successfully" };
