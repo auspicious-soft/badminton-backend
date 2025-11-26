@@ -161,7 +161,9 @@ export const logoutService = async (payload: any, res: Response) => {
 };
 
 export const forgotPasswordService = async (email: string, res: Response) => {
-  const admin = await adminModel.findOne({ email: email }).select("+password");
+  const admin =
+    (await adminModel.findOne({ email: email }).select("+password")) ||
+    (await employeesModel.findOne({ email: email }).select("+password"));
   if (!admin)
     return errorResponseHandler(
       "Email not found",
@@ -193,19 +195,31 @@ export const newPassswordAfterOTPVerifiedService = async (
   let existingAdmin: any;
 
   if (existingToken.email) {
-    existingAdmin = await adminModel.findOne({ email: existingToken.email });
+    existingAdmin =
+      (await adminModel.findOne({ email: existingToken.email })) ||
+      (await employeesModel.findOne({ email: existingToken.email }));
   } else if (existingToken.phoneNumber) {
-    existingAdmin = await adminModel.findOne({
-      phoneNumber: existingToken.phoneNumber,
-    });
+    existingAdmin =
+      (await adminModel.findOne({
+        phoneNumber: existingToken.phoneNumber,
+      })) ||
+      (await employeesModel.findOne({
+        phoneNumber: existingToken.phoneNumber,
+      }));
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const response = await adminModel.findByIdAndUpdate(
-    existingAdmin._id,
-    { password: hashedPassword },
-    { new: true }
-  );
+  const response =
+    (await adminModel.findByIdAndUpdate(
+      existingAdmin._id,
+      { password: hashedPassword },
+      { new: true }
+    )) ||
+    (await employeesModel.findByIdAndUpdate(
+      existingAdmin._id,
+      { password: hashedPassword },
+      { new: true }
+    ));
   await passwordResetTokenModel.findByIdAndDelete(existingToken._id);
 
   return {
