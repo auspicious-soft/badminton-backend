@@ -66,7 +66,7 @@ export const updateBasePrice = async (req: Request, res: Response) => {
         httpStatusCode.BAD_REQUEST,
         res
       );
-    } 
+    }
 
     const priceMap: any = {};
     slotPricing.forEach((slot: any) => {
@@ -472,11 +472,33 @@ export const getNotifications = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
+    const userData = req.user as any;
+
     const matchFilter: any = {
       type: { $nin: ["PLAYER_JOINED_GAME"] },
       priority: "HIGH",
       isDeleted: false,
     };
+
+    if (
+      req.user &&
+      userData?.role === "employee" &&
+      userData?.venueId == "null"
+    ) {
+      return res.status(httpStatusCode.OK).json({
+        success: true,
+        message: "Notifications retrieved successfully",
+        data: [],
+        meta: {
+          total: 0,
+          hasPreviousPage: false,
+          hasNextPage: false,
+          page: 0,
+          limit: 0,
+          totalPages: 0,
+        },
+      });
+    }
 
     // Count total matching documents
     let totalNotifications = 0;
