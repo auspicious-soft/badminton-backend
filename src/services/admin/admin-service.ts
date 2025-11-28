@@ -1426,21 +1426,21 @@ export const createMatchService = async (payload: any, res: Response) => {
     {
       fullName: player1,
       email: player1Email,
-      phone: player1phone,
+      phoneNumber: player1phone,
       role: "guest",
       phoneVerified: true,
       emailVerified: true,
     },
     {
-      fullName: player2,
+      fullName: player2.length ? player2 : "Guest Player 2",
       role: "guest",
     },
     {
-      fullName: player3,
+      fullName: player3.length ? player3 : "Guest Player 3",
       role: "guest",
     },
     {
-      fullName: player4,
+      fullName: player4.length ? player4 : "Guest Player 4",
       role: "guest",
     },
   ];
