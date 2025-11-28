@@ -16,7 +16,7 @@ import {
 import { hashPasswordIfEmailAuth } from "src/utils/userAuth/signUpAuth";
 import { customAlphabet } from "nanoid";
 import { attendanceModel } from "src/models/employees/attendance-schema";
-import mongoose, { Types } from "mongoose";
+import mongoose, { ObjectId, Types } from "mongoose";
 import { venueModel } from "src/models/venue/venue-schema";
 import { bookingModel } from "src/models/venue/booking-schema";
 import { usersModel } from "src/models/user/user-schema";
@@ -33,6 +33,7 @@ import { notifyUser } from "src/utils/FCM/FCM";
 // import { priceModel } from "src/models/admin/price-schema";
 import invoices from "razorpay/dist/types/invoices";
 import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
+import { createNotification } from "src/models/notification/notification-schema";
 
 const sanitizeUser = (user: any): EmployeeDocument => {
   const sanitized = user.toObject();
@@ -1547,17 +1548,18 @@ export const createMatchService = async (payload: any, res: Response) => {
         : finalBookingData[0].bookingAmount + finalBookingData[1].bookingAmount,
   });
 
-  // for (let i = 0; i < finalBookingData.length; i++) {
-  //   await transactionModel.create({
-  //     userId: createdUsers[0]._id,
-  //     bookingId: finalBookingData[i]._id,
-  //     method: "In-Court",
-
-  //     isWebhookVerified: true,
-  //     status: "authorized",
-  //     amount: finalBookingData[i].bookingAmount,
-  //   });
-  // }
+  await createNotification({
+    recipientId: createdUsers[0]._id as any,
+    type: "PAYMENT_SUCCESSFUL",
+    title: `Game Booked by ${payload.user.role} - ${payload.user.fullName}`,
+    message: `Game Booked on court successfully by ${payload.user.role} - ${payload.user.fullName}`,
+    category: "BOOKING",
+    priority: "HIGH",
+    referenceId: finalBookingData[0]._id,
+    referenceType: payload.user.role === "admin" ? "admin" : "employees",
+    metadata: { type: "Admin" },
+    notificationType: "IN_APP",
+  });
 
   return {
     success: true,

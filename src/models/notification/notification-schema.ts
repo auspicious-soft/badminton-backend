@@ -86,7 +86,7 @@ const notificationSchema = new Schema(
 
         // Custom notifications
         "CUSTOM",
-        "REFERRAL_SUCCESSFUL"
+        "REFERRAL_SUCCESSFUL",
       ],
       index: true,
     },
@@ -139,6 +139,8 @@ const notificationSchema = new Schema(
         "venues",
         "courts",
         "chats",
+        "employees",
+        "admin",
         "orders",
         "chat_groups",
       ],
