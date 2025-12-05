@@ -43,7 +43,7 @@ const sanitizeUser = (user: any): EmployeeDocument => {
 };
 
 export const loginService = async (payload: any, res: Response) => {
-  const { email, password } = payload;
+  const { email, password, fcmToken } = payload;
   const countryCode = "+45";
   const toNumber = Number(email);
   const isEmail = isNaN(toNumber);
@@ -77,6 +77,16 @@ export const loginService = async (payload: any, res: Response) => {
   delete userObject.password;
 
   userObject.venueId = null;
+
+  if (fcmToken) {
+    if (!user.fcmToken) {
+      user.fcmToken = [];
+    }
+    if (!user.fcmToken.includes(fcmToken)) {
+      user.fcmToken.push(fcmToken);
+      await user.save();
+    }
+  }
 
   if (user.role === "employee") {
     const today = new Date();

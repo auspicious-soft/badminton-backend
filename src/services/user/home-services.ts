@@ -770,7 +770,7 @@ export const getCourtsServices = async (req: Request, res: Response) => {
       // });
       const availableSlots = venueTimeslots.map((slot: string) => {
         const slotHour = parseInt(slot.split(":")[0], 10);
-
+        
         const isPast = isRequestedDateToday && slotHour <= currentHour;
         const isBooked = confirmed.includes(slot);
         const isAvailable = !isBooked && !isPast;

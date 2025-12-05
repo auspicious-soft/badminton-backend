@@ -1,27 +1,33 @@
 import mongoose from "mongoose";
 export interface IUser {
-    identifier: string;
-    email: string;
-    password?: string;
-    name: string;
-    phoneNumber?: string;
-    role: string;
-    fullName: string;
-    profilePic?: string;
-    address?: string;
+  identifier: string;
+  email: string;
+  password?: string;
+  name: string;
+  phoneNumber?: string;
+  role: string;
+  fullName: string;
+  profilePic?: string;
+  address?: string;
+  fcmToken?: string[];
 }
 
 export interface AuthResponse {
     token: string;
     user: IUser;
 }
-const adminSchema = new mongoose.Schema({
-  
+const adminSchema = new mongoose.Schema(
+  {
     identifier: {
       type: String,
       // required: true,
       unique: true,
     },
+    fcmToken: [
+      {
+        type: String,
+      },
+    ],
     role: {
       type: String,
       requried: true,
@@ -45,7 +51,7 @@ const adminSchema = new mongoose.Schema({
     },
     profilePic: {
       type: String,
-      default:null
+      default: null,
     },
 
     address: { type: String },

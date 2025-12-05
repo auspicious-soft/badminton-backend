@@ -18,7 +18,7 @@ export interface EmployeeDocument extends Document {
     expiresAt?: Date | null;
   };
   token?: string;
-  fcmToken?: string | null;
+  fcmToken?: string[];
   dob?: Date;
   country?: string;
   createdAt?: Date;
@@ -83,10 +83,11 @@ const employeeSchema = new mongoose.Schema(
     token: {
       type: String,
     },
-    fcmToken: {
-      type: String,
-      default: null,
-    },
+    fcmToken: [
+      {
+        type: String,
+      },
+    ],
     dob: {
       type: Date,
     },
