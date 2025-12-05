@@ -335,6 +335,8 @@ export const dashboard = async (req: Request, res: Response) => {
       .json({ success: false, message: message || "An error occurred" });
   }
 };
+
+
 export const employeeDashboard = async (req: Request, res: Response) => {
   try {
     const response = await employeeDashboardServices(req, res);

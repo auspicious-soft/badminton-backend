@@ -127,48 +127,56 @@ export const loginService = async (payload: any, res: Response) => {
 };
 
 export const logoutService = async (payload: any, res: Response) => {
-  const { id: employeeId } = payload.user;
+  const { id: employeeId, role } = payload.user;
+  const { fcmToken } = payload.body;
 
-  if (!employeeId) {
-    return errorResponseHandler(
-      "Employee ID is required",
-      httpStatusCode.BAD_REQUEST,
-      res
-    );
+  if (role === "employee") {
+    if (!employeeId) {
+      return errorResponseHandler(
+        "Employee ID is required",
+        httpStatusCode.BAD_REQUEST,
+        res
+      );
+    }
+
+    await employeesModel.findByIdAndUpdate(employeeId, {
+      $pull: { fcmToken: fcmToken },
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to start of the day
+
+    // Find today's attendance record
+    const attendanceRecord = await attendanceModel.findOne({
+      employeeId,
+      date: today,
+    });
+
+    if (!attendanceRecord) {
+      return errorResponseHandler(
+        "No attendance record found for today",
+        httpStatusCode.NOT_FOUND,
+        res
+      );
+    }
+
+    attendanceRecord.checkOutTime = new Date();
+    await attendanceRecord.save();
+
+    return {
+      success: true,
+      message: "Logout successful, check-out time recorded",
+      data: { checkOutTime: attendanceRecord.checkOutTime },
+    };
+  } else {
+    await adminModel.findByIdAndUpdate(payload.user.id, {
+      $pull: { fcmToken: fcmToken },
+    });
+    return {
+      success: true,
+      message: "Logout successful",
+    };
   }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to start of the day
-
-  // Find today's attendance record
-  const attendanceRecord = await attendanceModel.findOne({
-    employeeId,
-    date: today,
-  });
-
-  if (!attendanceRecord) {
-    return errorResponseHandler(
-      "No attendance record found for today",
-      httpStatusCode.NOT_FOUND,
-      res
-    );
-  }
-
-  // if (attendanceRecord.checkOutTime) {
-  //   return errorResponseHandler(
-  //     "Employee has already checked out",
-  //     httpStatusCode.BAD_REQUEST,
-  //     res
-  //   );
-  // }
-  attendanceRecord.checkOutTime = new Date();
-  await attendanceRecord.save();
-
-  return {
-    success: true,
-    message: "Logout successful, check-out time recorded",
-    data: { checkOutTime: attendanceRecord.checkOutTime },
-  };
 };
 
 export const forgotPasswordService = async (email: string, res: Response) => {
