@@ -398,9 +398,10 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               }
             }
 
-            const bookingData = (await bookingModel
+            const bookingData = await bookingModel
               .findById(bookings[0]._id)
-              .lean()) as any;
+              .populate("venueId")
+              .lean() as any;
             const admin = await adminModel.find().lean();
             const employeeIds = [];
 
