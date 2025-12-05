@@ -11,10 +11,12 @@ import { chatModel } from "src/models/chat/chat-schema";
 import { orderModel } from "src/models/admin/order-schema";
 import { productModel } from "src/models/admin/products-schema";
 import { cartModel } from "src/models/user/user-cart";
-import { notifyUser } from "src/utils/FCM/FCM";
+import { notifyUser, sendNotification } from "src/utils/FCM/FCM";
 import { usersModel } from "src/models/user/user-schema";
 import { getCurrentISTTime } from "src/utils";
 import { venueModel } from "src/models/venue/venue-schema";
+import { adminModel } from "src/models/admin/admin-schema";
+import { employeesModel } from "src/models/employees/employee-schema";
 
 configDotenv();
 
@@ -394,6 +396,37 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 ];
                 bookingId = booking._id;
               }
+            }
+
+            const bookingData = await bookingModel.findById(bookings[0]._id).lean() as any;
+            const admin = await adminModel.find().lean();
+            const employeeIds = [];
+
+            for (let i = 0; i < bookingData?.venueId?.employees.length; i++) {
+              employeeIds.push(bookingData?.venueId?.employees[i]?.employeeId);
+            }
+            const employees = await employeesModel
+              .find({ _id: { $in: employeeIds } })
+              .lean();
+
+            const cludData = [...admin, ...employees];
+            let allFCMs: string[] = [];
+
+            for (const data of cludData) {
+              if (data.fcmToken) {
+                allFCMs = [...allFCMs, ...data.fcmToken];
+              }
+            }
+
+            for (const token of allFCMs) {
+              sendNotification(
+                token,
+                "Game Booked Successfully",
+                `Game booked for venue ${bookingData?.venueId?.name} using playcoins`,
+                {
+                  bookingId: bookingId.toString(),
+                }
+              );
             }
 
             await Promise.all(

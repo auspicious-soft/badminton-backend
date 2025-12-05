@@ -14,12 +14,15 @@ import razorpayInstance from "src/config/razorpay";
 import { additionalUserInfoModel } from "src/models/user/additional-info-schema";
 import { chatModel } from "src/models/chat/chat-schema";
 import { usersModel } from "src/models/user/user-schema";
-import { notifyUser } from "src/utils/FCM/FCM";
+import { notifyUser, sendNotification } from "src/utils/FCM/FCM";
 import { venueModel } from "src/models/venue/venue-schema";
 import { fillAndStroke } from "pdfkit";
 import { generateInvoiceNumber, sendInvoiceToUser } from "src/utils";
 import { dynamicPrizeModel } from "src/models/admin/dynamic-prize-schema";
 import { courtModel } from "src/models/venue/court-schema";
+import { adminModel } from "src/models/admin/admin-schema";
+import { employeesModel } from "src/models/employees/employee-schema";
+import { all } from "axios";
 
 function makeBookingDateInIST(rawDate: any, slotHour: any) {
   const hour = parseInt(slotHour, 10);
@@ -662,6 +665,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
 
   const bookingIds = transaction.bookingId || [];
 
+  
   if (bookingIds.length === 0) {
     return errorResponseHandler(
       "No bookings associated with this transaction",
@@ -669,6 +673,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       res
     );
   }
+  const bookingData = await bookingModel.findById(bookingIds[0]).populate("venueId").lean() as any;
 
   // Get user's playcoins balance
   const userInfo = await additionalUserInfoModel
@@ -814,8 +819,32 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
           session,
         });
       }
-
       await session.commitTransaction();
+
+      const admin = await adminModel.find().lean();
+      const employeeIds = [];
+
+      for(let i = 0; i < bookingData?.venueId?.employees.length; i++){
+        employeeIds.push(bookingData?.venueId?.employees[i]?.employeeId);
+      }
+      const employees = await employeesModel
+        .find({ _id: { $in: employeeIds} })
+        .lean();
+
+      const cludData = [...admin, ...employees];
+      let allFCMs: string[] = []
+
+      for(const data of cludData){
+        if(data.fcmToken){
+          allFCMs = [...allFCMs, ...data.fcmToken];
+        }
+      }
+
+      for(const token of allFCMs){
+        sendNotification(token, "Game Booked Successfully", `Game booked for venue ${bookingData?.venueId?.name} using playcoins`, {
+          bookingId: bookingId.toString(),
+        });
+      }
 
       // for (const booking of bookings) {
       //   await sendInvoiceToUser(userData.id, booking._id);
