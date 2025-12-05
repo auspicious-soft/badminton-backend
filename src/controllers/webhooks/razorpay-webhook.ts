@@ -426,7 +426,7 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
                 sendNotification(
                   token,
                   "Game Booked Successfully",
-                  `Game booked for venue ${bookingData?.venueId?.name} using playcoins`,
+                  `Game booked for venue ${bookingData?.venueId?.name}`,
                   {
                     bookingId: bookingId.toString(),
                   }
