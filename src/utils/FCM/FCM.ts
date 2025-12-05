@@ -1,6 +1,6 @@
 import admin from "firebase-admin";
 import { configDotenv } from "dotenv";
-import mongoose, {Types} from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { createNotification } from "src/models/notification/notification-schema";
 configDotenv();
 
@@ -67,7 +67,7 @@ export const sendNotification = async (
     console.log("Successfully sent FCM message:", response);
   } catch (error) {
     console.error("Error sending FCM message:", error);
-    throw error;
+    return;
   }
 };
 

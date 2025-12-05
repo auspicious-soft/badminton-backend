@@ -398,7 +398,9 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
               }
             }
 
-            const bookingData = await bookingModel.findById(bookings[0]._id).lean() as any;
+            const bookingData = (await bookingModel
+              .findById(bookings[0]._id)
+              .lean()) as any;
             const admin = await adminModel.find().lean();
             const employeeIds = [];
 
@@ -419,14 +421,22 @@ export const razorpayWebhookHandler = async (req: Request, res: Response) => {
             }
 
             for (const token of allFCMs) {
-              sendNotification(
-                token,
-                "Game Booked Successfully",
-                `Game booked for venue ${bookingData?.venueId?.name} using playcoins`,
-                {
-                  bookingId: bookingId.toString(),
-                }
-              );
+              try {
+                sendNotification(
+                  token,
+                  "Game Booked Successfully",
+                  `Game booked for venue ${bookingData?.venueId?.name} using playcoins`,
+                  {
+                    bookingId: bookingId.toString(),
+                  }
+                );
+              } catch (err) {
+                console.log(
+                  "Failed to send notification to token:",
+                  token,
+                  err
+                );
+              }
             }
 
             await Promise.all(

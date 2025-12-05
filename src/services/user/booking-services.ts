@@ -88,7 +88,7 @@ export const bookCourtServices = async (req: Request, res: Response) => {
 
   // Get the current date and determine if it's a weekday or weekend
 
-  const courtData = await courtModel.findById(courtId).lean() as any;
+  const courtData = (await courtModel.findById(courtId).lean()) as any;
   const dateCheck = makeBookingDateInIST(bookingDate, bookingSlots[0]);
   console.log("Booking Date in IST:", makeBookingDateInIST(bookingDate, 6));
   const dateString = dateCheck.toISOString().split("T")[0];
@@ -665,7 +665,6 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
 
   const bookingIds = transaction.bookingId || [];
 
-  
   if (bookingIds.length === 0) {
     return errorResponseHandler(
       "No bookings associated with this transaction",
@@ -673,7 +672,10 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       res
     );
   }
-  const bookingData = await bookingModel.findById(bookingIds[0]).populate("venueId").lean() as any;
+  const bookingData = (await bookingModel
+    .findById(bookingIds[0])
+    .populate("venueId")
+    .lean()) as any;
 
   // Get user's playcoins balance
   const userInfo = await additionalUserInfoModel
@@ -686,7 +688,7 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
 
   try {
-    await session.startTransaction();
+    session.startTransaction();
 
     if (method === "playcoins") {
       // Check if user has enough playcoins
@@ -824,26 +826,34 @@ export const paymentBookingServices = async (req: Request, res: Response) => {
       const admin = await adminModel.find().lean();
       const employeeIds = [];
 
-      for(let i = 0; i < bookingData?.venueId?.employees.length; i++){
+      for (let i = 0; i < bookingData?.venueId?.employees?.length; i++) {
         employeeIds.push(bookingData?.venueId?.employees[i]?.employeeId);
       }
-      const employees = await employeesModel
-        .find({ _id: { $in: employeeIds} })
-        .lean();
+      const employees =
+        (await employeesModel.find({ _id: { $in: employeeIds } }).lean()) || [];
 
       const cludData = [...admin, ...employees];
-      let allFCMs: string[] = []
+      let allFCMs: string[] = [];
 
-      for(const data of cludData){
-        if(data.fcmToken){
-          allFCMs = [...allFCMs, ...data.fcmToken];
+      for (const data of cludData) {
+        if (data?.fcmToken.length) {
+          allFCMs = [...allFCMs, ...data?.fcmToken];
         }
       }
 
-      for(const token of allFCMs){
-        sendNotification(token, "Game Booked Successfully", `Game booked for venue ${bookingData?.venueId?.name} using playcoins`, {
-          bookingId: bookingId.toString(),
-        });
+      for (const token of allFCMs) {
+        try {
+          sendNotification(
+            token,
+            "Game Booked Successfully",
+            `Game booked for venue ${bookingData?.venueId?.name} using playcoins`,
+            {
+              bookingId: bookingId?.toString(),
+            }
+          );
+        } catch (err) {
+          console.log("Failed to send notification to token:", token, err);
+        }
       }
 
       // for (const booking of bookings) {
